@@ -193,6 +193,91 @@
     color: var(--text-secondary);
     font-size: 14px;
   }
+
+  /* ---------- formulario de cliente ---------- */
+  .form-wrap { padding: 20px; max-width: 640px; }
+  .form-back {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-decoration: none;
+    margin-bottom: 14px;
+    cursor: pointer;
+  }
+  .form-back:hover { color: var(--primary); }
+  .form-card {
+    background: var(--bg-card);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .form-card h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 0 0 20px;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .field select, .field textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 0.5px solid var(--border);
+    background: #FFFFFF;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text-primary);
+  }
+  .field select { height: 40px; }
+  .field textarea { resize: vertical; min-height: 70px; }
+  .field select:focus, .field textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+  }
+  .form-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+  }
+  .form-actions-right { display: flex; gap: 10px; }
+  .btn-secondary {
+    border: 0.5px solid var(--border);
+    background: transparent;
+    border-radius: 8px;
+    padding: 0 18px;
+    height: 42px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .btn-secondary:hover { background: var(--bg-column); }
+  .btn-danger-text {
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--brick-text);
+    cursor: pointer;
+    padding: 0;
+  }
+  .btn-danger-text:hover { text-decoration: underline; }
+  .form-save-msg {
+    font-size: 13px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    margin-bottom: 14px;
+  }
+  .form-save-msg.ok { background: var(--sage-bg); color: var(--sage-text); }
+  .form-save-msg.err { background: var(--brick-bg); color: var(--brick-text); }
 </style>
 </head>
 <body>
@@ -279,6 +364,15 @@
       renderKanban();
       return;
     }
+    if (rota === '/cliente/novo') {
+      renderFormCliente(null);
+      return;
+    }
+    const matchCliente = rota.match(/^\/cliente\/(.+)$/);
+    if (matchCliente) {
+      renderFormCliente(matchCliente[1]);
+      return;
+    }
     app.innerHTML = '<div class="loading-msg">Tela ainda não criada.</div>';
   }
 
@@ -359,7 +453,7 @@
   // ------------------------------------------------------------
   async function renderKanban() {
     const app = document.getElementById('app');
-    app.innerHTML = topbarHtml() + '<div class="loading-msg">Carregando clientes...</div>';
+    app.innerHTML = topbarHtml(true) + '<div class="loading-msg">Carregando clientes...</div>';
     ligarEventosTopbar();
 
     const { data, error } = await sb
@@ -368,7 +462,7 @@
       .order('criado_em', { ascending: false });
 
     if (error) {
-      app.innerHTML = topbarHtml() + `<div class="error-box">Não foi possível carregar os clientes.<br>${error.message}</div>`;
+      app.innerHTML = topbarHtml(true) + `<div class="error-box">Não foi possível carregar os clientes.<br>${error.message}</div>`;
       ligarEventosTopbar();
       return;
     }
@@ -394,7 +488,7 @@
       `;
     });
 
-    app.innerHTML = topbarHtml() + `
+    app.innerHTML = topbarHtml(true) + `
       <div class="kanban-wrap">
         <div class="kanban-board">${colunasHtml}</div>
       </div>
@@ -420,11 +514,12 @@
     return div.innerHTML;
   }
 
-  function topbarHtml() {
+  function topbarHtml(mostrarNovoCliente) {
     return `
       <div class="topbar">
         <div class="brand">PreviMater CRM</div>
         <div class="who">
+          ${mostrarNovoCliente ? '<button class="btn-ghost" id="btn-novo-cliente">+ novo cliente</button>' : ''}
           <span>${currentUser.nome} · ${currentUser.nivel === 'proprietario' ? 'proprietário' : 'administrativo'}</span>
           <button class="btn-ghost" id="btn-sair">Sair</button>
         </div>
@@ -433,8 +528,230 @@
   }
 
   function ligarEventosTopbar() {
-    const btn = document.getElementById('btn-sair');
-    if (btn) btn.addEventListener('click', fazerLogout);
+    const btnSair = document.getElementById('btn-sair');
+    if (btnSair) btnSair.addEventListener('click', fazerLogout);
+    const btnNovo = document.getElementById('btn-novo-cliente');
+    if (btnNovo) btnNovo.addEventListener('click', () => { location.hash = '#/cliente/novo'; });
+  }
+
+  // ------------------------------------------------------------
+  // MASCARA DE DINHEIRO (padrao ja usado no App Recebimentos)
+  // ------------------------------------------------------------
+  function formatarMoedaInput(el) {
+    let digits = el.value.replace(/\D/g, '');
+    if (!digits) digits = '0';
+    const valor = parseInt(digits, 10) / 100;
+    el.value = valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function moneyToFloat(str) {
+    if (!str) return null;
+    const limpo = str.replace(/\./g, '').replace(',', '.');
+    const val = parseFloat(limpo);
+    return isNaN(val) ? null : val;
+  }
+
+  function moneyParaInput(valor) {
+    if (valor === null || valor === undefined) return '';
+    return Number(valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  // ------------------------------------------------------------
+  // TELA DE FORMULARIO DE CLIENTE (novo ou edicao)
+  // ------------------------------------------------------------
+  async function renderFormCliente(clienteId) {
+    const app = document.getElementById('app');
+    const ehNovo = !clienteId;
+
+    if (ehNovo) {
+      app.innerHTML = topbarHtml(true) + montarHtmlForm(null);
+      ligarEventosTopbar();
+      ligarEventosForm(null);
+      return;
+    }
+
+    app.innerHTML = topbarHtml(true) + '<div class="loading-msg">Carregando cliente...</div>';
+    ligarEventosTopbar();
+
+    const { data, error } = await sb
+      .from('crm_clientes')
+      .select('*')
+      .eq('id', clienteId)
+      .single();
+
+    if (error || !data) {
+      app.innerHTML = topbarHtml(true) + '<div class="error-box">Cliente não encontrado.</div>';
+      ligarEventosTopbar();
+      return;
+    }
+
+    app.innerHTML = topbarHtml(true) + montarHtmlForm(data);
+    ligarEventosTopbar();
+    ligarEventosForm(data);
+  }
+
+  function montarHtmlForm(c) {
+    const ehNovo = !c;
+    const opcoesCanal = ['meta_oficial', 'evolution', 'whatsgw'];
+    const nomesCanal = { meta_oficial: 'Meta oficial', evolution: 'Evolution', whatsgw: 'WhatsGW' };
+
+    return `
+      <div class="form-wrap">
+        <a class="form-back" onclick="location.hash='#/clientes'">&larr; voltar para o kanban</a>
+        <div class="form-card">
+          <h2>${ehNovo ? 'Novo cliente' : 'Editar cliente'}</h2>
+          <div id="form-msg"></div>
+
+          <div class="field">
+            <label for="f-nome">Nome completo *</label>
+            <input id="f-nome" type="text" value="${escapeAttr(c && c.nome_completo)}">
+          </div>
+
+          <div class="form-row">
+            <div class="field">
+              <label for="f-cpf">CPF</label>
+              <input id="f-cpf" type="text" value="${escapeAttr(c && c.cpf)}">
+            </div>
+            <div class="field">
+              <label for="f-telefone">Telefone principal</label>
+              <input id="f-telefone" type="text" value="${escapeAttr(c && c.telefone_principal)}">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="field">
+              <label for="f-canal">Canal WhatsApp</label>
+              <select id="f-canal">
+                <option value="">-- selecione --</option>
+                ${opcoesCanal.map(op => `<option value="${op}" ${c && c.canal_whatsapp === op ? 'selected' : ''}>${nomesCanal[op]}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-fase">Fase do kanban</label>
+              <select id="f-fase">
+                ${FASES.map(f => `<option value="${f.chave}" ${c && c.fase_kanban === f.chave ? 'selected' : (!c && f.chave === 'Protocolo Enviado' ? 'selected' : '')}>${nomeFaseExibicao(f.chave)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="field">
+              <label for="f-dn-bebe">Data nascimento do bebê</label>
+              <input id="f-dn-bebe" type="date" value="${(c && c.data_nascimento_bebe) || ''}">
+            </div>
+            <div class="field">
+              <label for="f-ds">Data saída do emprego</label>
+              <input id="f-ds" type="date" value="${(c && c.data_saida_emprego) || ''}">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="field">
+              <label for="f-valor-beneficio">Valor benefício esperado (R$)</label>
+              <input id="f-valor-beneficio" type="text" inputmode="decimal" value="${moneyParaInput(c && c.valor_beneficio_esperado)}">
+            </div>
+            <div class="field">
+              <label for="f-valor-honorarios">Valor honorários (R$)</label>
+              <input id="f-valor-honorarios" type="text" inputmode="decimal" value="${moneyParaInput(c && c.valor_honorarios)}">
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="f-desbloqueio">Data desbloqueio INSS (se houver)</label>
+            <input id="f-desbloqueio" type="date" value="${(c && c.data_desbloqueio_inss) || ''}">
+          </div>
+
+          <div class="field">
+            <label for="f-obs">Observações</label>
+            <textarea id="f-obs">${escapeHtml(c && c.observacoes)}</textarea>
+          </div>
+
+          <div class="form-actions">
+            <div>
+              ${!ehNovo ? '<button class="btn-danger-text" id="btn-excluir-cliente">Excluir cliente</button>' : '<span></span>'}
+            </div>
+            <div class="form-actions-right">
+              <button class="btn-secondary" id="btn-cancelar-form">Cancelar</button>
+              <button class="btn-primary" style="width:auto; padding:0 20px;" id="btn-salvar-cliente">${ehNovo ? 'Criar cliente' : 'Salvar alterações'}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function escapeAttr(str) {
+    if (!str) return '';
+    return String(str).replace(/"/g, '&quot;');
+  }
+
+  function ligarEventosForm(clienteExistente) {
+    document.getElementById('f-valor-beneficio').addEventListener('input', (e) => formatarMoedaInput(e.target));
+    document.getElementById('f-valor-honorarios').addEventListener('input', (e) => formatarMoedaInput(e.target));
+
+    document.getElementById('btn-cancelar-form').addEventListener('click', () => { location.hash = '#/clientes'; });
+    document.getElementById('btn-salvar-cliente').addEventListener('click', () => salvarCliente(clienteExistente));
+
+    const btnExcluir = document.getElementById('btn-excluir-cliente');
+    if (btnExcluir) btnExcluir.addEventListener('click', () => excluirCliente(clienteExistente.id));
+  }
+
+  async function salvarCliente(clienteExistente) {
+    const msgBox = document.getElementById('form-msg');
+    const btn = document.getElementById('btn-salvar-cliente');
+    msgBox.innerHTML = '';
+
+    const nome = document.getElementById('f-nome').value.trim();
+    if (!nome) {
+      msgBox.innerHTML = '<div class="form-save-msg err">Preencha o nome completo.</div>';
+      return;
+    }
+
+    const payload = {
+      nome_completo: nome,
+      cpf: document.getElementById('f-cpf').value.trim() || null,
+      telefone_principal: document.getElementById('f-telefone').value.trim() || null,
+      canal_whatsapp: document.getElementById('f-canal').value || null,
+      fase_kanban: document.getElementById('f-fase').value,
+      data_nascimento_bebe: document.getElementById('f-dn-bebe').value || null,
+      data_saida_emprego: document.getElementById('f-ds').value || null,
+      valor_beneficio_esperado: moneyToFloat(document.getElementById('f-valor-beneficio').value),
+      valor_honorarios: moneyToFloat(document.getElementById('f-valor-honorarios').value),
+      data_desbloqueio_inss: document.getElementById('f-desbloqueio').value || null,
+      observacoes: document.getElementById('f-obs').value.trim() || null,
+      atualizado_em: new Date().toISOString()
+    };
+
+    btn.disabled = true;
+    btn.textContent = 'Salvando...';
+
+    let error;
+    if (clienteExistente) {
+      ({ error } = await sb.from('crm_clientes').update(payload).eq('id', clienteExistente.id));
+    } else {
+      ({ error } = await sb.from('crm_clientes').insert(payload));
+    }
+
+    if (error) {
+      msgBox.innerHTML = `<div class="form-save-msg err">Não foi possível salvar: ${error.message}</div>`;
+      btn.disabled = false;
+      btn.textContent = clienteExistente ? 'Salvar alterações' : 'Criar cliente';
+      return;
+    }
+
+    location.hash = '#/clientes';
+    render();
+  }
+
+  async function excluirCliente(clienteId) {
+    if (!confirm('Tem certeza que quer excluir este cliente? Essa ação não pode ser desfeita.')) return;
+    const { error } = await sb.from('crm_clientes').delete().eq('id', clienteId);
+    if (error) {
+      alert('Não foi possível excluir: ' + error.message);
+      return;
+    }
+    location.hash = '#/clientes';
+    render();
   }
 </script>
 </body>

@@ -1,1353 +1,1027 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PreviMater CRM</title>
-<link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon192.png">
-<link rel="apple-touch-icon" href="icon192.png">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#0A9396"/>
+<title>PreviMater — CRM</title>
+<link rel="manifest" href="manifest.json"/>
+<link rel="icon" href="icon192.png"/>
+<link rel="apple-touch-icon" href="icon192.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  :root {
-    --bg-page: #F5F1E8;
-    --bg-card: #FFFFFF;
-    --bg-column: #EFEBDF;
-    --text-primary: #1E2A2A;
-    --text-secondary: #6B6A63;
-    --border: #D8D3C4;
-    --primary: #12302E;
-    --primary-dark: #0B211F;
-    --amber: #D98E3D;
-    --sage: #6B8F5C;
-    --sage-bg: #E7EFDF;
-    --sage-text: #3F5A33;
-    --brick: #B5533D;
-    --brick-bg: #F6E2DC;
-    --brick-text: #7C3520;
-    --gray: #7C7A6E;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: 'Inter', sans-serif;
-    background: var(--bg-page);
-    color: var(--text-primary);
-    min-height: 100vh;
-  }
-  #app { min-height: 100vh; }
+:root{
+  --teal:#0A9396;--teal2:#00B4D8;--teal-l:#E0F4F5;--teal-m:#94D2BD;
+  --rose:#E87CA0;--rose-l:#FCE8F0;
+  --bg:#EFF7F7;--white:#FFFFFF;
+  --text:#0D2B2B;--text2:#3D6060;--text3:#7FA8A8;
+  --border:#D4EBEB;--border2:#E8F4F4;
+  --green:#0A7A5C;--green-bg:#E0F5EE;
+  --yellow:#B06000;--yellow-bg:#FEF3E0;
+  --red:#C0392B;--red-bg:#FDECEA;
+  --purple:#6B3FA0;--purple-bg:#F0EAFA;
+  --gray:#5A7070;--gray-bg:#EEF3F3;
+  --sw:248px;--r:12px;--rl:16px;--rx:20px;
+  --sh:0 1px 4px rgba(10,147,150,.08);
+  --shm:0 4px 20px rgba(10,147,150,.13);
+  --shl:0 8px 40px rgba(10,147,150,.18);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased;}
 
-  /* ---------- login ---------- */
-  .login-wrap {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1.5rem;
-  }
-  .login-card {
-    background: var(--bg-card);
-    border: 0.5px solid var(--border);
-    border-radius: 12px;
-    padding: 2rem 1.75rem;
-    width: 100%;
-    max-width: 360px;
-  }
-  .login-card h1 {
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--primary);
-    margin: 0 0 1.5rem;
-  }
-  .field { margin-bottom: 1rem; }
-  .field label {
-    display: block;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: 6px;
-  }
-  .field input {
-    width: 100%;
-    height: 40px;
-    padding: 0 12px;
-    border-radius: 8px;
-    border: 0.5px solid var(--border);
-    background: #FFFFFF;
-    font-family: inherit;
-    font-size: 14px;
-    color: var(--text-primary);
-  }
-  .field input:focus { outline: none; border-color: var(--primary); }
-  .btn-primary {
-    width: 100%;
-    height: 42px;
-    border: none;
-    border-radius: 8px;
-    background: var(--primary);
-    color: var(--bg-page);
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    margin-top: 4px;
-  }
-  .btn-primary:hover { background: var(--primary-dark); }
-  .btn-primary:disabled { opacity: 0.6; cursor: default; }
-  .error-msg {
-    font-size: 13px;
-    color: var(--brick-text);
-    background: var(--brick-bg);
-    padding: 8px 10px;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-  }
+/* LOADING */
+#ls{position:fixed;inset:0;background:linear-gradient(135deg,#0A9396,#00B4D8);display:flex;align-items:center;justify-content:center;z-index:999;flex-direction:column;gap:18px;}
+#ls.h{display:none;}
+.spin{width:30px;height:30px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg)}}
 
-  /* ---------- topbar ---------- */
-  .topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 20px;
-    border-bottom: 0.5px solid var(--border);
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-  .topbar .brand { font-size: 18px; font-weight: 700; color: var(--primary); }
-  .topbar .who {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 13px;
-    color: var(--text-secondary);
-  }
-  .btn-ghost {
-    border: 0.5px solid var(--border);
-    background: transparent;
-    border-radius: 6px;
-    padding: 6px 12px;
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-primary);
-    cursor: pointer;
-  }
-  .btn-ghost:hover { background: var(--bg-column); }
+/* LOGIN */
+#ln{position:fixed;inset:0;background:linear-gradient(135deg,#0A9396 0%,#00B4D8 60%,#94D2BD 100%);display:flex;align-items:center;justify-content:center;z-index:998;padding:24px;}
+#ln.h{display:none;}
+.lbox{background:var(--white);border-radius:22px;padding:40px 36px;width:100%;max-width:370px;box-shadow:var(--shl);}
+.llogo{display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:28px;}
+.lico{width:60px;height:60px;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(10,147,150,.3);}
+.ltitle{font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.4px;}
+.lsub{font-size:12px;color:var(--text3);margin-top:-6px;}
+.lf{display:flex;flex-direction:column;gap:5px;margin-bottom:13px;}
+.lf label{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;}
+.lf input{background:#F3FAFA;border:1.5px solid var(--border);border-radius:9px;padding:11px 14px;color:var(--text);font-size:14px;font-family:inherit;width:100%;transition:border .15s;}
+.lf input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(10,147,150,.14);}
+.lbtn{width:100%;background:linear-gradient(135deg,#0A9396,#00B4D8);color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit;margin-top:6px;box-shadow:0 4px 14px rgba(10,147,150,.28);}
+.lbtn:active{opacity:.85;}
+.lerr{font-size:12px;color:var(--red);text-align:center;margin-top:8px;min-height:14px;}
 
-  /* ---------- abas de quadro ---------- */
-  .quadro-tabs {
-    display: flex;
-    gap: 4px;
-    padding: 0 20px;
-    border-bottom: 0.5px solid var(--border);
-    overflow-x: auto;
-  }
-  .quadro-tab {
-    padding: 10px 16px;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text-secondary);
-    cursor: pointer;
-    border-bottom: 3px solid transparent;
-    white-space: nowrap;
-  }
-  .quadro-tab:hover { color: var(--primary); }
-  .quadro-tab.ativo {
-    color: var(--primary);
-    border-bottom-color: var(--primary);
-  }
+/* APP */
+#app{display:none;min-height:100vh;}
+#app.v{display:flex;}
 
-  /* ---------- kanban ---------- */
-  .kanban-wrap { padding: 20px; }
-  .kanban-board {
-    display: flex;
-    gap: 12px;
-    overflow-x: auto;
-    align-items: flex-start;
-    padding-bottom: 12px;
-  }
-  .kanban-col { min-width: 230px; flex: 0 0 230px; }
-  .col-header {
-    background: var(--bg-column);
-    padding: 8px 10px;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 8px;
-    letter-spacing: 0.2px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 6px;
-  }
-  .col-count { font-weight: 400; color: var(--text-secondary); font-size: 12px; }
-  .col-arquivar {
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: 15px;
-    line-height: 1;
-    padding: 0 2px;
-  }
-  .col-arquivar:hover { color: var(--brick-text); }
-  .client-card {
-    background: var(--bg-card);
-    border: 0.5px solid var(--border);
-    border-radius: 12px;
-    padding: 10px 12px;
-    margin-bottom: 8px;
-    cursor: pointer;
-  }
-  .client-card:hover { border-color: var(--primary); }
-  .client-card .nome { font-size: 14px; font-weight: 700; color: var(--text-primary); }
-  .client-card .meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
-  .card-etiquetas { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-  .etiqueta-chip {
-    font-size: 10px;
-    font-weight: 700;
-    color: #FFFFFF;
-    padding: 2px 7px;
-    border-radius: 5px;
-    letter-spacing: 0.2px;
-  }
-  .empty-col { font-size: 12px; color: var(--text-secondary); padding: 6px 2px; }
-  .loading-msg, .error-box {
-    padding: 40px 20px;
-    text-align: center;
-    color: var(--text-secondary);
-    font-size: 14px;
-  }
-  .add-col-btn {
-    min-width: 180px;
-    flex: 0 0 180px;
-    border: 1px dashed var(--border);
-    border-radius: 12px;
-    background: transparent;
-    color: var(--text-secondary);
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 12px;
-    cursor: pointer;
-  }
-  .add-col-btn:hover { border-color: var(--primary); color: var(--primary); }
+/* SIDEBAR */
+#sb{position:fixed;top:0;left:0;bottom:0;width:var(--sw);background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:100;overflow-y:auto;transition:transform .25s cubic-bezier(.4,0,.2,1);}
+@media(max-width:900px){#sb{transform:translateX(-100%);}#sb.o{transform:none;}}
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:99;display:none;}
+#ov.o{display:block;}
+.sbh{padding:20px 18px 16px;border-bottom:1px solid var(--border2);}
+.sbl{display:flex;align-items:center;gap:11px;}
+.sbi{width:38px;height:38px;border-radius:11px;overflow:hidden;flex-shrink:0;box-shadow:0 4px 12px rgba(10,147,150,.25);}
+.sblt{font-size:15px;font-weight:800;color:var(--text);letter-spacing:-.3px;line-height:1.1;}
+.sbls{font-size:10px;color:var(--text3);}
+.sbn{flex:1;padding:14px 10px;}
+.snl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:0 10px;margin:12px 0 4px;}
+.ni{width:100%;background:none;border:none;display:flex;align-items:center;gap:10px;padding:9px 12px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit;border-radius:10px;margin-bottom:2px;transition:all .12s;text-align:left;}
+.ni:hover{background:var(--teal-l);color:var(--teal);}
+.ni.a{background:var(--teal-l);color:var(--teal);}
+.nic{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;background:var(--bg);transition:all .12s;flex-shrink:0;}
+.ni.a .nic{background:var(--teal);color:#fff;}
+.sbf{padding:12px 10px;border-top:1px solid var(--border2);}
+.sbu{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:10px;margin-bottom:8px;}
+.sbav{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#0A9396,#00B4D8);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0;}
+.sbnm{font-size:13px;font-weight:700;color:var(--text);}
+.sbem{font-size:10px;color:var(--text3);}
+.sblg{width:100%;background:none;border:1.5px solid var(--border);color:var(--text3);padding:8px;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px;justify-content:center;transition:all .12s;}
+.sblg:hover{border-color:var(--red);color:var(--red);}
 
-  /* ---------- formularios ---------- */
-  .form-wrap { padding: 20px; max-width: 660px; }
-  .form-back {
-    display: inline-block;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-decoration: none;
-    margin-bottom: 14px;
-    cursor: pointer;
-  }
-  .form-back:hover { color: var(--primary); }
-  .form-card {
-    background: var(--bg-card);
-    border: 0.5px solid var(--border);
-    border-radius: 12px;
-    padding: 24px;
-  }
-  .form-card h2 { font-size: 18px; font-weight: 700; color: var(--primary); margin: 0 0 20px; }
-  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .field select, .field textarea {
-    width: 100%;
-    padding: 8px 12px;
-    border-radius: 8px;
-    border: 0.5px solid var(--border);
-    background: #FFFFFF;
-    font-family: inherit;
-    font-size: 14px;
-    color: var(--text-primary);
-  }
-  .field select { height: 40px; }
-  .field textarea { resize: vertical; min-height: 70px; }
-  .field select:focus, .field textarea:focus { outline: none; border-color: var(--primary); }
-  .etiqueta-picker { display: flex; flex-wrap: wrap; gap: 6px; }
-  .etiqueta-toggle {
-    font-size: 12px;
-    font-weight: 700;
-    padding: 5px 11px;
-    border-radius: 6px;
-    cursor: pointer;
-    border: 1.5px solid transparent;
-    opacity: 0.4;
-    color: #FFFFFF;
-  }
-  .etiqueta-toggle.marcada { opacity: 1; }
-  .form-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 20px;
-  }
-  .form-actions-right { display: flex; gap: 10px; }
-  .btn-secondary {
-    border: 0.5px solid var(--border);
-    background: transparent;
-    border-radius: 8px;
-    padding: 0 18px;
-    height: 42px;
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    cursor: pointer;
-  }
-  .btn-secondary:hover { background: var(--bg-column); }
-  .btn-danger-text {
-    border: none;
-    background: transparent;
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--brick-text);
-    cursor: pointer;
-    padding: 0;
-  }
-  .btn-danger-text:hover { text-decoration: underline; }
-  .form-save-msg { font-size: 13px; padding: 8px 10px; border-radius: 8px; margin-bottom: 14px; }
-  .form-save-msg.ok { background: var(--sage-bg); color: var(--sage-text); }
-  .form-save-msg.err { background: var(--brick-bg); color: var(--brick-text); }
+/* MAIN */
+#mw{margin-left:var(--sw);flex:1;min-height:100vh;display:flex;flex-direction:column;min-width:0;}
+@media(max-width:900px){#mw{margin-left:0;}}
+#tb{display:none;background:var(--white);border-bottom:1px solid var(--border);padding:0 16px;height:54px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:98;}
+@media(max-width:900px){#tb{display:flex;}}
+#pc{flex:1;padding:26px 26px 70px;min-width:0;}
+@media(max-width:900px){#pc{padding:18px 14px 70px;}}
 
-  /* ---------- tabelas (campanha, etiquetas) ---------- */
-  .campanha-wrap { padding: 20px; }
-  .alert-banner {
-    background: var(--brick-bg);
-    color: var(--brick-text);
-    padding: 10px 14px;
-    border-radius: 8px;
-    margin-bottom: 16px;
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .section-title { font-size: 15px; font-weight: 700; color: var(--primary); margin: 24px 0 10px; }
-  .section-title:first-child { margin-top: 0; }
-  .previmater-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: var(--bg-card);
-    border: 0.5px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden;
-  }
-  .previmater-table th {
-    text-align: left;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--text-secondary);
-    background: var(--bg-column);
-    padding: 8px 12px;
-  }
-  .previmater-table td {
-    font-size: 13px;
-    color: var(--text-primary);
-    padding: 8px 12px;
-    border-top: 0.5px solid var(--border);
-  }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
-  .badge.ok { background: var(--sage-bg); color: var(--sage-text); }
-  .badge.alerta { background: var(--brick-bg); color: var(--brick-text); }
-  .badge.neutro { background: var(--bg-column); color: var(--text-secondary); }
-  .teto-input {
-    width: 64px;
-    padding: 4px 6px;
-    border-radius: 6px;
-    border: 0.5px solid var(--border);
-    font-family: inherit;
-    font-size: 13px;
-  }
-  .btn-mini {
-    border: 0.5px solid var(--border);
-    background: transparent;
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-family: inherit;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-primary);
-    cursor: pointer;
-    margin-left: 6px;
-  }
-  .btn-mini:hover { background: var(--bg-column); }
-  .add-instancia-form {
-    background: var(--bg-card);
-    border: 0.5px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 16px;
-    display: grid;
-    grid-template-columns: 2fr 1fr 1fr auto;
-    gap: 10px;
-    align-items: end;
-  }
-  .add-instancia-form .field { margin-bottom: 0; }
-  .cor-input { width: 46px; height: 34px; padding: 2px; border-radius: 6px; border: 0.5px solid var(--border); }
+.pgh{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;}
+.pgt{font-size:24px;font-weight:800;color:var(--text);letter-spacing:-.5px;}
+.pgs{font-size:13px;color:var(--text3);margin-top:3px;}
+.st{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.9px;margin:22px 0 10px;}
 
-  @media (max-width: 640px) {
-    .form-row { grid-template-columns: 1fr; }
-    .add-instancia-form { grid-template-columns: 1fr; }
-  }
+/* KANBAN */
+.kb{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding-bottom:16px;}
+.kl{flex:0 0 262px;width:262px;background:var(--white);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--sh);display:flex;flex-direction:column;max-height:calc(100vh - 190px);}
+.kl.dragover{border-color:var(--teal);box-shadow:0 0 0 3px rgba(10,147,150,.16);}
+.klh{padding:12px 14px 10px;border-bottom:1px solid var(--border2);border-top:3px solid var(--teal);border-radius:var(--rl) var(--rl) 0 0;display:flex;align-items:center;justify-content:space-between;gap:6px;}
+.kln{font-size:12px;font-weight:800;color:var(--text);letter-spacing:-.1px;line-height:1.25;}
+.klc{font-size:10px;font-weight:700;color:var(--text3);background:var(--bg);padding:2px 7px;border-radius:8px;flex-shrink:0;}
+.klm{background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;border-radius:6px;flex-shrink:0;}
+.klm:hover{background:var(--teal-l);color:var(--teal);}
+.klb{padding:10px;overflow-y:auto;flex:1;min-height:56px;}
+.kc{background:var(--white);border:1.5px solid var(--border);border-radius:11px;padding:11px 12px;margin-bottom:8px;cursor:grab;transition:all .13s;box-shadow:var(--sh);}
+.kc:hover{border-color:var(--teal);box-shadow:var(--shm);transform:translateY(-1px);}
+.kc.dragging{opacity:.4;cursor:grabbing;}
+.kc{position:relative;}
+.kcmv{position:absolute;top:7px;right:7px;background:var(--bg);border:none;color:var(--text3);width:24px;height:24px;border-radius:7px;cursor:pointer;font-size:12px;line-height:1;opacity:0;transition:opacity .13s;}
+.kc:hover .kcmv{opacity:1;}
+@media(max-width:900px){.kcmv{opacity:1;}}
+.kcmv:hover{background:var(--teal);color:#fff;}
+.ent{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;padding:3px 8px;border-radius:7px;letter-spacing:.2px;}
+.ent-ok{background:var(--gray-bg);color:var(--gray);}
+.ent-soon{background:var(--yellow-bg);color:var(--yellow);}
+.ent-late{background:var(--red-bg);color:var(--red);}
+.mvsug{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
+.mvs{background:#F3FAFA;border:1.5px solid var(--border);border-radius:10px;padding:10px 13px;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:8px;transition:all .13s;}
+.mvs:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-l);}
+.mvsl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:7px;}
+.kcn{font-size:13px;font-weight:700;color:var(--text);letter-spacing:-.2px;line-height:1.3;padding-right:26px;}
+.kcm{font-size:11px;color:var(--text3);margin-top:3px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.kcv{font-size:12px;font-weight:800;color:var(--teal);}
+.kce{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px;}
+.chip{font-size:9px;font-weight:800;color:#fff;padding:2px 7px;border-radius:6px;letter-spacing:.3px;text-transform:uppercase;}
+.klf{padding:8px 10px 10px;}
+.kadd{width:100%;background:none;border:none;color:var(--text3);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;padding:7px;border-radius:8px;text-align:left;}
+.kadd:hover{background:var(--teal-l);color:var(--teal);}
+.knl{flex:0 0 200px;width:200px;border:2px dashed var(--border);border-radius:var(--rl);background:none;color:var(--text3);font-family:inherit;font-size:12px;font-weight:700;padding:14px;cursor:pointer;transition:all .15s;}
+.knl:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-l);}
+.kempty{font-size:11px;color:var(--text3);text-align:center;padding:14px 6px;}
+
+/* FORM */
+.fs{background:var(--white);border:1px solid var(--border);border-radius:var(--rl);padding:20px;margin-bottom:14px;box-shadow:var(--sh);}
+.fst{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.9px;margin-bottom:14px;}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
+@media(max-width:520px){.fg{grid-template-columns:1fr;}}
+.ff{grid-column:1/-1;}
+.fld{display:flex;flex-direction:column;gap:5px;}
+.fld label{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;}
+.fld input,.fld select,.fld textarea{background:#F3FAFA;border:1.5px solid var(--border);border-radius:9px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;width:100%;transition:border .15s;}
+.fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(10,147,150,.1);}
+.fld textarea{min-height:68px;resize:vertical;}
+.fhint{font-size:10px;color:var(--text3);line-height:1.4;}
+.cb{background:linear-gradient(135deg,#E6F7F7,#EEF9F9);border:1px solid var(--teal-m);border-radius:10px;padding:13px 15px;margin-top:5px;}
+.cr2{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--text2);}
+.cr2.tot{font-weight:800;border-top:1px solid var(--teal-m);margin-top:5px;padding-top:8px;font-size:15px;color:var(--teal);}
+.etp{display:flex;flex-wrap:wrap;gap:6px;}
+.ett{font-size:11px;font-weight:800;padding:5px 11px;border-radius:7px;cursor:pointer;color:#fff;opacity:.32;transition:opacity .13s;text-transform:uppercase;letter-spacing:.3px;}
+.ett.on{opacity:1;}
+
+/* BOTOES */
+.btn{padding:10px 18px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s;border:none;}
+.btnp{background:linear-gradient(135deg,#0A9396,#00B4D8);color:#fff;box-shadow:0 4px 12px rgba(10,147,150,.22);}
+.btnp:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(10,147,150,.32);}
+.btns{background:var(--white);color:var(--text);border:1.5px solid var(--border);}
+.btns:hover{border-color:var(--teal);color:var(--teal);}
+.btnd{background:none;border:none;color:var(--red);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}
+.btnd:hover{text-decoration:underline;}
+.bbk{background:none;border:none;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px;padding:4px 0;}
+.brow{display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap;align-items:center;}
+.bnew{background:linear-gradient(135deg,#0A9396,#00B4D8);color:#fff;border:none;padding:9px 16px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(10,147,150,.22);display:flex;align-items:center;gap:5px;transition:all .15s;}
+.bnew:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(10,147,150,.32);}
+.bmini{background:var(--white);border:1.5px solid var(--border);border-radius:8px;padding:5px 11px;font-size:11px;font-weight:700;font-family:inherit;color:var(--text2);cursor:pointer;}
+.bmini:hover{border-color:var(--teal);color:var(--teal);}
+
+/* MODAL */
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;}
+.mo.h{display:none;}
+.mb{background:var(--white);border-radius:var(--rx);padding:26px;width:100%;max-width:430px;max-height:88vh;overflow-y:auto;box-shadow:var(--shl);}
+.mbt{font-size:17px;font-weight:800;color:var(--text);margin-bottom:3px;letter-spacing:-.3px;}
+.mbs{font-size:12px;color:var(--text3);margin-bottom:18px;}
+
+/* TABELA */
+.tbl{width:100%;border-collapse:collapse;background:var(--white);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;box-shadow:var(--sh);}
+.tbl th{text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;background:var(--bg);padding:10px 13px;}
+.tbl td{font-size:13px;color:var(--text);padding:10px 13px;border-top:1px solid var(--border2);}
+.bdg{display:inline-block;padding:3px 9px;border-radius:7px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;}
+.bdg.ok{background:var(--green-bg);color:var(--green);}
+.bdg.wr{background:var(--red-bg);color:var(--red);}
+.bdg.nt{background:var(--gray-bg);color:var(--gray);}
+.inp-mini{background:#F3FAFA;border:1.5px solid var(--border);border-radius:8px;padding:6px 9px;font-size:12px;font-family:inherit;width:70px;color:var(--text);}
+.inp-cor{width:44px;height:32px;padding:2px;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;}
+.alertbar{background:var(--red-bg);color:var(--red);border:1px solid #F5C6C0;padding:11px 15px;border-radius:11px;margin-bottom:16px;font-size:12px;font-weight:700;}
+
+/* TOAST */
+#toast{position:fixed;bottom:calc(26px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(120px);background:var(--text);color:#fff;padding:11px 20px;border-radius:22px;font-size:13px;font-weight:700;z-index:9999;transition:transform .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;box-shadow:0 8px 28px rgba(0,0,0,.18);}
+#toast.v{transform:translateX(-50%) translateY(0);}
+#toast.ok{background:#0A7A5C;}
+#toast.er{background:#C0392B;}
+
+.emp{text-align:center;padding:44px 20px;color:var(--text3);}
+.empt{font-size:15px;font-weight:700;color:var(--text2);margin-bottom:5px;}
 </style>
 </head>
 <body>
-<div id="app"></div>
+
+<div id="ls"><img src="icon192.png" style="width:56px;height:56px;border-radius:14px"/><div class="spin"></div></div>
+
+<div id="ln" class="h">
+  <div class="lbox">
+    <div class="llogo">
+      <div class="lico"><img src="icon192.png" style="width:100%;height:100%;object-fit:cover"/></div>
+      <div class="ltitle">PreviMater</div>
+      <div class="lsub">CRM</div>
+    </div>
+    <div class="lf"><label>E-mail</label><input type="email" id="le" placeholder="seu@email.com" autocomplete="email"/></div>
+    <div class="lf"><label>Senha</label><input type="password" id="lp" placeholder="••••••••" autocomplete="current-password"/></div>
+    <div class="lerr" id="lerr"></div>
+    <button class="lbtn" onclick="doLogin()">Entrar</button>
+  </div>
+</div>
+
+<div id="app">
+  <nav id="sb">
+    <div class="sbh">
+      <div class="sbl">
+        <div class="sbi"><img src="icon192.png" style="width:100%;height:100%;object-fit:cover"/></div>
+        <div><div class="sblt">PreviMater</div><div class="sbls">CRM</div></div>
+      </div>
+    </div>
+    <div class="sbn" id="sbnav"></div>
+    <div class="sbf">
+      <div class="sbu"><div class="sbav" id="sbav"></div><div><div class="sbnm" id="sbnm"></div><div class="sbem" id="sbem"></div></div></div>
+      <button class="sblg" onclick="doLogout()">Sair da conta</button>
+    </div>
+  </nav>
+  <div id="ov" onclick="togSB()"></div>
+  <div id="mw">
+    <div id="tb">
+      <div style="display:flex;align-items:center;gap:8px">
+        <button style="background:none;border:none;cursor:pointer;padding:6px;color:var(--text2)" onclick="togSB()">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="sbi" style="width:30px;height:30px;border-radius:9px"><img src="icon192.png" style="width:100%;height:100%;object-fit:cover"/></div>
+        <span style="font-size:14px;font-weight:800">PreviMater</span>
+      </div>
+      <button class="bnew" style="padding:7px 13px;font-size:12px" onclick="location.hash='#/cliente/novo'">+ Novo</button>
+    </div>
+    <div id="pc"></div>
+  </div>
+</div>
+
+<div class="mo h" id="modal"><div class="mb" id="modalbox"></div></div>
+<div id="toast"></div>
 
 <script>
-  // ------------------------------------------------------------
-  // CONFIGURACAO SUPABASE
-  // ------------------------------------------------------------
-  const SUPABASE_URL = 'https://ggyngtqknonwnohbzkyj.supabase.co';
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdneW5ndHFrbm9ud25vaGJ6a3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5ODA4NzcsImV4cCI6MjA5NDU1Njg3N30.0zYn_V9gBtRNWivAHfps6u68akb0mTc7Ix8ZD38OD0I';
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// ============================================================
+// CONFIG
+// ============================================================
+const SUPABASE_URL='https://ggyngtqknonwnohbzkyj.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdneW5ndHFrbm9ud25vaGJ6a3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5ODA4NzcsImV4cCI6MjA5NDU1Njg3N30.0zYn_V9gBtRNWivAHfps6u68akb0mTc7Ix8ZD38OD0I';
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 
-  // ------------------------------------------------------------
-  // ESTADO
-  // ------------------------------------------------------------
-  let currentUser = null;      // { id, nome, nivel, email }
-  let currentSession = null;
-  let quadrosPermitidos = [];  // ex: ['comercial','incubadora','operacional','financeiro']
-  let etiquetasCache = [];     // [{id, nome, cor}]
+const PCT_HONORARIOS=0.30;
 
-  const QUADROS = {
-    comercial: {
-      rotulo: 'Comercial',
-      fases: [
-        { chave: 'Lead novo',             cor: 'var(--gray)' },
-        { chave: 'Em triagem',            cor: 'var(--amber)' },
-        { chave: 'Aguardando documentos', cor: 'var(--amber)' },
-        { chave: 'Contrato enviado',      cor: 'var(--sage)' },
-        { chave: 'Contrato assinado',     cor: 'var(--primary)' }
-      ]
-    },
-    incubadora: { rotulo: 'Incubadora', fases: null }, // colunas = meses, vem do banco
-    operacional: {
-      rotulo: 'Operacional',
-      fases: [
-        { chave: 'Beneficio Protocolado', cor: 'var(--gray)',    rotulo: 'Benefício protocolado' },
-        { chave: 'Em Analise',            cor: 'var(--amber)',   rotulo: 'Em análise' },
-        { chave: 'Exigencia',             cor: 'var(--amber)',   rotulo: 'Exigência' },
-        { chave: 'Exigencia Cumprida',    cor: 'var(--sage)',    rotulo: 'Exigência cumprida' },
-        { chave: 'Beneficio Negado',      cor: 'var(--brick)',   rotulo: 'Benefício negado' },
-        { chave: 'Beneficio Concedido',   cor: 'var(--sage)',    rotulo: 'Benefício concedido' }
-      ]
-    },
-    financeiro: {
-      rotulo: 'Financeiro',
-      fases: [
-        { chave: 'Aguardando pagamento INSS', cor: 'var(--gray)' },
-        { chave: 'Beneficio recebido',        cor: 'var(--amber)',  rotulo: 'Benefício recebido' },
-        { chave: 'Honorarios a receber',      cor: 'var(--amber)',  rotulo: 'Honorários a receber' },
-        { chave: 'Pago-Encerrado',            cor: 'var(--sage)',   rotulo: 'Pago / encerrado' }
-      ]
-    }
+const QUADROS={
+  comercial:{rotulo:'Comercial',icone:'◔',ordem:1},
+  incubadora:{rotulo:'Incubadora',icone:'◍',ordem:2},
+  operacional:{rotulo:'Operacional',icone:'◈',ordem:3},
+  financeiro:{rotulo:'Financeiro',icone:'◆',ordem:4}
+};
+const CANAIS={meta_oficial:'Meta oficial',evolution:'Evolution',whatsgw:'WhatsGW'};
+
+let U=null, S=null, QPERM=[], ETQ=[];
+let dragCardId=null;
+
+// ============================================================
+// UTIL
+// ============================================================
+function esc(s){const d=document.createElement('div');d.textContent=(s===null||s===undefined)?'':s;return d.innerHTML;}
+function escA(s){return s?String(s).replace(/"/g,'&quot;'):'';}
+function toast(msg,tipo){const t=document.getElementById('toast');t.textContent=msg;t.className='v '+(tipo||'');setTimeout(()=>t.className='',2600);}
+function togSB(){document.getElementById('sb').classList.toggle('o');document.getElementById('ov').classList.toggle('o');}
+function fecharModal(){document.getElementById('modal').classList.add('h');}
+
+function moneyToFloat(v){if(!v)return 0;return parseFloat(String(v).replace(/\./g,'').replace(',','.'))||0;}
+function floatToMoney(v){v=parseFloat(v)||0;return v>0?v.toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.'):'';}
+function moneyMask(el){
+  let d=(el.value||'').replace(/\D/g,'');
+  if(!d){el.value='';return;}
+  while(d.length<3)d='0'+d;
+  const c=d.slice(-2);
+  let r=d.slice(0,-2).replace(/^0+/,'')||'0';
+  r=r.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+  el.value=r+','+c;
+}
+function cpfMask(el){
+  let d=(el.value||'').replace(/\D/g,'').slice(0,11);
+  if(d.length>9) d=d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/,'$1.$2.$3-$4');
+  else if(d.length>6) d=d.replace(/(\d{3})(\d{3})(\d{1,3})/,'$1.$2.$3');
+  else if(d.length>3) d=d.replace(/(\d{3})(\d{1,3})/,'$1.$2');
+  el.value=d;
+}
+function fmtBRL(v){return (parseFloat(v)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+function fmtData(d){if(!d)return '—';const[a,m,x]=d.split('-');return `${x}/${m}/${a}`;}
+
+// ============================================================
+// AUTH
+// ============================================================
+async function boot(){
+  const{data}=await sb.auth.getSession();
+  S=data.session;
+  if(S) await carregarUsuario();
+  document.getElementById('ls').classList.add('h');
+  if(U){mostrarApp();route();}
+  else{document.getElementById('ln').classList.remove('h');}
+}
+
+async function carregarUsuario(){
+  const{data,error}=await sb.from('crm_usuarios').select('id,nome,nivel,email').eq('auth_user_id',S.user.id).single();
+  if(error||!data)return;
+  U=data;
+  const{data:p}=await sb.from('crm_permissoes_quadro').select('quadro').eq('usuario_id',U.id);
+  QPERM=(p||[]).map(x=>x.quadro).filter(q=>QUADROS[q]).sort((a,b)=>QUADROS[a].ordem-QUADROS[b].ordem);
+  const{data:e}=await sb.from('crm_etiquetas').select('*').order('nome');
+  ETQ=e||[];
+}
+
+async function doLogin(){
+  const em=document.getElementById('le').value.trim();
+  const pw=document.getElementById('lp').value;
+  const err=document.getElementById('lerr');
+  err.textContent='';
+  if(!em||!pw){err.textContent='Preencha e-mail e senha.';return;}
+  const{data,error}=await sb.auth.signInWithPassword({email:em,password:pw});
+  if(error){err.textContent='E-mail ou senha incorretos.';return;}
+  S=data.session;
+  await carregarUsuario();
+  if(!U){err.textContent='Usuário não cadastrado no CRM.';await sb.auth.signOut();S=null;return;}
+  document.getElementById('ln').classList.add('h');
+  mostrarApp();
+  location.hash='#/';
+  route();
+}
+
+async function doLogout(){
+  await sb.auth.signOut();
+  S=null;U=null;QPERM=[];ETQ=[];
+  document.getElementById('app').classList.remove('v');
+  document.getElementById('ln').classList.remove('h');
+}
+
+function mostrarApp(){
+  document.getElementById('app').classList.add('v');
+  document.getElementById('sbav').textContent=(U.nome||'?').charAt(0).toUpperCase();
+  document.getElementById('sbnm').textContent=U.nome;
+  document.getElementById('sbem').textContent=U.email;
+  montarSidebar();
+}
+
+function montarSidebar(){
+  let h='<div class="snl">Quadros</div>';
+  QPERM.forEach(q=>{
+    h+=`<button class="ni" id="nav-${q}" onclick="location.hash='#/quadro/${q}'"><div class="nic">${QUADROS[q].icone}</div>${QUADROS[q].rotulo}</button>`;
+  });
+  h+='<div class="snl">Configurações</div>';
+  h+=`<button class="ni" id="nav-etiquetas" onclick="location.hash='#/etiquetas'"><div class="nic">◇</div>Etiquetas</button>`;
+  if(U.nivel==='proprietario'){
+    h+=`<button class="ni" id="nav-campanha" onclick="location.hash='#/campanha'"><div class="nic">◐</div>Campanha</button>`;
+  }
+  document.getElementById('sbnav').innerHTML=h;
+}
+
+function marcarNav(id){
+  document.querySelectorAll('.ni').forEach(b=>b.classList.remove('a'));
+  const el=document.getElementById('nav-'+id);
+  if(el)el.classList.add('a');
+  if(window.innerWidth<=900){
+    document.getElementById('sb').classList.remove('o');
+    document.getElementById('ov').classList.remove('o');
+  }
+}
+
+// ============================================================
+// ROTEAMENTO
+// ============================================================
+window.addEventListener('hashchange',route);
+window.addEventListener('DOMContentLoaded',boot);
+
+function route(){
+  if(!U)return;
+  const r=location.hash.slice(1)||'/';
+  if(r==='/'){location.hash='#/quadro/'+(QPERM[0]||'comercial');return;}
+  let m;
+  if(m=r.match(/^\/quadro\/(.+)$/)) return pageQuadro(m[1]);
+  if(r==='/cliente/novo') return pageCliente(null);
+  if(m=r.match(/^\/cliente\/(.+)$/)) return pageCliente(m[1]);
+  if(r==='/etiquetas') return pageEtiquetas();
+  if(r==='/campanha') return pageCampanha();
+  document.getElementById('pc').innerHTML='<div class="emp"><div class="empt">Tela não encontrada</div></div>';
+}
+
+// ============================================================
+// QUADRO / KANBAN
+// ============================================================
+async function pageQuadro(q){
+  const pc=document.getElementById('pc');
+  marcarNav(q);
+
+  if(!QUADROS[q]||!QPERM.includes(q)){
+    pc.innerHTML='<div class="emp"><div class="empt">Você não tem acesso a este quadro</div></div>';
+    return;
+  }
+
+  pc.innerHTML=`<div class="pgh"><div><div class="pgt">${QUADROS[q].rotulo}</div><div class="pgs">Carregando...</div></div></div>`;
+
+  const[{data:listas},{data:clientes,error}]=await Promise.all([
+    sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem'),
+    sb.from('crm_clientes').select('id,nome_completo,lista_id,posicao,telefone_principal,data_nascimento_bebe,data_entrega,valor_beneficio_esperado,crm_clientes_etiquetas(etiqueta_id)').eq('quadro',q).order('posicao')
+  ]);
+
+  if(error){
+    pc.innerHTML=`<div class="emp"><div class="empt">Erro ao carregar</div>${esc(error.message)}</div>`;
+    return;
+  }
+
+  const L=listas||[], C=clientes||[];
+  const porLista={};
+  L.forEach(l=>porLista[l.id]=[]);
+  const orfaos=[];
+  C.forEach(c=>{ if(porLista[c.lista_id]) porLista[c.lista_id].push(c); else orfaos.push(c); });
+
+  let kb=L.map(l=>listaHtml(l,porLista[l.id])).join('');
+  if(orfaos.length) kb+=listaHtml({id:'__sem__',nome:'Sem lista',cor:'#5A7070'},orfaos,true);
+  kb+=`<button class="knl" onclick="modalNovaLista('${q}')">+ nova lista</button>`;
+
+  pc.innerHTML=`
+    <div class="pgh">
+      <div><div class="pgt">${QUADROS[q].rotulo}</div><div class="pgs">${C.length} ${C.length===1?'cliente':'clientes'} neste quadro</div></div>
+      <button class="bnew" onclick="location.hash='#/cliente/novo'">+ Novo cliente</button>
+    </div>
+    <div class="kb" id="kb">${kb}</div>
+  `;
+  ligarDragDrop();
+}
+
+function listaHtml(l,cards,semAcoes){
+  const cs=cards.length
+    ? cards.map(cardHtml).join('')
+    : '<div class="kempty">Vazia</div>';
+  return `
+    <div class="kl" data-lista="${l.id}">
+      <div class="klh" style="border-top-color:${escA(l.cor)}">
+        <div class="kln">${esc(l.nome)}</div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span class="klc">${cards.length}</span>
+          ${semAcoes?'':`<button class="klm" onclick="modalEditarLista('${l.id}')" title="Editar lista">⋯</button>`}
+        </div>
+      </div>
+      <div class="klb" data-drop="${l.id}">${cs}</div>
+      ${semAcoes?'':`<div class="klf"><button class="kadd" onclick="location.hash='#/cliente/novo?lista=${l.id}'">+ adicionar cliente</button></div>`}
+    </div>`;
+}
+
+function cardHtml(c){
+  const chips=(c.crm_clientes_etiquetas||[]).map(e=>{
+    const t=ETQ.find(x=>x.id===e.etiqueta_id);
+    return t?`<span class="chip" style="background:${escA(t.cor)}">${esc(t.nome)}</span>`:'';
+  }).join('');
+  const meta=[];
+  if(c.telefone_principal)meta.push(esc(c.telefone_principal));
+  if(c.data_nascimento_bebe)meta.push('DN '+fmtData(c.data_nascimento_bebe));
+  return `
+    <div class="kc" draggable="true" data-card="${c.id}" onclick="location.hash='#/cliente/${c.id}'">
+      <button class="kcmv" title="Mover cartão" onclick="event.stopPropagation();modalMover('${c.id}')">⇄</button>
+      <div class="kcn">${esc(c.nome_completo)}</div>
+      ${meta.length?`<div class="kcm">${meta.join(' · ')}</div>`:''}
+      ${c.valor_beneficio_esperado?`<div class="kcm"><span class="kcv">${fmtBRL(c.valor_beneficio_esperado)}</span></div>`:''}
+      ${entregaHtml(c.data_entrega)}
+      ${chips?`<div class="kce">${chips}</div>`:''}
+    </div>`;
+}
+
+function entregaHtml(d){
+  if(!d)return '';
+  const hoje=new Date();hoje.setHours(0,0,0,0);
+  const[a,m,x]=d.split('-').map(Number);
+  const alvo=new Date(a,m-1,x);
+  const dias=Math.round((alvo-hoje)/86400000);
+  let cls='ent-ok',txt=fmtData(d);
+  if(dias<0){cls='ent-late';txt=fmtData(d)+' · atrasado';}
+  else if(dias===0){cls='ent-soon';txt='entrega hoje';}
+  else if(dias<=3){cls='ent-soon';txt=fmtData(d)+' · em '+dias+'d';}
+  return `<div class="kcm"><span class="ent ${cls}">◷ ${txt}</span></div>`;
+}
+
+// ---------- DRAG AND DROP ----------
+function ligarDragDrop(){
+  document.querySelectorAll('.kc').forEach(card=>{
+    card.addEventListener('dragstart',e=>{
+      dragCardId=card.getAttribute('data-card');
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+    });
+    card.addEventListener('dragend',()=>{
+      card.classList.remove('dragging');
+      document.querySelectorAll('.kl').forEach(l=>l.classList.remove('dragover'));
+    });
+  });
+
+  document.querySelectorAll('.klb').forEach(body=>{
+    body.addEventListener('dragover',e=>{
+      e.preventDefault();
+      body.closest('.kl').classList.add('dragover');
+      const arrastando=document.querySelector('.dragging');
+      if(!arrastando)return;
+      const depois=cardDepoisDe(body,e.clientY);
+      if(depois==null) body.appendChild(arrastando);
+      else body.insertBefore(arrastando,depois);
+    });
+    body.addEventListener('dragleave',e=>{
+      if(!body.contains(e.relatedTarget)) body.closest('.kl').classList.remove('dragover');
+    });
+    body.addEventListener('drop',async e=>{
+      e.preventDefault();
+      body.closest('.kl').classList.remove('dragover');
+      const listaId=body.getAttribute('data-drop');
+      if(listaId==='__sem__')return;
+      await salvarOrdemLista(listaId,body);
+    });
+  });
+}
+
+function cardDepoisDe(container,y){
+  const cards=[...container.querySelectorAll('.kc:not(.dragging)')];
+  return cards.reduce((mais,card)=>{
+    const box=card.getBoundingClientRect();
+    const off=y-box.top-box.height/2;
+    if(off<0&&off>mais.off)return{off:off,el:card};
+    return mais;
+  },{off:Number.NEGATIVE_INFINITY,el:null}).el;
+}
+
+async function salvarOrdemLista(listaId,body){
+  const ids=[...body.querySelectorAll('.kc')].map(c=>c.getAttribute('data-card'));
+  const updates=ids.map((id,i)=>sb.from('crm_clientes').update({lista_id:listaId,posicao:i,atualizado_em:new Date().toISOString()}).eq('id',id));
+  const res=await Promise.all(updates);
+  const erro=res.find(r=>r.error);
+  if(erro){toast('Não foi possível mover','er');route();return;}
+  toast('Cliente movido','ok');
+  atualizarContadores();
+}
+
+function atualizarContadores(){
+  document.querySelectorAll('.kl').forEach(l=>{
+    const n=l.querySelectorAll('.kc').length;
+    const c=l.querySelector('.klc');
+    if(c)c.textContent=n;
+    const b=l.querySelector('.klb');
+    if(b&&n===0&&!b.querySelector('.kempty'))b.innerHTML='<div class="kempty">Vazia</div>';
+    if(b&&n>0){const e=b.querySelector('.kempty');if(e)e.remove();}
+  });
+}
+
+// ---------- MODAL MOVER CARTAO ----------
+async function modalMover(clienteId){
+  abrirModal('<div class="mbt">Mover cartão</div><div class="mbs">Carregando...</div>');
+
+  const{data:c}=await sb.from('crm_clientes').select('id,nome_completo,quadro,lista_id,posicao').eq('id',clienteId).single();
+  if(!c){toast('Cliente não encontrado','er');fecharModal();return;}
+
+  const{data:listasAtuais}=await sb.from('crm_listas').select('*').eq('quadro',c.quadro).eq('arquivada',false).order('ordem');
+  const L=listasAtuais||[];
+  const idx=L.findIndex(l=>l.id===c.lista_id);
+
+  // sugestoes: lista anterior e proxima dentro do mesmo quadro
+  let sug='';
+  if(idx>0) sug+=`<button class="mvs" onclick="moverPara('${c.id}','${c.quadro}','${L[idx-1].id}',0)">← ${esc(L[idx-1].nome)}</button>`;
+  if(idx>=0&&idx<L.length-1) sug+=`<button class="mvs" onclick="moverPara('${c.id}','${c.quadro}','${L[idx+1].id}',0)">→ ${esc(L[idx+1].nome)}</button>`;
+
+  const optQ=QPERM.map(q=>`<option value="${q}" ${c.quadro===q?'selected':''}>${QUADROS[q].rotulo}</option>`).join('');
+  const optL=L.map(l=>`<option value="${l.id}" ${c.lista_id===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
+
+  abrirModal(`
+    <div class="mbt">Mover cartão</div>
+    <div class="mbs">${esc(c.nome_completo)}</div>
+
+    ${sug?`<div class="mvsl">Sugeridas</div><div class="mvsug">${sug}</div>`:''}
+
+    <div class="mvsl">Selecionar destino</div>
+    <div class="fld" style="margin-bottom:12px"><label>Quadro</label>
+      <select id="mv-quadro" onchange="mvTrocarQuadro()">${optQ}</select></div>
+    <div class="fg" style="margin-bottom:20px">
+      <div class="fld"><label>Lista</label><select id="mv-lista" onchange="mvTrocarLista()">${optL}</select></div>
+      <div class="fld"><label>Posição</label><select id="mv-pos"></select></div>
+    </div>
+
+    <div class="brow">
+      <button class="btn btns" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btnp" onclick="moverConfirmar('${c.id}')">Mover</button>
+    </div>`);
+
+  await mvTrocarLista(c.posicao);
+}
+
+async function mvTrocarQuadro(){
+  const q=document.getElementById('mv-quadro').value;
+  const{data:L}=await sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem');
+  document.getElementById('mv-lista').innerHTML=(L||[]).map(l=>`<option value="${l.id}">${esc(l.nome)}</option>`).join('');
+  await mvTrocarLista();
+}
+
+async function mvTrocarLista(posAtual){
+  const listaId=document.getElementById('mv-lista').value;
+  const sel=document.getElementById('mv-pos');
+  if(!listaId){sel.innerHTML='<option value="0">1</option>';return;}
+  const{count}=await sb.from('crm_clientes').select('id',{count:'exact',head:true}).eq('lista_id',listaId);
+  const total=(count||0);
+  let opts='';
+  for(let i=0;i<=total;i++){
+    const marcado=(posAtual!==undefined&&posAtual===i)?'selected':'';
+    opts+=`<option value="${i}" ${marcado}>${i+1}</option>`;
+  }
+  sel.innerHTML=opts;
+}
+
+async function moverConfirmar(clienteId){
+  const quadro=document.getElementById('mv-quadro').value;
+  const listaId=document.getElementById('mv-lista').value;
+  const pos=parseInt(document.getElementById('mv-pos').value,10)||0;
+  if(!listaId){toast('Escolha uma lista','er');return;}
+  await moverPara(clienteId,quadro,listaId,pos);
+}
+
+async function moverPara(clienteId,quadro,listaId,pos){
+  // abre espaco na posicao escolhida
+  const{data:naLista}=await sb.from('crm_clientes').select('id,posicao').eq('lista_id',listaId).neq('id',clienteId).order('posicao');
+  const ordenados=(naLista||[]).map(x=>x.id);
+  ordenados.splice(pos,0,clienteId);
+
+  const ups=ordenados.map((id,i)=>{
+    const p={lista_id:listaId,posicao:i,atualizado_em:new Date().toISOString()};
+    if(id===clienteId)p.quadro=quadro;
+    return sb.from('crm_clientes').update(p).eq('id',id);
+  });
+  const res=await Promise.all(ups);
+  if(res.find(r=>r.error)){toast('Não foi possível mover','er');return;}
+
+  fecharModal();
+  toast('Cartão movido','ok');
+  const rotaAtual=location.hash.match(/^#\/quadro\/(.+)$/);
+  if(rotaAtual) pageQuadro(rotaAtual[1]);
+  else location.hash='#/quadro/'+quadro;
+}
+
+// ---------- MODAIS DE LISTA ----------
+function abrirModal(html){
+  document.getElementById('modalbox').innerHTML=html;
+  document.getElementById('modal').classList.remove('h');
+}
+
+function modalNovaLista(quadro){
+  abrirModal(`
+    <div class="mbt">Nova lista</div>
+    <div class="mbs">Ela vai aparecer como uma coluna no quadro ${QUADROS[quadro].rotulo}.</div>
+    <div class="fld" style="margin-bottom:13px"><label>Nome da lista</label><input type="text" id="nl-nome" placeholder="Ex: Aguardando GPS"/></div>
+    <div class="fld" style="margin-bottom:18px"><label>Cor</label><input type="color" class="inp-cor" id="nl-cor" value="#0A9396"/></div>
+    <div class="brow">
+      <button class="btn btns" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btnp" onclick="criarLista('${quadro}')">Criar lista</button>
+    </div>`);
+}
+
+async function criarLista(quadro){
+  const nome=document.getElementById('nl-nome').value.trim();
+  const cor=document.getElementById('nl-cor').value;
+  if(!nome){toast('Digite o nome da lista','er');return;}
+  const{data:ult}=await sb.from('crm_listas').select('ordem').eq('quadro',quadro).order('ordem',{ascending:false}).limit(1);
+  const ordem=(ult&&ult[0]?ult[0].ordem:0)+1;
+  const{error}=await sb.from('crm_listas').insert({quadro,nome,cor,ordem});
+  if(error){toast('Erro ao criar','er');return;}
+  fecharModal();toast('Lista criada','ok');pageQuadro(quadro);
+}
+
+async function modalEditarLista(listaId){
+  const{data:l}=await sb.from('crm_listas').select('*').eq('id',listaId).single();
+  if(!l)return;
+  abrirModal(`
+    <div class="mbt">Editar lista</div>
+    <div class="mbs">Quadro ${QUADROS[l.quadro].rotulo}</div>
+    <div class="fld" style="margin-bottom:13px"><label>Nome</label><input type="text" id="el-nome" value="${escA(l.nome)}"/></div>
+    <div class="fg" style="margin-bottom:18px">
+      <div class="fld"><label>Cor</label><input type="color" class="inp-cor" id="el-cor" value="${escA(l.cor)}"/></div>
+      <div class="fld"><label>Posição no quadro</label><input type="number" id="el-ordem" value="${l.ordem}" min="0"/></div>
+    </div>
+    <div class="brow" style="justify-content:space-between">
+      <button class="btnd" onclick="arquivarLista('${l.id}','${l.quadro}')">Arquivar lista</button>
+      <div style="display:flex;gap:9px">
+        <button class="btn btns" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btnp" onclick="salvarLista('${l.id}','${l.quadro}')">Salvar</button>
+      </div>
+    </div>`);
+}
+
+async function salvarLista(id,quadro){
+  const nome=document.getElementById('el-nome').value.trim();
+  const cor=document.getElementById('el-cor').value;
+  const ordem=parseInt(document.getElementById('el-ordem').value,10)||0;
+  if(!nome){toast('O nome não pode ficar vazio','er');return;}
+  const{error}=await sb.from('crm_listas').update({nome,cor,ordem}).eq('id',id);
+  if(error){toast('Erro ao salvar','er');return;}
+  fecharModal();toast('Lista atualizada','ok');pageQuadro(quadro);
+}
+
+async function arquivarLista(id,quadro){
+  if(!confirm('Arquivar esta lista? Os clientes continuam cadastrados, mas ficarão sem lista até você movê-los.'))return;
+  const{error}=await sb.from('crm_listas').update({arquivada:true}).eq('id',id);
+  if(error){toast('Erro ao arquivar','er');return;}
+  fecharModal();toast('Lista arquivada','ok');pageQuadro(quadro);
+}
+
+// ============================================================
+// FICHA DO CLIENTE
+// ============================================================
+async function pageCliente(id){
+  const pc=document.getElementById('pc');
+  const novo=!id;
+  let c=null, etqSel=[];
+
+  let listaPre=null;
+  const hash=location.hash;
+  const mq=hash.match(/lista=([^&]+)/);
+  if(mq)listaPre=mq[1];
+
+  if(!novo){
+    pc.innerHTML='<div class="emp">Carregando...</div>';
+    const{data,error}=await sb.from('crm_clientes').select('*,crm_clientes_etiquetas(etiqueta_id)').eq('id',id).single();
+    if(error||!data){pc.innerHTML='<div class="emp"><div class="empt">Cliente não encontrado</div></div>';return;}
+    c=data;
+    etqSel=(data.crm_clientes_etiquetas||[]).map(e=>e.etiqueta_id);
+  }
+
+  const quadroAtual=(c&&c.quadro)||QPERM[0]||'comercial';
+  const{data:listas}=await sb.from('crm_listas').select('*').eq('quadro',quadroAtual).eq('arquivada',false).order('ordem');
+
+  const optQ=QPERM.map(q=>`<option value="${q}" ${quadroAtual===q?'selected':''}>${QUADROS[q].rotulo}</option>`).join('');
+  const listaSel=(c&&c.lista_id)||listaPre||((listas&&listas[0])?listas[0].id:'');
+  const optL=(listas||[]).map(l=>`<option value="${l.id}" ${listaSel===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
+  const optCanal=Object.keys(CANAIS).map(k=>`<option value="${k}" ${c&&c.canal_whatsapp===k?'selected':''}>${CANAIS[k]}</option>`).join('');
+  const chips=ETQ.map(t=>`<span class="ett ${etqSel.includes(t.id)?'on':''}" data-etq="${t.id}" style="background:${escA(t.cor)}" onclick="this.classList.toggle('on')">${esc(t.nome)}</span>`).join('');
+
+  pc.innerHTML=`
+    <div style="display:flex;align-items:center;gap:11px;margin-bottom:20px">
+      <button class="bbk" onclick="history.back()">‹ Voltar</button>
+      <div style="flex:1"><div class="pgt" style="font-size:21px">${novo?'Novo cliente':esc(c.nome_completo)}</div>
+      <div class="pgs">${novo?'Cadastre uma nova cliente':'Editar ficha da cliente'}</div></div>
+      ${novo?'':`<button class="btn btns" onclick="modalMover('${c.id}')">⇄ Mover cartão</button>`}
+    </div>
+
+    <div class="fs">
+      <div class="fst">1. Dados pessoais</div>
+      <div class="fg">
+        <div class="fld ff"><label>Nome completo *</label><input type="text" id="f-nome" value="${escA(c&&c.nome_completo)}"/></div>
+        <div class="fld"><label>CPF</label><input type="text" id="f-cpf" inputmode="numeric" placeholder="000.000.000-00" value="${escA(c&&c.cpf)}" oninput="cpfMask(this)"/></div>
+        <div class="fld"><label>Telefone principal</label><input type="text" id="f-tel" value="${escA(c&&c.telefone_principal)}"/></div>
+        <div class="fld"><label>Canal WhatsApp</label><select id="f-canal"><option value="">— selecione —</option>${optCanal}</select></div>
+        <div class="fld"><label>Data de nascimento do bebê</label><input type="date" id="f-dn" value="${(c&&c.data_nascimento_bebe)||''}"/></div>
+      </div>
+    </div>
+
+    <div class="fs">
+      <div class="fst">2. Situação no CRM</div>
+      <div class="fg">
+        <div class="fld"><label>Quadro</label><select id="f-quadro" onchange="trocarQuadroForm()">${optQ}</select></div>
+        <div class="fld"><label>Lista</label><select id="f-lista">${optL}</select></div>
+        <div class="fld ff"><label>Etiquetas</label><div class="etp" id="etp">${chips||'<span class="fhint">Nenhuma etiqueta criada ainda.</span>'}</div></div>
+      </div>
+    </div>
+
+    <div class="fs">
+      <div class="fst">3. Benefício e honorários</div>
+      <div class="fg">
+        <div class="fld"><label>Data de saída do emprego (DS)</label><input type="date" id="f-ds" value="${(c&&c.data_saida_emprego)||''}"/></div>
+        <div class="fld"><label>Valor do benefício (R$)</label><input type="text" id="f-vb" inputmode="decimal" value="${floatToMoney(c&&c.valor_beneficio_esperado)}" oninput="moneyMask(this)" onchange="recalcHonorarios()"/></div>
+        <div class="fld"><label>Honorários (R$)</label><input type="text" id="f-vh" inputmode="decimal" value="${floatToMoney(c&&c.valor_honorarios)}" oninput="moneyMask(this)"/>
+          <div class="fhint">Calculado automaticamente como 30% do benefício. Você pode sobrescrever.</div></div>
+        <div class="fld"><label>Data de entrega</label><input type="date" id="f-entrega" value="${(c&&c.data_entrega)||''}"/>
+          <div class="fhint">Prazo desta cliente. Aparece no card e fica em destaque quando estiver perto ou vencida.</div></div>
+      </div>
+      <div class="cb" id="cbox" style="margin-top:14px"></div>
+    </div>
+
+    <div class="fs">
+      <div class="fst">4. Observações</div>
+      <div class="fld"><textarea id="f-obs">${esc(c&&c.observacoes)}</textarea></div>
+    </div>
+
+    <div class="brow" style="justify-content:space-between;margin-bottom:30px">
+      <div>${novo?'':`<button class="btnd" onclick="excluirCliente('${c.id}')">Excluir cliente</button>`}</div>
+      <div style="display:flex;gap:9px">
+        <button class="btn btns" onclick="history.back()">Cancelar</button>
+        <button class="btn btnp" id="btn-salvar" onclick="salvarCliente(${novo?'null':`'${c.id}'`})">${novo?'Criar cliente':'Salvar alterações'}</button>
+      </div>
+    </div>`;
+
+  renderCaixaCalculo();
+}
+
+function recalcHonorarios(){
+  const vb=moneyToFloat(document.getElementById('f-vb').value);
+  const vh=document.getElementById('f-vh');
+  if(vb>0) vh.value=floatToMoney(vb*PCT_HONORARIOS);
+  renderCaixaCalculo();
+}
+
+function renderCaixaCalculo(){
+  const vb=moneyToFloat(document.getElementById('f-vb').value);
+  const vh=moneyToFloat(document.getElementById('f-vh').value);
+  const box=document.getElementById('cbox');
+  if(!box)return;
+  if(vb<=0&&vh<=0){box.style.display='none';return;}
+  box.style.display='block';
+  box.innerHTML=`
+    <div class="cr2"><span>Benefício</span><span>${fmtBRL(vb)}</span></div>
+    <div class="cr2"><span>Honorários (30%)</span><span>${fmtBRL(vh)}</span></div>
+    <div class="cr2 tot"><span>Líquido da cliente</span><span>${fmtBRL(vb-vh)}</span></div>`;
+}
+
+async function trocarQuadroForm(){
+  const q=document.getElementById('f-quadro').value;
+  const{data:listas}=await sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem');
+  document.getElementById('f-lista').innerHTML=(listas||[]).map(l=>`<option value="${l.id}">${esc(l.nome)}</option>`).join('');
+}
+
+async function salvarCliente(id){
+  const btn=document.getElementById('btn-salvar');
+  const nome=document.getElementById('f-nome').value.trim();
+  if(!nome){toast('Preencha o nome completo','er');return;}
+
+  const quadro=document.getElementById('f-quadro').value;
+  const payload={
+    nome_completo:nome,
+    cpf:document.getElementById('f-cpf').value.trim()||null,
+    telefone_principal:document.getElementById('f-tel').value.trim()||null,
+    canal_whatsapp:document.getElementById('f-canal').value||null,
+    quadro:quadro,
+    lista_id:document.getElementById('f-lista').value||null,
+    data_nascimento_bebe:document.getElementById('f-dn').value||null,
+    data_saida_emprego:document.getElementById('f-ds').value||null,
+    valor_beneficio_esperado:moneyToFloat(document.getElementById('f-vb').value)||null,
+    valor_honorarios:moneyToFloat(document.getElementById('f-vh').value)||null,
+    data_entrega:document.getElementById('f-entrega').value||null,
+    observacoes:document.getElementById('f-obs').value.trim()||null,
+    atualizado_em:new Date().toISOString()
   };
 
-  const MESES_NOME = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-                      'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const etqSel=[...document.querySelectorAll('#etp .ett.on')].map(e=>e.getAttribute('data-etq'));
 
-  function rotuloFase(f) { return f.rotulo || f.chave; }
+  btn.disabled=true;btn.textContent='Salvando...';
+  let cid=id,error;
+  if(id){({error}=await sb.from('crm_clientes').update(payload).eq('id',id));}
+  else{const r=await sb.from('crm_clientes').insert(payload).select('id').single();error=r.error;if(r.data)cid=r.data.id;}
 
-  // ------------------------------------------------------------
-  // ROTEAMENTO POR HASH
-  // ------------------------------------------------------------
-  function getRoute() { return location.hash.slice(1) || '/'; }
+  if(error){toast('Erro ao salvar: '+error.message,'er');btn.disabled=false;btn.textContent=id?'Salvar alterações':'Criar cliente';return;}
 
-  window.addEventListener('hashchange', render);
-  window.addEventListener('DOMContentLoaded', init);
+  await sb.from('crm_clientes_etiquetas').delete().eq('cliente_id',cid);
+  if(etqSel.length) await sb.from('crm_clientes_etiquetas').insert(etqSel.map(e=>({cliente_id:cid,etiqueta_id:e})));
 
-  async function init() {
-    const { data } = await sb.auth.getSession();
-    currentSession = data.session;
-    if (currentSession) await carregarUsuarioAtual();
-    render();
-  }
+  toast(id?'Cliente atualizado':'Cliente criado','ok');
+  location.hash='#/quadro/'+quadro;
+}
 
-  async function carregarUsuarioAtual() {
-    const { data, error } = await sb
-      .from('crm_usuarios')
-      .select('id, nome, nivel, email')
-      .eq('auth_user_id', currentSession.user.id)
-      .single();
-    if (error || !data) return;
-    currentUser = data;
+async function excluirCliente(id){
+  if(!confirm('Excluir esta cliente? Essa ação não pode ser desfeita.'))return;
+  const{error}=await sb.from('crm_clientes').delete().eq('id',id);
+  if(error){toast('Erro ao excluir','er');return;}
+  toast('Cliente excluída','ok');
+  location.hash='#/';
+}
 
-    const { data: perms } = await sb
-      .from('crm_permissoes_quadro')
-      .select('quadro')
-      .eq('usuario_id', currentUser.id);
-    quadrosPermitidos = (perms || []).map(p => p.quadro);
+// ============================================================
+// ETIQUETAS
+// ============================================================
+async function pageEtiquetas(){
+  const pc=document.getElementById('pc');
+  marcarNav('etiquetas');
+  pc.innerHTML='<div class="emp">Carregando...</div>';
 
-    const { data: etqs } = await sb.from('crm_etiquetas').select('*').order('nome');
-    etiquetasCache = etqs || [];
-  }
+  const{data,error}=await sb.from('crm_etiquetas').select('*').order('nome');
+  if(error){pc.innerHTML='<div class="emp"><div class="empt">Erro ao carregar</div></div>';return;}
+  ETQ=data||[];
 
-  // ------------------------------------------------------------
-  // RENDER PRINCIPAL
-  // ------------------------------------------------------------
-  function render() {
-    const app = document.getElementById('app');
-    if (!currentSession || !currentUser) {
-      app.innerHTML = telaLogin();
-      ligarEventosLogin();
-      return;
-    }
-    const rota = getRoute();
+  const linhas=ETQ.map(t=>`
+    <tr data-etq="${t.id}">
+      <td><input class="inp-mini" style="width:170px" type="text" value="${escA(t.nome)}"/></td>
+      <td><input class="inp-cor" type="color" value="${escA(t.cor)}"/></td>
+      <td><span class="chip" style="background:${escA(t.cor)}">${esc(t.nome)}</span></td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="bmini" onclick="salvarEtiqueta('${t.id}',this)">Salvar</button>
+        <button class="bmini" style="color:var(--red);border-color:#F0C8C2" onclick="excluirEtiqueta('${t.id}')">Excluir</button>
+      </td>
+    </tr>`).join('');
 
-    if (rota === '/') {
-      const primeiro = quadrosPermitidos[0] || 'comercial';
-      location.hash = '#/quadro/' + primeiro;
-      return;
-    }
+  pc.innerHTML=`
+    <div class="pgh"><div><div class="pgt">Etiquetas</div><div class="pgs">Marcadores coloridos para os cards das clientes</div></div></div>
 
-    const matchQuadro = rota.match(/^\/quadro\/(.+)$/);
-    if (matchQuadro) { renderQuadro(matchQuadro[1]); return; }
-
-    if (rota === '/cliente/novo') { renderFormCliente(null); return; }
-
-    const matchCliente = rota.match(/^\/cliente\/(.+)$/);
-    if (matchCliente) { renderFormCliente(matchCliente[1]); return; }
-
-    if (rota === '/etiquetas') { renderEtiquetas(); return; }
-    if (rota === '/campanha') { renderCampanha(); return; }
-
-    app.innerHTML = topbarHtml({}) + '<div class="loading-msg">Tela não encontrada.</div>';
-    ligarEventosTopbar();
-  }
-
-  // ------------------------------------------------------------
-  // LOGIN
-  // ------------------------------------------------------------
-  function telaLogin() {
-    return `
-      <div class="login-wrap">
-        <div class="login-card">
-          <h1>PreviMater CRM</h1>
-          <div id="login-error"></div>
-          <div class="field">
-            <label for="login-email">E-mail</label>
-            <input id="login-email" type="email" autocomplete="username">
-          </div>
-          <div class="field">
-            <label for="login-senha">Senha</label>
-            <input id="login-senha" type="password" autocomplete="current-password">
-          </div>
-          <button class="btn-primary" id="btn-entrar">Entrar</button>
-        </div>
+    <div class="fs">
+      <div class="fst">Criar nova etiqueta</div>
+      <div class="fg" style="align-items:end">
+        <div class="fld"><label>Nome</label><input type="text" id="ne-nome" placeholder="Ex: Tem direito"/></div>
+        <div class="fld"><label>Cor</label><input type="color" class="inp-cor" id="ne-cor" value="#0A9396"/></div>
+        <div class="fld ff"><button class="btn btnp" onclick="criarEtiqueta()" style="width:auto">Criar etiqueta</button></div>
       </div>
-    `;
-  }
+    </div>
 
-  function ligarEventosLogin() {
-    const btn = document.getElementById('btn-entrar');
-    const email = document.getElementById('login-email');
-    const senha = document.getElementById('login-senha');
-    btn.addEventListener('click', () => fazerLogin(email.value, senha.value));
-    senha.addEventListener('keydown', e => { if (e.key === 'Enter') fazerLogin(email.value, senha.value); });
-  }
+    ${ETQ.length?`<table class="tbl"><thead><tr><th>Nome</th><th>Cor</th><th>Como aparece</th><th></th></tr></thead><tbody>${linhas}</tbody></table>`
+      :'<div class="emp"><div class="empt">Nenhuma etiqueta criada</div></div>'}`;
+}
 
-  async function fazerLogin(email, senha) {
-    const btn = document.getElementById('btn-entrar');
-    const errBox = document.getElementById('login-error');
-    errBox.innerHTML = '';
-    if (!email || !senha) {
-      errBox.innerHTML = '<div class="error-msg">Preencha e-mail e senha.</div>';
-      return;
-    }
-    btn.disabled = true;
-    btn.textContent = 'Entrando...';
-    const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
-    if (error) {
-      btn.disabled = false;
-      btn.textContent = 'Entrar';
-      errBox.innerHTML = '<div class="error-msg">E-mail ou senha incorretos.</div>';
-      return;
-    }
-    currentSession = data.session;
-    await carregarUsuarioAtual();
-    if (!currentUser) {
-      errBox.innerHTML = '<div class="error-msg">Login certo, mas este usuário não está cadastrado no CRM.</div>';
-      btn.disabled = false;
-      btn.textContent = 'Entrar';
-      await sb.auth.signOut();
-      currentSession = null;
-      return;
-    }
-    location.hash = '#/';
-    render();
-  }
+async function criarEtiqueta(){
+  const nome=document.getElementById('ne-nome').value.trim();
+  const cor=document.getElementById('ne-cor').value;
+  if(!nome){toast('Digite o nome','er');return;}
+  const{error}=await sb.from('crm_etiquetas').insert({nome,cor});
+  if(error){toast('Erro ao criar','er');return;}
+  toast('Etiqueta criada','ok');pageEtiquetas();
+}
 
-  async function fazerLogout() {
-    await sb.auth.signOut();
-    currentSession = null;
-    currentUser = null;
-    quadrosPermitidos = [];
-    etiquetasCache = [];
-    location.hash = '#/';
-    render();
-  }
+async function salvarEtiqueta(id,btn){
+  const tr=btn.closest('tr');
+  const nome=tr.querySelector('input[type=text]').value.trim();
+  const cor=tr.querySelector('input[type=color]').value;
+  if(!nome){toast('O nome não pode ficar vazio','er');return;}
+  const{error}=await sb.from('crm_etiquetas').update({nome,cor}).eq('id',id);
+  if(error){toast('Erro ao salvar','er');return;}
+  toast('Etiqueta salva','ok');pageEtiquetas();
+}
 
-  // ------------------------------------------------------------
-  // TOPBAR + ABAS DE QUADRO
-  // ------------------------------------------------------------
-  function topbarHtml(opcoes) {
-    opcoes = opcoes || {};
-    const abas = quadrosPermitidos
-      .filter(q => QUADROS[q])
-      .map(q => `<div class="quadro-tab ${opcoes.quadroAtivo === q ? 'ativo' : ''}" onclick="location.hash='#/quadro/${q}'">${QUADROS[q].rotulo}</div>`)
-      .join('');
+async function excluirEtiqueta(id){
+  if(!confirm('Excluir esta etiqueta? Ela sai de todas as clientes que a tiverem.'))return;
+  const{error}=await sb.from('crm_etiquetas').delete().eq('id',id);
+  if(error){toast('Erro ao excluir','er');return;}
+  toast('Etiqueta excluída','ok');pageEtiquetas();
+}
 
-    const extras = [];
-    extras.push(`<div class="quadro-tab ${opcoes.quadroAtivo === 'etiquetas' ? 'ativo' : ''}" onclick="location.hash='#/etiquetas'">Etiquetas</div>`);
-    if (currentUser.nivel === 'proprietario') {
-      extras.push(`<div class="quadro-tab ${opcoes.quadroAtivo === 'campanha' ? 'ativo' : ''}" onclick="location.hash='#/campanha'">Campanha</div>`);
-    }
+// ============================================================
+// CAMPANHA WHATSGW
+// ============================================================
+async function pageCampanha(){
+  const pc=document.getElementById('pc');
+  marcarNav('campanha');
+  if(U.nivel!=='proprietario'){pc.innerHTML='<div class="emp"><div class="empt">Tela restrita a proprietários</div></div>';return;}
+  pc.innerHTML='<div class="emp">Carregando...</div>';
 
-    return `
-      <div class="topbar">
-        <div class="brand">PreviMater CRM</div>
-        <div class="who">
-          ${opcoes.novoCliente ? '<button class="btn-ghost" id="btn-novo-cliente">+ novo cliente</button>' : ''}
-          <span>${escapeHtml(currentUser.nome)} · ${currentUser.nivel === 'proprietario' ? 'proprietário' : 'administrativo'}</span>
-          <button class="btn-ghost" id="btn-sair">Sair</button>
-        </div>
+  const[{data:inst,error},{data:disp}]=await Promise.all([
+    sb.from('crm_instancias_whatsapp').select('*').order('numero_telefone'),
+    sb.from('crm_campanha_disparos').select('*').order('criado_em',{ascending:false}).limit(30)
+  ]);
+  if(error){pc.innerHTML='<div class="emp"><div class="empt">Erro ao carregar</div></div>';return;}
+
+  const I=inst||[],D=disp||[];
+  const ruins=I.filter(x=>x.status==='degradado'||(x.taxa_entrega!==null&&x.taxa_entrega<80));
+  const alerta=ruins.length?`<div class="alertbar">Atenção: ${ruins.length===1?'o número '+esc(ruins[0].numero_telefone)+' está':ruins.length+' números estão'} com entrega baixa. Considere reduzir o teto diário ou pausar.</div>`:'';
+
+  const linhasI=I.map(x=>{
+    const tx=(x.taxa_entrega!==null&&x.taxa_entrega!==undefined)?Number(x.taxa_entrega).toFixed(0)+'%':'—';
+    const cl=(x.taxa_entrega===null||x.taxa_entrega===undefined)?'nt':(x.taxa_entrega<80?'wr':'ok');
+    const sc=x.status==='ativo'?'ok':(x.status==='degradado'?'wr':'nt');
+    return `<tr data-inst="${x.id}">
+      <td style="font-weight:700">${esc(x.numero_telefone)}</td>
+      <td>${CANAIS[x.canal]||esc(x.canal)}</td>
+      <td><input class="inp-mini" type="number" min="0" value="${x.teto_diario_atual}"/> <button class="bmini" onclick="salvarTeto('${x.id}',this)">Salvar</button></td>
+      <td>${x.disparos_hoje} / ${x.teto_diario_atual}</td>
+      <td><span class="bdg ${cl}">${tx}</span></td>
+      <td><span class="bdg ${sc}">${esc(x.status)}</span></td>
+    </tr>`;
+  }).join('');
+
+  const cls={agendado:'nt',enviado:'nt',entregue:'ok',lido:'ok',respondido:'ok',falhou:'wr'};
+  const mapa={};I.forEach(x=>mapa[x.id]=x.numero_telefone);
+  const linhasD=D.map(d=>`<tr>
+      <td>${esc(d.contato_nome)||'—'}</td>
+      <td>${esc(d.contato_telefone)}</td>
+      <td>${esc(mapa[d.instancia_id])||'—'}</td>
+      <td>${d.data_hora_agendada?new Date(d.data_hora_agendada).toLocaleString('pt-BR'):'—'}</td>
+      <td><span class="bdg ${cls[d.status]||'nt'}">${esc(d.status)}</span></td>
+    </tr>`).join('');
+
+  pc.innerHTML=`
+    <div class="pgh"><div><div class="pgt">Campanha</div><div class="pgs">Números, tetos diários e disparos de indicação</div></div></div>
+    ${alerta}
+
+    <div class="fs">
+      <div class="fst">Adicionar número</div>
+      <div class="fg" style="align-items:end">
+        <div class="fld"><label>Número (com DDD)</label><input type="text" id="ni-num" placeholder="41999999999"/></div>
+        <div class="fld"><label>Canal</label><select id="ni-canal"><option value="whatsgw">WhatsGW</option><option value="evolution">Evolution</option><option value="meta_oficial">Meta oficial</option></select></div>
+        <div class="fld"><label>Teto diário inicial</label><input type="number" id="ni-teto" min="0" value="20"/></div>
+        <div class="fld"><button class="btn btnp" onclick="criarInstancia()" style="width:auto">Adicionar</button></div>
       </div>
-      <div class="quadro-tabs">${abas}${extras.join('')}</div>
-    `;
-  }
-
-  function ligarEventosTopbar() {
-    const btnSair = document.getElementById('btn-sair');
-    if (btnSair) btnSair.addEventListener('click', fazerLogout);
-    const btnNovo = document.getElementById('btn-novo-cliente');
-    if (btnNovo) btnNovo.addEventListener('click', () => { location.hash = '#/cliente/novo'; });
-  }
-
-  // ------------------------------------------------------------
-  // QUADRO (kanban)
-  // ------------------------------------------------------------
-  async function renderQuadro(quadro) {
-    const app = document.getElementById('app');
-
-    if (!QUADROS[quadro]) {
-      app.innerHTML = topbarHtml({}) + '<div class="error-box">Quadro não encontrado.</div>';
-      ligarEventosTopbar();
-      return;
-    }
-    if (!quadrosPermitidos.includes(quadro)) {
-      app.innerHTML = topbarHtml({}) + '<div class="error-box">Você não tem acesso a este quadro.</div>';
-      ligarEventosTopbar();
-      return;
-    }
-
-    const topo = topbarHtml({ novoCliente: true, quadroAtivo: quadro });
-    app.innerHTML = topo + '<div class="loading-msg">Carregando...</div>';
-    ligarEventosTopbar();
-
-    const { data: clientes, error } = await sb
-      .from('crm_clientes')
-      .select('id, nome_completo, quadro, fase_kanban, data_nascimento_bebe, valor_beneficio_esperado, crm_clientes_etiquetas(etiqueta_id)')
-      .eq('quadro', quadro)
-      .order('criado_em', { ascending: false });
-
-    if (error) {
-      app.innerHTML = topo + `<div class="error-box">Não foi possível carregar.<br>${escapeHtml(error.message)}</div>`;
-      ligarEventosTopbar();
-      return;
-    }
-
-    const lista = clientes || [];
-    const boardHtml = quadro === 'incubadora'
-      ? await montarBoardIncubadora(lista)
-      : montarBoardFases(quadro, lista);
-
-    app.innerHTML = topo + `<div class="kanban-wrap"><div class="kanban-board">${boardHtml}</div></div>`;
-    ligarEventosTopbar();
-    ligarEventosBoard();
-  }
-
-  function montarBoardFases(quadro, clientes) {
-    const fases = QUADROS[quadro].fases;
-    const porFase = {};
-    fases.forEach(f => porFase[f.chave] = []);
-    clientes.forEach(c => { if (porFase[c.fase_kanban]) porFase[c.fase_kanban].push(c); });
-
-    return fases.map(f => `
-      <div class="kanban-col">
-        <div class="col-header" style="border-top: 4px solid ${f.cor};">
-          <span>${rotuloFase(f)} <span class="col-count">(${porFase[f.chave].length})</span></span>
-        </div>
-        ${porFase[f.chave].length === 0
-          ? '<div class="empty-col">Nenhum cliente</div>'
-          : porFase[f.chave].map(cartaoClienteHtml).join('')}
-      </div>
-    `).join('');
-  }
-
-  async function montarBoardIncubadora(clientes) {
-    const { data: colunas } = await sb
-      .from('crm_incubadora_colunas')
-      .select('*')
-      .eq('arquivada', false)
-      .order('ano')
-      .order('mes');
-
-    const listaColunas = colunas || [];
-
-    if (listaColunas.length === 0) {
-      return `<button class="add-col-btn" id="btn-nova-coluna-mes">+ criar primeiro mês</button>`;
-    }
-
-    const porColuna = {};
-    listaColunas.forEach(col => porColuna[col.id] = []);
-    const semColuna = [];
-
-    clientes.forEach(c => {
-      if (!c.data_nascimento_bebe) { semColuna.push(c); return; }
-      const [ano, mes] = c.data_nascimento_bebe.split('-').map(Number);
-      const col = listaColunas.find(x => x.ano === ano && x.mes === mes);
-      if (col) porColuna[col.id].push(c);
-      else semColuna.push(c);
-    });
-
-    let html = listaColunas.map(col => `
-      <div class="kanban-col">
-        <div class="col-header" style="border-top: 4px solid var(--amber);">
-          <span>${escapeHtml(col.rotulo)} <span class="col-count">(${porColuna[col.id].length})</span></span>
-          <button class="col-arquivar" data-arquivar-coluna="${col.id}" title="Arquivar este mês">&times;</button>
-        </div>
-        ${porColuna[col.id].length === 0
-          ? '<div class="empty-col">Nenhum cliente</div>'
-          : porColuna[col.id].map(cartaoClienteHtml).join('')}
-      </div>
-    `).join('');
-
-    if (semColuna.length > 0) {
-      html += `
-        <div class="kanban-col">
-          <div class="col-header" style="border-top: 4px solid var(--gray);">
-            <span>Sem mês definido <span class="col-count">(${semColuna.length})</span></span>
-          </div>
-          ${semColuna.map(cartaoClienteHtml).join('')}
-        </div>
-      `;
-    }
-
-    html += `<button class="add-col-btn" id="btn-nova-coluna-mes">+ novo mês</button>`;
-    return html;
-  }
-
-  function cartaoClienteHtml(c) {
-    const valor = c.valor_beneficio_esperado
-      ? Number(c.valor_beneficio_esperado).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-      : '';
-    const idsEtiquetas = (c.crm_clientes_etiquetas || []).map(e => e.etiqueta_id);
-    const chips = idsEtiquetas.map(id => {
-      const et = etiquetasCache.find(x => x.id === id);
-      if (!et) return '';
-      return `<span class="etiqueta-chip" style="background:${escapeAttr(et.cor)};">${escapeHtml(et.nome)}</span>`;
-    }).join('');
-
-    return `
-      <div class="client-card" onclick="location.hash='#/cliente/${c.id}'">
-        <div class="nome">${escapeHtml(c.nome_completo)}</div>
-        ${valor ? `<div class="meta">${valor}</div>` : ''}
-        ${chips ? `<div class="card-etiquetas">${chips}</div>` : ''}
-      </div>
-    `;
-  }
-
-  function ligarEventosBoard() {
-    const btnNovaCol = document.getElementById('btn-nova-coluna-mes');
-    if (btnNovaCol) btnNovaCol.addEventListener('click', criarColunaMes);
-
-    document.querySelectorAll('[data-arquivar-coluna]').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        arquivarColunaMes(btn.getAttribute('data-arquivar-coluna'));
-      });
-    });
-  }
-
-  async function criarColunaMes() {
-    const entrada = prompt('Qual mês criar? Digite no formato MM/AAAA (ex: 03/2026)');
-    if (!entrada) return;
-    const partes = entrada.trim().split('/');
-    const mes = parseInt(partes[0], 10);
-    const ano = parseInt(partes[1], 10);
-    if (isNaN(mes) || isNaN(ano) || mes < 1 || mes > 12 || ano < 2000) {
-      alert('Formato inválido. Use MM/AAAA, por exemplo 03/2026.');
-      return;
-    }
-    const rotulo = MESES_NOME[mes - 1] + '/' + ano;
-    const { error } = await sb.from('crm_incubadora_colunas')
-      .upsert({ rotulo, ano, mes, arquivada: false }, { onConflict: 'ano,mes' });
-    if (error) { alert('Não foi possível criar: ' + error.message); return; }
-    renderQuadro('incubadora');
-  }
-
-  async function arquivarColunaMes(colunaId) {
-    if (!confirm('Arquivar este mês? Os clientes continuam cadastrados, só a coluna some do quadro.')) return;
-    const { error } = await sb.from('crm_incubadora_colunas').update({ arquivada: true }).eq('id', colunaId);
-    if (error) { alert('Não foi possível arquivar: ' + error.message); return; }
-    renderQuadro('incubadora');
-  }
-
-  // ------------------------------------------------------------
-  // UTILITARIOS
-  // ------------------------------------------------------------
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str === null || str === undefined ? '' : str;
-    return div.innerHTML;
-  }
-
-  function escapeAttr(str) {
-    if (!str) return '';
-    return String(str).replace(/"/g, '&quot;');
-  }
-
-  function formatarMoedaInput(el) {
-    let digits = el.value.replace(/\D/g, '');
-    if (!digits) digits = '0';
-    const valor = parseInt(digits, 10) / 100;
-    el.value = valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
-  function moneyToFloat(str) {
-    if (!str) return null;
-    const limpo = str.replace(/\./g, '').replace(',', '.');
-    const val = parseFloat(limpo);
-    return isNaN(val) ? null : val;
-  }
-
-  function moneyParaInput(valor) {
-    if (valor === null || valor === undefined) return '';
-    return Number(valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
-  // ------------------------------------------------------------
-  // FORMULARIO DE CLIENTE
-  // ------------------------------------------------------------
-  async function renderFormCliente(clienteId) {
-    const app = document.getElementById('app');
-    const topo = topbarHtml({});
-    const ehNovo = !clienteId;
-
-    if (ehNovo) {
-      app.innerHTML = topo + montarHtmlForm(null, []);
-      ligarEventosTopbar();
-      ligarEventosForm(null);
-      return;
-    }
-
-    app.innerHTML = topo + '<div class="loading-msg">Carregando cliente...</div>';
-    ligarEventosTopbar();
-
-    const { data, error } = await sb
-      .from('crm_clientes')
-      .select('*, crm_clientes_etiquetas(etiqueta_id)')
-      .eq('id', clienteId)
-      .single();
-
-    if (error || !data) {
-      app.innerHTML = topo + '<div class="error-box">Cliente não encontrado.</div>';
-      ligarEventosTopbar();
-      return;
-    }
-
-    const etiquetasDoCliente = (data.crm_clientes_etiquetas || []).map(e => e.etiqueta_id);
-    app.innerHTML = topo + montarHtmlForm(data, etiquetasDoCliente);
-    ligarEventosTopbar();
-    ligarEventosForm(data);
-  }
-
-  function montarHtmlForm(c, etiquetasMarcadas) {
-    const ehNovo = !c;
-    const quadroAtual = (c && c.quadro) || quadrosPermitidos[0] || 'comercial';
-    const opcoesCanal = ['meta_oficial', 'evolution', 'whatsgw'];
-    const nomesCanal = { meta_oficial: 'Meta oficial', evolution: 'Evolution', whatsgw: 'WhatsGW' };
-
-    const optsQuadro = quadrosPermitidos.map(q =>
-      `<option value="${q}" ${quadroAtual === q ? 'selected' : ''}>${QUADROS[q].rotulo}</option>`
-    ).join('');
-
-    const chipsEtiqueta = etiquetasCache.map(et => {
-      const marcada = etiquetasMarcadas.includes(et.id);
-      return `<span class="etiqueta-toggle ${marcada ? 'marcada' : ''}" data-etiqueta-id="${et.id}" style="background:${escapeAttr(et.cor)};">${escapeHtml(et.nome)}</span>`;
-    }).join('');
-
-    return `
-      <div class="form-wrap">
-        <a class="form-back" onclick="history.back()">&larr; voltar</a>
-        <div class="form-card">
-          <h2>${ehNovo ? 'Novo cliente' : 'Editar cliente'}</h2>
-          <div id="form-msg"></div>
-
-          <div class="field">
-            <label for="f-nome">Nome completo *</label>
-            <input id="f-nome" type="text" value="${escapeAttr(c && c.nome_completo)}">
-          </div>
-
-          <div class="form-row">
-            <div class="field">
-              <label for="f-cpf">CPF</label>
-              <input id="f-cpf" type="text" value="${escapeAttr(c && c.cpf)}">
-            </div>
-            <div class="field">
-              <label for="f-telefone">Telefone principal</label>
-              <input id="f-telefone" type="text" value="${escapeAttr(c && c.telefone_principal)}">
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="field">
-              <label for="f-quadro">Quadro</label>
-              <select id="f-quadro">${optsQuadro}</select>
-            </div>
-            <div class="field">
-              <label for="f-fase">Fase</label>
-              <select id="f-fase"></select>
-            </div>
-          </div>
-
-          <div class="field">
-            <label for="f-canal">Canal WhatsApp</label>
-            <select id="f-canal">
-              <option value="">-- selecione --</option>
-              ${opcoesCanal.map(op => `<option value="${op}" ${c && c.canal_whatsapp === op ? 'selected' : ''}>${nomesCanal[op]}</option>`).join('')}
-            </select>
-          </div>
-
-          <div class="form-row">
-            <div class="field">
-              <label for="f-dn-bebe">Data de nascimento do bebê</label>
-              <input id="f-dn-bebe" type="date" value="${(c && c.data_nascimento_bebe) || ''}">
-            </div>
-            <div class="field">
-              <label for="f-ds">Data de saída do emprego</label>
-              <input id="f-ds" type="date" value="${(c && c.data_saida_emprego) || ''}">
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="field">
-              <label for="f-valor-beneficio">Valor benefício esperado (R$)</label>
-              <input id="f-valor-beneficio" type="text" inputmode="decimal" value="${moneyParaInput(c && c.valor_beneficio_esperado)}">
-            </div>
-            <div class="field">
-              <label for="f-valor-honorarios">Valor honorários (R$)</label>
-              <input id="f-valor-honorarios" type="text" inputmode="decimal" value="${moneyParaInput(c && c.valor_honorarios)}">
-            </div>
-          </div>
-
-          <div class="field">
-            <label for="f-desbloqueio">Data de desbloqueio INSS (se houver)</label>
-            <input id="f-desbloqueio" type="date" value="${(c && c.data_desbloqueio_inss) || ''}">
-          </div>
-
-          <div class="field">
-            <label>Etiquetas</label>
-            <div class="etiqueta-picker" id="etiqueta-picker">
-              ${chipsEtiqueta || '<span class="empty-col">Nenhuma etiqueta criada ainda.</span>'}
-            </div>
-          </div>
-
-          <div class="field">
-            <label for="f-obs">Observações</label>
-            <textarea id="f-obs">${escapeHtml(c && c.observacoes)}</textarea>
-          </div>
-
-          <div class="form-actions">
-            <div>${!ehNovo ? '<button class="btn-danger-text" id="btn-excluir-cliente">Excluir cliente</button>' : '<span></span>'}</div>
-            <div class="form-actions-right">
-              <button class="btn-secondary" id="btn-cancelar-form">Cancelar</button>
-              <button class="btn-primary" style="width:auto; padding:0 20px;" id="btn-salvar-cliente">${ehNovo ? 'Criar cliente' : 'Salvar alterações'}</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  function preencherFasesDoQuadro(quadro, faseSelecionada) {
-    const selFase = document.getElementById('f-fase');
-    const cfg = QUADROS[quadro];
-
-    if (quadro === 'incubadora') {
-      selFase.innerHTML = '<option value="Incubadora">Definido pelo mês do nascimento</option>';
-      selFase.disabled = true;
-      return;
-    }
-
-    selFase.disabled = false;
-    selFase.innerHTML = cfg.fases.map(f =>
-      `<option value="${escapeAttr(f.chave)}" ${faseSelecionada === f.chave ? 'selected' : ''}>${rotuloFase(f)}</option>`
-    ).join('');
-  }
-
-  function ligarEventosForm(clienteExistente) {
-    const selQuadro = document.getElementById('f-quadro');
-    preencherFasesDoQuadro(selQuadro.value, clienteExistente && clienteExistente.fase_kanban);
-    selQuadro.addEventListener('change', () => preencherFasesDoQuadro(selQuadro.value, null));
-
-    document.getElementById('f-valor-beneficio').addEventListener('input', e => formatarMoedaInput(e.target));
-    document.getElementById('f-valor-honorarios').addEventListener('input', e => formatarMoedaInput(e.target));
-
-    document.querySelectorAll('#etiqueta-picker .etiqueta-toggle').forEach(chip => {
-      chip.addEventListener('click', () => chip.classList.toggle('marcada'));
-    });
-
-    document.getElementById('btn-cancelar-form').addEventListener('click', () => history.back());
-    document.getElementById('btn-salvar-cliente').addEventListener('click', () => salvarCliente(clienteExistente));
-
-    const btnExcluir = document.getElementById('btn-excluir-cliente');
-    if (btnExcluir) btnExcluir.addEventListener('click', () => excluirCliente(clienteExistente.id));
-  }
-
-  async function salvarCliente(clienteExistente) {
-    const msgBox = document.getElementById('form-msg');
-    const btn = document.getElementById('btn-salvar-cliente');
-    msgBox.innerHTML = '';
-
-    const nome = document.getElementById('f-nome').value.trim();
-    if (!nome) {
-      msgBox.innerHTML = '<div class="form-save-msg err">Preencha o nome completo.</div>';
-      return;
-    }
-
-    const quadro = document.getElementById('f-quadro').value;
-    const payload = {
-      nome_completo: nome,
-      cpf: document.getElementById('f-cpf').value.trim() || null,
-      telefone_principal: document.getElementById('f-telefone').value.trim() || null,
-      canal_whatsapp: document.getElementById('f-canal').value || null,
-      quadro: quadro,
-      fase_kanban: document.getElementById('f-fase').value,
-      data_nascimento_bebe: document.getElementById('f-dn-bebe').value || null,
-      data_saida_emprego: document.getElementById('f-ds').value || null,
-      valor_beneficio_esperado: moneyToFloat(document.getElementById('f-valor-beneficio').value),
-      valor_honorarios: moneyToFloat(document.getElementById('f-valor-honorarios').value),
-      data_desbloqueio_inss: document.getElementById('f-desbloqueio').value || null,
-      observacoes: document.getElementById('f-obs').value.trim() || null,
-      atualizado_em: new Date().toISOString()
-    };
-
-    const etiquetasMarcadas = Array.from(
-      document.querySelectorAll('#etiqueta-picker .etiqueta-toggle.marcada')
-    ).map(el => el.getAttribute('data-etiqueta-id'));
-
-    btn.disabled = true;
-    btn.textContent = 'Salvando...';
-
-    let clienteId, error;
-    if (clienteExistente) {
-      clienteId = clienteExistente.id;
-      ({ error } = await sb.from('crm_clientes').update(payload).eq('id', clienteId));
-    } else {
-      const resp = await sb.from('crm_clientes').insert(payload).select('id').single();
-      error = resp.error;
-      if (resp.data) clienteId = resp.data.id;
-    }
-
-    if (error) {
-      msgBox.innerHTML = `<div class="form-save-msg err">Não foi possível salvar: ${escapeHtml(error.message)}</div>`;
-      btn.disabled = false;
-      btn.textContent = clienteExistente ? 'Salvar alterações' : 'Criar cliente';
-      return;
-    }
-
-    // atualiza etiquetas: apaga as antigas e grava as marcadas
-    await sb.from('crm_clientes_etiquetas').delete().eq('cliente_id', clienteId);
-    if (etiquetasMarcadas.length > 0) {
-      await sb.from('crm_clientes_etiquetas').insert(
-        etiquetasMarcadas.map(eid => ({ cliente_id: clienteId, etiqueta_id: eid }))
-      );
-    }
-
-    location.hash = '#/quadro/' + quadro;
-    render();
-  }
-
-  async function excluirCliente(clienteId) {
-    if (!confirm('Tem certeza que quer excluir este cliente? Essa ação não pode ser desfeita.')) return;
-    const { error } = await sb.from('crm_clientes').delete().eq('id', clienteId);
-    if (error) { alert('Não foi possível excluir: ' + error.message); return; }
-    location.hash = '#/';
-    render();
-  }
-
-  // ------------------------------------------------------------
-  // TELA DE ETIQUETAS
-  // ------------------------------------------------------------
-  async function renderEtiquetas() {
-    const app = document.getElementById('app');
-    const topo = topbarHtml({ quadroAtivo: 'etiquetas' });
-
-    app.innerHTML = topo + '<div class="loading-msg">Carregando etiquetas...</div>';
-    ligarEventosTopbar();
-
-    const { data, error } = await sb.from('crm_etiquetas').select('*').order('nome');
-    if (error) {
-      app.innerHTML = topo + `<div class="error-box">Não foi possível carregar.<br>${escapeHtml(error.message)}</div>`;
-      ligarEventosTopbar();
-      return;
-    }
-    etiquetasCache = data || [];
-
-    const linhas = etiquetasCache.map(et => `
-      <tr data-etiqueta-id="${et.id}">
-        <td><input type="text" class="teto-input et-nome" style="width:180px;" value="${escapeAttr(et.nome)}"></td>
-        <td><input type="color" class="cor-input et-cor" value="${escapeAttr(et.cor)}"></td>
-        <td><span class="etiqueta-chip" style="background:${escapeAttr(et.cor)};">${escapeHtml(et.nome)}</span></td>
-        <td>
-          <button class="btn-mini btn-salvar-etiqueta">Salvar</button>
-          <button class="btn-mini btn-excluir-etiqueta">Excluir</button>
-        </td>
-      </tr>
-    `).join('');
-
-    app.innerHTML = topo + `
-      <div class="campanha-wrap">
-        <div class="section-title">Etiquetas</div>
-
-        <div class="add-instancia-form">
-          <div class="field">
-            <label for="ne-nome">Nome da etiqueta</label>
-            <input id="ne-nome" type="text" placeholder="Ex: Tem direito">
-          </div>
-          <div class="field">
-            <label for="ne-cor">Cor</label>
-            <input id="ne-cor" type="color" class="cor-input" value="#6B8F5C">
-          </div>
-          <div></div>
-          <button class="btn-primary" style="width:auto; padding:0 16px; height:40px;" id="btn-criar-etiqueta">Criar</button>
-        </div>
-
-        ${etiquetasCache.length === 0
-          ? '<div class="loading-msg">Nenhuma etiqueta criada ainda.</div>'
-          : `<table class="previmater-table">
-               <thead><tr><th>Nome</th><th>Cor</th><th>Como aparece</th><th></th></tr></thead>
-               <tbody>${linhas}</tbody>
-             </table>`}
-      </div>
-    `;
-
-    ligarEventosTopbar();
-    document.getElementById('btn-criar-etiqueta').addEventListener('click', criarEtiqueta);
-    document.querySelectorAll('tr[data-etiqueta-id]').forEach(linha => {
-      const id = linha.getAttribute('data-etiqueta-id');
-      linha.querySelector('.btn-salvar-etiqueta').addEventListener('click', () => {
-        salvarEtiqueta(id, linha.querySelector('.et-nome').value, linha.querySelector('.et-cor').value);
-      });
-      linha.querySelector('.btn-excluir-etiqueta').addEventListener('click', () => excluirEtiqueta(id));
-    });
-  }
-
-  async function criarEtiqueta() {
-    const nome = document.getElementById('ne-nome').value.trim();
-    const cor = document.getElementById('ne-cor').value;
-    if (!nome) { alert('Digite o nome da etiqueta.'); return; }
-    const { error } = await sb.from('crm_etiquetas').insert({ nome, cor });
-    if (error) { alert('Não foi possível criar: ' + error.message); return; }
-    renderEtiquetas();
-  }
-
-  async function salvarEtiqueta(id, nome, cor) {
-    if (!nome.trim()) { alert('O nome não pode ficar vazio.'); return; }
-    const { error } = await sb.from('crm_etiquetas').update({ nome: nome.trim(), cor }).eq('id', id);
-    if (error) { alert('Não foi possível salvar: ' + error.message); return; }
-    renderEtiquetas();
-  }
-
-  async function excluirEtiqueta(id) {
-    if (!confirm('Excluir esta etiqueta? Ela será removida de todos os clientes que a tiverem.')) return;
-    const { error } = await sb.from('crm_etiquetas').delete().eq('id', id);
-    if (error) { alert('Não foi possível excluir: ' + error.message); return; }
-    renderEtiquetas();
-  }
-
-  // ------------------------------------------------------------
-  // PAINEL DA CAMPANHA WHATSGW
-  // ------------------------------------------------------------
-  const NOMES_CANAL_INSTANCIA = { meta_oficial: 'Meta oficial', evolution: 'Evolution', whatsgw: 'WhatsGW' };
-
-  async function renderCampanha() {
-    const app = document.getElementById('app');
-    const topo = topbarHtml({ quadroAtivo: 'campanha' });
-
-    if (currentUser.nivel !== 'proprietario') {
-      app.innerHTML = topo + '<div class="error-box">Essa tela é restrita a proprietários.</div>';
-      ligarEventosTopbar();
-      return;
-    }
-
-    app.innerHTML = topo + '<div class="loading-msg">Carregando painel da campanha...</div>';
-    ligarEventosTopbar();
-
-    const [{ data: instancias, error: erroInstancias }, { data: disparos }] = await Promise.all([
-      sb.from('crm_instancias_whatsapp').select('*').order('numero_telefone'),
-      sb.from('crm_campanha_disparos').select('*').order('criado_em', { ascending: false }).limit(30)
-    ]);
-
-    if (erroInstancias) {
-      app.innerHTML = topo + `<div class="error-box">Não foi possível carregar os números.<br>${escapeHtml(erroInstancias.message)}</div>`;
-      ligarEventosTopbar();
-      return;
-    }
-
-    const listaInstancias = instancias || [];
-    const listaDisparos = disparos || [];
-
-    const degradados = listaInstancias.filter(i => i.status === 'degradado' || (i.taxa_entrega !== null && i.taxa_entrega < 80));
-    const banner = degradados.length > 0
-      ? `<div class="alert-banner">Atenção: ${degradados.length === 1
-          ? 'o número ' + escapeHtml(degradados[0].numero_telefone) + ' está'
-          : degradados.length + ' números estão'} com taxa de entrega baixa ou degradado(s). Considere pausar ou reduzir o teto diário.</div>`
-      : '';
-
-    app.innerHTML = topo + `
-      <div class="campanha-wrap">
-        ${banner}
-        <div class="section-title">Números / instâncias</div>
-        <button class="btn-ghost" id="btn-toggle-add-instancia" style="margin-bottom:12px;">+ novo número</button>
-        <div id="add-instancia-container"></div>
-        ${listaInstancias.length === 0
-          ? '<div class="loading-msg">Nenhum número cadastrado ainda.</div>'
-          : tabelaInstanciasHtml(listaInstancias)}
-        <div class="section-title">Últimos disparos</div>
-        ${listaDisparos.length === 0
-          ? '<div class="loading-msg">Nenhum disparo registrado ainda.</div>'
-          : tabelaDisparosHtml(listaDisparos, listaInstancias)}
-      </div>
-    `;
-
-    ligarEventosTopbar();
-    document.getElementById('btn-toggle-add-instancia').addEventListener('click', mostrarFormNovaInstancia);
-    ligarEventosTabelaInstancias();
-  }
-
-  function tabelaInstanciasHtml(lista) {
-    const linhas = lista.map(i => {
-      const taxaTxt = (i.taxa_entrega !== null && i.taxa_entrega !== undefined) ? `${Number(i.taxa_entrega).toFixed(0)}%` : '—';
-      const taxaClasse = (i.taxa_entrega === null || i.taxa_entrega === undefined) ? 'neutro' : (i.taxa_entrega < 80 ? 'alerta' : 'ok');
-      const statusClasse = i.status === 'ativo' ? 'ok' : (i.status === 'degradado' ? 'alerta' : 'neutro');
-      return `
-        <tr data-instancia-id="${i.id}">
-          <td>${escapeHtml(i.numero_telefone)}</td>
-          <td>${NOMES_CANAL_INSTANCIA[i.canal] || escapeHtml(i.canal)}</td>
-          <td>
-            <input type="number" min="0" class="teto-input teto-input-linha" value="${i.teto_diario_atual}">
-            <button class="btn-mini btn-salvar-teto">Salvar</button>
-          </td>
-          <td>${i.disparos_hoje} / ${i.teto_diario_atual}</td>
-          <td><span class="badge ${taxaClasse}">${taxaTxt}</span></td>
-          <td><span class="badge ${statusClasse}">${escapeHtml(i.status)}</span></td>
-        </tr>
-      `;
-    }).join('');
-
-    return `
-      <table class="previmater-table">
-        <thead><tr>
-          <th>Número</th><th>Canal</th><th>Teto diário</th>
-          <th>Disparos hoje</th><th>Taxa entrega</th><th>Status</th>
-        </tr></thead>
-        <tbody>${linhas}</tbody>
-      </table>
-    `;
-  }
-
-  function tabelaDisparosHtml(disparos, instancias) {
-    const mapa = {};
-    instancias.forEach(i => { mapa[i.id] = i.numero_telefone; });
-    const classeStatus = {
-      agendado: 'neutro', enviado: 'neutro', entregue: 'ok',
-      lido: 'ok', respondido: 'ok', falhou: 'alerta'
-    };
-
-    const linhas = disparos.map(d => `
-      <tr>
-        <td>${escapeHtml(d.contato_nome) || '—'}</td>
-        <td>${escapeHtml(d.contato_telefone)}</td>
-        <td>${escapeHtml(mapa[d.instancia_id]) || '—'}</td>
-        <td>${d.data_hora_agendada ? new Date(d.data_hora_agendada).toLocaleString('pt-BR') : '—'}</td>
-        <td><span class="badge ${classeStatus[d.status] || 'neutro'}">${escapeHtml(d.status)}</span></td>
-      </tr>
-    `).join('');
-
-    return `
-      <table class="previmater-table">
-        <thead><tr>
-          <th>Contato</th><th>Telefone</th><th>Número usado</th>
-          <th>Agendado para</th><th>Status</th>
-        </tr></thead>
-        <tbody>${linhas}</tbody>
-      </table>
-    `;
-  }
-
-  function ligarEventosTabelaInstancias() {
-    document.querySelectorAll('tr[data-instancia-id]').forEach(linha => {
-      const id = linha.getAttribute('data-instancia-id');
-      linha.querySelector('.btn-salvar-teto').addEventListener('click', () => {
-        salvarTetoInstancia(id, linha.querySelector('.teto-input-linha'));
-      });
-    });
-  }
-
-  async function salvarTetoInstancia(instanciaId, inputEl) {
-    const novoTeto = parseInt(inputEl.value, 10);
-    if (isNaN(novoTeto) || novoTeto < 0) { alert('Digite um número válido pro teto diário.'); return; }
-    const { error } = await sb.from('crm_instancias_whatsapp')
-      .update({ teto_diario_atual: novoTeto, atualizado_em: new Date().toISOString() })
-      .eq('id', instanciaId);
-    if (error) { alert('Não foi possível salvar: ' + error.message); return; }
-    renderCampanha();
-  }
-
-  function mostrarFormNovaInstancia() {
-    const container = document.getElementById('add-instancia-container');
-    container.innerHTML = `
-      <div class="add-instancia-form">
-        <div class="field">
-          <label for="ni-numero">Número (com DDD)</label>
-          <input id="ni-numero" type="text" placeholder="41999999999">
-        </div>
-        <div class="field">
-          <label for="ni-canal">Canal</label>
-          <select id="ni-canal">
-            <option value="whatsgw">WhatsGW</option>
-            <option value="evolution">Evolution</option>
-            <option value="meta_oficial">Meta oficial</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="ni-teto">Teto diário inicial</label>
-          <input id="ni-teto" type="number" min="0" value="20">
-        </div>
-        <button class="btn-primary" style="width:auto; padding:0 16px; height:40px;" id="btn-criar-instancia">Adicionar</button>
-      </div>
-    `;
-    document.getElementById('btn-criar-instancia').addEventListener('click', criarInstancia);
-  }
-
-  async function criarInstancia() {
-    const numero = document.getElementById('ni-numero').value.trim();
-    const canal = document.getElementById('ni-canal').value;
-    const teto = parseInt(document.getElementById('ni-teto').value, 10) || 0;
-    if (!numero) { alert('Digite o número de telefone.'); return; }
-
-    const { error } = await sb.from('crm_instancias_whatsapp').insert({
-      numero_telefone: numero, canal, teto_diario_atual: teto, disparos_hoje: 0, status: 'ativo'
-    });
-    if (error) { alert('Não foi possível adicionar: ' + error.message); return; }
-    renderCampanha();
-  }
+    </div>
+
+    <div class="st">Números / instâncias</div>
+    ${I.length?`<table class="tbl"><thead><tr><th>Número</th><th>Canal</th><th>Teto diário</th><th>Hoje</th><th>Entrega</th><th>Status</th></tr></thead><tbody>${linhasI}</tbody></table>`
+      :'<div class="emp"><div class="empt">Nenhum número cadastrado</div></div>'}
+
+    <div class="st">Últimos disparos</div>
+    ${D.length?`<table class="tbl"><thead><tr><th>Contato</th><th>Telefone</th><th>Número usado</th><th>Agendado</th><th>Status</th></tr></thead><tbody>${linhasD}</tbody></table>`
+      :'<div class="emp"><div class="empt">Nenhum disparo registrado</div></div>'}`;
+}
+
+async function salvarTeto(id,btn){
+  const v=parseInt(btn.closest('tr').querySelector('input').value,10);
+  if(isNaN(v)||v<0){toast('Número inválido','er');return;}
+  const{error}=await sb.from('crm_instancias_whatsapp').update({teto_diario_atual:v,atualizado_em:new Date().toISOString()}).eq('id',id);
+  if(error){toast('Erro ao salvar','er');return;}
+  toast('Teto atualizado','ok');pageCampanha();
+}
+
+async function criarInstancia(){
+  const num=document.getElementById('ni-num').value.trim();
+  const canal=document.getElementById('ni-canal').value;
+  const teto=parseInt(document.getElementById('ni-teto').value,10)||0;
+  if(!num){toast('Digite o número','er');return;}
+  const{error}=await sb.from('crm_instancias_whatsapp').insert({numero_telefone:num,canal,teto_diario_atual:teto,disparos_hoje:0,status:'ativo'});
+  if(error){toast('Erro ao adicionar','er');return;}
+  toast('Número adicionado','ok');pageCampanha();
+}
 </script>
 </body>
 </html>

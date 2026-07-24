@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PreviMater CRM</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon192.png">
+<link rel="apple-touch-icon" href="icon192.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg-page: #F5F1E8;
+    --bg-card: #FFFFFF;
+    --bg-column: #EFEBDF;
+    --text-primary: #1E2A2A;
+    --text-secondary: #6B6A63;
+    --border: #D8D3C4;
+    --primary: #12302E;
+    --primary-dark: #0B211F;
+    --amber: #D98E3D;
+    --sage: #6B8F5C;
+    --sage-bg: #E7EFDF;
+    --sage-text: #3F5A33;
+    --brick: #B5533D;
+    --brick-bg: #F6E2DC;
+    --brick-text: #7C3520;
+    --gray: #7C7A6E;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Inter', sans-serif;
+    background: var(--bg-page);
+    color: var(--text-primary);
+    min-height: 100vh;
+  }
+  #app { min-height: 100vh; }
+
+  /* ---------- login ---------- */
+  .login-wrap {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+  .login-card {
+    background: var(--bg-card);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem 1.75rem;
+    width: 100%;
+    max-width: 360px;
+  }
+  .login-card h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 0 0 1.5rem;
+  }
+  .field { margin-bottom: 1rem; }
+  .field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 0.5px solid var(--border);
+    background: #FFFFFF;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text-primary);
+  }
+  .field input:focus {
+    outline: none;
+    border-color: var(--primary);
+  }
+  .btn-primary {
+    width: 100%;
+    height: 42px;
+    border: none;
+    border-radius: 8px;
+    background: var(--primary);
+    color: var(--bg-page);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-primary:disabled { opacity: 0.6; cursor: default; }
+  .error-msg {
+    font-size: 13px;
+    color: var(--brick-text);
+    background: var(--brick-bg);
+    padding: 8px 10px;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+  }
+
+  /* ---------- topbar ---------- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .topbar .brand {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary);
+  }
+  .topbar .who {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .btn-ghost {
+    border: 0.5px solid var(--border);
+    background: transparent;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .btn-ghost:hover { background: var(--bg-column); }
+
+  /* ---------- kanban ---------- */
+  .kanban-wrap { padding: 20px; }
+  .kanban-board {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(220px, 1fr));
+    gap: 12px;
+    overflow-x: auto;
+  }
+  .col-header {
+    border-radius: 0;
+    background: var(--bg-column);
+    padding: 8px 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    letter-spacing: 0.2px;
+  }
+  .col-count {
+    font-weight: 400;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+  .client-card {
+    background: var(--bg-card);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+  }
+  .client-card:hover { border-color: var(--primary); }
+  .client-card .nome {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .client-card .meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+  .empty-col {
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 6px 2px;
+  }
+  .loading-msg, .error-box {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+  // ------------------------------------------------------------
+  // CONFIGURACAO SUPABASE
+  // ------------------------------------------------------------
+  const SUPABASE_URL = 'https://ggyngtqknonwnohbzkyj.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdneW5ndHFrbm9ud25vaGJ6a3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5ODA4NzcsImV4cCI6MjA5NDU1Njg3N30.0zYn_V9gBtRNWivAHfps6u68akb0mTc7Ix8ZD38OD0I';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ------------------------------------------------------------
+  // ESTADO
+  // ------------------------------------------------------------
+  let currentUser = null; // { nome, nivel, email }
+  let currentSession = null;
+
+  const FASES = [
+    { chave: 'Protocolo Enviado', cor: 'var(--gray)' },
+    { chave: 'Em Analise', cor: 'var(--amber)' },
+    { chave: 'Exigencia', cor: 'var(--amber)' },
+    { chave: 'Exigencia Cumprida', cor: 'var(--sage)' },
+    { chave: 'Beneficio Negado', cor: 'var(--brick)' },
+    { chave: 'Beneficio Concedido', cor: 'var(--sage)' },
+    { chave: 'Pagamento-Encerrado', cor: 'var(--primary)' }
+  ];
+
+  function nomeFaseExibicao(chave) {
+    return chave.replace('-', ' ').replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace('Analise', 'análise')
+      .replace('Beneficio', 'Benefício')
+      .replace('Exigencia', 'Exigência')
+      .replace('Encerrado', 'encerrado');
+  }
+
+  // ------------------------------------------------------------
+  // ROTEAMENTO POR HASH
+  // ------------------------------------------------------------
+  function getRoute() {
+    return location.hash.slice(1) || '/';
+  }
+
+  window.addEventListener('hashchange', render);
+  window.addEventListener('DOMContentLoaded', init);
+
+  async function init() {
+    const { data } = await sb.auth.getSession();
+    currentSession = data.session;
+    if (currentSession) {
+      await carregarUsuarioAtual();
+    }
+    render();
+  }
+
+  async function carregarUsuarioAtual() {
+    const { data, error } = await sb
+      .from('crm_usuarios')
+      .select('nome, nivel, email')
+      .eq('auth_user_id', currentSession.user.id)
+      .single();
+    if (!error && data) {
+      currentUser = data;
+    }
+  }
+
+  // ------------------------------------------------------------
+  // RENDER PRINCIPAL
+  // ------------------------------------------------------------
+  function render() {
+    const app = document.getElementById('app');
+    if (!currentSession || !currentUser) {
+      app.innerHTML = telaLogin();
+      ligarEventosLogin();
+      return;
+    }
+    const rota = getRoute();
+    if (rota === '/' ) {
+      location.hash = '#/clientes';
+      return;
+    }
+    if (rota === '/clientes') {
+      renderKanban();
+      return;
+    }
+    app.innerHTML = '<div class="loading-msg">Tela ainda não criada.</div>';
+  }
+
+  // ------------------------------------------------------------
+  // TELA DE LOGIN
+  // ------------------------------------------------------------
+  function telaLogin() {
+    return `
+      <div class="login-wrap">
+        <div class="login-card">
+          <h1>PreviMater CRM</h1>
+          <div id="login-error"></div>
+          <div class="field">
+            <label for="login-email">E-mail</label>
+            <input id="login-email" type="email" autocomplete="username">
+          </div>
+          <div class="field">
+            <label for="login-senha">Senha</label>
+            <input id="login-senha" type="password" autocomplete="current-password">
+          </div>
+          <button class="btn-primary" id="btn-entrar">Entrar</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function ligarEventosLogin() {
+    const btn = document.getElementById('btn-entrar');
+    const email = document.getElementById('login-email');
+    const senha = document.getElementById('login-senha');
+    btn.addEventListener('click', () => fazerLogin(email.value, senha.value));
+    senha.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') fazerLogin(email.value, senha.value);
+    });
+  }
+
+  async function fazerLogin(email, senha) {
+    const btn = document.getElementById('btn-entrar');
+    const errBox = document.getElementById('login-error');
+    errBox.innerHTML = '';
+    if (!email || !senha) {
+      errBox.innerHTML = '<div class="error-msg">Preencha e-mail e senha.</div>';
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Entrando...';
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
+    if (error) {
+      btn.disabled = false;
+      btn.textContent = 'Entrar';
+      errBox.innerHTML = '<div class="error-msg">E-mail ou senha incorretos.</div>';
+      return;
+    }
+    currentSession = data.session;
+    await carregarUsuarioAtual();
+    if (!currentUser) {
+      errBox.innerHTML = '<div class="error-msg">Login certo, mas este usuário não está cadastrado no CRM. Fale com o Esdras.</div>';
+      btn.disabled = false;
+      btn.textContent = 'Entrar';
+      await sb.auth.signOut();
+      currentSession = null;
+      return;
+    }
+    location.hash = '#/clientes';
+    render();
+  }
+
+  async function fazerLogout() {
+    await sb.auth.signOut();
+    currentSession = null;
+    currentUser = null;
+    location.hash = '#/';
+    render();
+  }
+
+  // ------------------------------------------------------------
+  // TELA KANBAN
+  // ------------------------------------------------------------
+  async function renderKanban() {
+    const app = document.getElementById('app');
+    app.innerHTML = topbarHtml() + '<div class="loading-msg">Carregando clientes...</div>';
+    ligarEventosTopbar();
+
+    const { data, error } = await sb
+      .from('crm_clientes')
+      .select('id, nome_completo, fase_kanban, canal_whatsapp, valor_beneficio_esperado')
+      .order('criado_em', { ascending: false });
+
+    if (error) {
+      app.innerHTML = topbarHtml() + `<div class="error-box">Não foi possível carregar os clientes.<br>${error.message}</div>`;
+      ligarEventosTopbar();
+      return;
+    }
+
+    const porFase = {};
+    FASES.forEach(f => porFase[f.chave] = []);
+    (data || []).forEach(c => {
+      if (porFase[c.fase_kanban]) porFase[c.fase_kanban].push(c);
+    });
+
+    let colunasHtml = '';
+    FASES.forEach(f => {
+      const clientesFase = porFase[f.chave];
+      colunasHtml += `
+        <div>
+          <div class="col-header" style="border-top: 4px solid ${f.cor};">
+            ${nomeFaseExibicao(f.chave)} <span class="col-count">(${clientesFase.length})</span>
+          </div>
+          ${clientesFase.length === 0
+            ? '<div class="empty-col">Nenhum cliente</div>'
+            : clientesFase.map(cartaoClienteHtml).join('')}
+        </div>
+      `;
+    });
+
+    app.innerHTML = topbarHtml() + `
+      <div class="kanban-wrap">
+        <div class="kanban-board">${colunasHtml}</div>
+      </div>
+    `;
+    ligarEventosTopbar();
+  }
+
+  function cartaoClienteHtml(c) {
+    const valor = c.valor_beneficio_esperado
+      ? c.valor_beneficio_esperado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+      : '';
+    return `
+      <div class="client-card" onclick="location.hash='#/cliente/${c.id}'">
+        <div class="nome">${escapeHtml(c.nome_completo)}</div>
+        <div class="meta">${valor}</div>
+      </div>
+    `;
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str || '';
+    return div.innerHTML;
+  }
+
+  function topbarHtml() {
+    return `
+      <div class="topbar">
+        <div class="brand">PreviMater CRM</div>
+        <div class="who">
+          <span>${currentUser.nome} · ${currentUser.nivel === 'proprietario' ? 'proprietário' : 'administrativo'}</span>
+          <button class="btn-ghost" id="btn-sair">Sair</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function ligarEventosTopbar() {
+    const btn = document.getElementById('btn-sair');
+    if (btn) btn.addEventListener('click', fazerLogout);
+  }
+</script>
+</body>
+</html>

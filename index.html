@@ -93,8 +93,8 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .card{background:var(--white);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--sh);}
 
 /* KANBAN */
-.kb{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding-bottom:16px;}
-.kl{flex:0 0 262px;width:262px;background:var(--white);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--sh);display:flex;flex-direction:column;max-height:calc(100vh - 190px);}
+.kb{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;height:calc(100vh - 210px);padding-bottom:16px;}
+.kl{flex:0 0 262px;width:262px;background:var(--white);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--sh);display:flex;flex-direction:column;max-height:calc(100vh - 226px);}
 .kl.dragover{border-color:var(--teal);box-shadow:0 0 0 3px rgba(10,147,150,.16);}
 .klh{padding:12px 14px 10px;border-bottom:1px solid var(--border2);border-top:3px solid var(--teal);border-radius:var(--rl) var(--rl) 0 0;display:flex;align-items:center;justify-content:space-between;gap:6px;}
 .kln{font-size:12px;font-weight:800;color:var(--text);line-height:1.25;}
@@ -290,9 +290,12 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .mo{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;}
 .mo.h{display:none;}
 .mb{background:var(--white);border-radius:var(--rx);padding:26px;width:100%;max-width:470px;max-height:88vh;overflow-y:auto;box-shadow:var(--shl);}
+.mb.mb-wide{max-width:680px;}
 .mbt{font-size:17px;font-weight:800;color:var(--text);margin-bottom:3px;letter-spacing:-.3px;}
 .mbs{font-size:12px;color:var(--text3);margin-bottom:18px;}
 .mbc{float:right;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text3);line-height:1;}
+.mctit{font-size:19px;font-weight:800;color:var(--text);border:none;border-bottom:1.5px solid transparent;background:none;width:100%;padding:2px 0 6px;margin-bottom:2px;font-family:inherit;}
+.mctit:focus{outline:none;border-bottom-color:var(--teal);}
 .mvsug{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
 .mvs{background:#F3FAFA;border:1.5px solid var(--border);border-radius:10px;padding:10px 13px;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;font-family:inherit;text-align:left;transition:all .13s;}
 .mvs:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-l);}
@@ -362,7 +365,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
   </div>
 </div>
 
-<div class="mo h" id="modal"><div class="mb" id="modalbox"></div></div>
+<div class="mo h" id="modal" onclick="fecharSeFundo(event)"><div class="mb" id="modalbox"></div></div>
 <div id="toast"></div>
 
 <script>
@@ -377,7 +380,7 @@ const PCT_HONORARIOS=0.30;
 const QUADROS={
   comercial:{rotulo:'Comercial',icone:'◔',ordem:1},
   incubadora:{rotulo:'Incubadora',icone:'◍',ordem:2},
-  operacional:{rotulo:'Operacional',icone:'◈',ordem:3},
+  operacional:{rotulo:'Administrativo',icone:'◈',ordem:3},
   financeiro:{rotulo:'Financeiro',icone:'◆',ordem:4}
 };
 const CANAIS={meta_oficial:'Meta oficial',evolution:'Evolution',whatsgw:'WhatsGW'};
@@ -401,7 +404,8 @@ function escA(s){return s?String(s).replace(/"/g,'&quot;'):'';}
 function toast(m,t){const e=$('toast');e.textContent=m;e.className='v '+(t||'ok');clearTimeout(e._t);e._t=setTimeout(()=>e.className='',2600);}
 function togSB(){$('sb').classList.toggle('o');$('ov').classList.toggle('o');}
 function fecharModal(){$('modal').classList.add('h');}
-function abrirModal(h){$('modalbox').innerHTML=h;$('modal').classList.remove('h');}
+function fecharSeFundo(e){if(e.target===e.currentTarget)fecharModal();}
+function abrirModal(h,largo){const box=$('modalbox');box.innerHTML=h;box.classList.toggle('mb-wide',!!largo);$('modal').classList.remove('h');}
 
 const R=v=>(parseFloat(v)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const fD=s=>{if(!s)return'—';return new Date(s+'T12:00:00').toLocaleDateString('pt-BR');};
@@ -568,6 +572,21 @@ async function pageQuadro(q){
   ]);
   if(error){pc.innerHTML=`<div class="emp"><div class="empt">Erro ao carregar</div>${esc(error.message)}</div>`;return;}
   const L=listas||[],C=clientes||[];
+
+  if(q==='financeiro'&&C.length){
+    const ids=C.map(c=>c.id);
+    const{data:parc}=await sb.from('pm_parcelas').select('crm_cliente_id,status,data_vencimento').in('crm_cliente_id',ids).neq('status','cancelado');
+    const porCliente={};
+    (parc||[]).forEach(p=>{
+      if(!porCliente[p.crm_cliente_id])porCliente[p.crm_cliente_id]={total:0,recebidas:0,proxima:null};
+      const r=porCliente[p.crm_cliente_id];
+      r.total++;
+      if(p.status==='recebido')r.recebidas++;
+      else if(!r.proxima||p.data_vencimento<r.proxima)r.proxima=p.data_vencimento;
+    });
+    C.forEach(c=>{c.finResumo=porCliente[c.id]||null;});
+  }
+
   const porLista={};L.forEach(l=>porLista[l.id]=[]);
   const orfaos=[];
   C.forEach(c=>{if(porLista[c.lista_id])porLista[c.lista_id].push(c);else orfaos.push(c);});
@@ -602,11 +621,16 @@ function cardHtml(c){
   const meta=[];
   if(c.telefone_principal)meta.push(esc(c.telefone_principal));
   if(c.data_nascimento_bebe)meta.push('DN '+fD(c.data_nascimento_bebe));
-  return `<div class="kc" draggable="true" data-card="${c.id}" onclick="location.hash='#/cliente/${c.id}'">
+  let finHtml='';
+  if(c.finResumo){
+    const f=c.finResumo;
+    finHtml=`<div class="kcm"><span class="kcv">${f.recebidas}/${f.total} parcelas</span>${f.proxima?` · próxima ${fD(f.proxima)}`:''}</div>`;
+  }
+  return `<div class="kc" draggable="true" data-card="${c.id}" onclick="abrirCardCliente('${c.id}')">
       <button class="kcmv" title="Mover cartão" onclick="event.stopPropagation();modalMover('${c.id}')">⇄</button>
       <div class="kcn">${esc(c.nome_completo)}</div>
       ${meta.length?`<div class="kcm">${meta.join(' · ')}</div>`:''}
-      ${c.valor_beneficio_esperado?`<div class="kcm"><span class="kcv">${R(c.valor_beneficio_esperado)}</span></div>`:''}
+      ${finHtml||(c.valor_beneficio_esperado?`<div class="kcm"><span class="kcv">${R(c.valor_beneficio_esperado)}</span></div>`:'')}
       ${entregaHtml(c.data_entrega)}
       ${chips?`<div class="kce">${chips}</div>`:''}
     </div>`;
@@ -722,6 +746,113 @@ async function moverPara(clienteId,quadro,listaId,pos){
   fecharModal();toast('Cartão movido','ok');
   const at=location.hash.match(/^#\/quadro\/(.+)$/);
   if(at)pageQuadro(at[1]);else location.hash='#/quadro/'+quadro;
+}
+
+// ---------- CARD DO CLIENTE COMO MODAL (estilo Trello) ----------
+async function abrirCardCliente(id){
+  if(!id){toast('Este registro não está vinculado a um cliente do CRM.','er');return;}
+  abrirModal('<div class="emp">Carregando...</div>',true);
+  const{data:c,error}=await sb.from('crm_clientes').select('*,crm_clientes_etiquetas(etiqueta_id)').eq('id',id).single();
+  if(error||!c){abrirModal('<div class="emp"><div class="empt">Cliente não encontrado</div></div>',true);return;}
+  const etqSel=(c.crm_clientes_etiquetas||[]).map(e=>e.etiqueta_id);
+  const{data:listas}=await sb.from('crm_listas').select('*').eq('quadro',c.quadro).eq('arquivada',false).order('ordem');
+  renderCardClienteModal(c,etqSel,listas||[]);
+}
+function renderCardClienteModal(c,etqSel,listas){
+  const optQ=QPERM.map(q=>`<option value="${q}" ${c.quadro===q?'selected':''}>${QUADROS[q].rotulo}</option>`).join('');
+  const optL=listas.map(l=>`<option value="${l.id}" ${c.lista_id===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
+  const optCanal=`<option value="">—</option>`+Object.keys(CANAIS).map(k=>`<option value="${k}" ${c.canal_whatsapp===k?'selected':''}>${CANAIS[k]}</option>`).join('');
+  const optOrig=`<option value="">—</option>`+Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
+  const chips=ETQ.map(t=>`<span class="ett ${etqSel.includes(t.id)?'on':''}" data-etq="${t.id}" style="background:${escA(t.cor)}" onclick="this.classList.toggle('on')">${esc(t.nome)}</span>`).join('');
+  abrirModal(`
+    <button class="mbc" onclick="fecharModal()">×</button>
+    <input type="text" id="mc-nome" class="mctit" value="${escA(c.nome_completo)}"/>
+    <div class="mbs">Cliente desde ${fD(c.criado_em?c.criado_em.slice(0,10):null)}</div>
+    <div class="etp" style="margin-bottom:16px">${chips||'<span class="fhint">Nenhuma etiqueta criada ainda.</span>'}</div>
+
+    <div class="fg" style="margin-bottom:13px">
+      <div class="fld"><label>Quadro</label><select id="mc-quadro" onchange="mcTrocarQuadro()">${optQ}</select></div>
+      <div class="fld"><label>Lista</label><select id="mc-lista">${optL}</select></div>
+    </div>
+    <div class="fg" style="margin-bottom:13px">
+      <div class="fld"><label>Telefone</label><input type="text" id="mc-tel" value="${escA(c.telefone_principal)}"/></div>
+      <div class="fld"><label>CPF</label><input type="text" id="mc-cpf" value="${escA(c.cpf)}" oninput="cpfMask(this)"/></div>
+      <div class="fld"><label>Canal WhatsApp</label><select id="mc-canal">${optCanal}</select></div>
+      <div class="fld"><label>Como chegou</label><select id="mc-origem">${optOrig}</select></div>
+      <div class="fld"><label>Data de entrega</label><input type="date" id="mc-entrega" value="${c.data_entrega||''}"/></div>
+      <div class="fld"><label>DN do bebê</label><input type="date" id="mc-dn" value="${c.data_nascimento_bebe||''}"/></div>
+      <div class="fld"><label>Benefício (R$)</label><input type="text" id="mc-vb" data-money="" inputmode="decimal" value="${floatToMoney(c.valor_beneficio_esperado)}" onchange="mcRecalc()"/></div>
+      <div class="fld"><label>Honorários (R$)</label><input type="text" id="mc-vh" data-money="" inputmode="decimal" value="${floatToMoney(c.valor_honorarios)}" onchange="mcRecalc(true)"/></div>
+    </div>
+    <div class="cb" id="mc-cbox" style="display:none;margin-bottom:13px"></div>
+
+    <div class="fld ff" style="margin-bottom:13px"><label>Observações</label><textarea id="mc-obs">${esc(c.observacoes)}</textarea></div>
+    <div class="fld ff" style="margin-bottom:18px"><label>Link do Trello</label><input type="url" id="mc-trello" placeholder="https://trello.com/c/..." value="${escA(c.trello_url)}"/></div>
+
+    <div class="brow" style="justify-content:space-between">
+      <button class="btnd" onclick="excluirClienteModal('${c.id}')">Excluir cliente</button>
+      <div style="display:flex;gap:9px">
+        <button class="btn btns" onclick="fecharModal()">Fechar</button>
+        <button class="btn btnp" id="mc-btn-salvar" onclick="salvarCardCliente('${c.id}')">Salvar</button>
+      </div>
+    </div>`,true);
+  mcRecalcBox(c.valor_beneficio_esperado,c.valor_honorarios);
+}
+function mcRecalc(veioHonorario){
+  const vb=m2f($('mc-vb'));
+  if(!veioHonorario&&vb>0)$('mc-vh').value=floatToMoney(vb*PCT_HONORARIOS);
+  mcRecalcBox(vb,m2f($('mc-vh')));
+}
+function mcRecalcBox(vb,vh){
+  vb=parseFloat(vb)||0;vh=parseFloat(vh)||0;
+  const box=$('mc-cbox');if(!box)return;
+  if(vb<=0&&vh<=0){box.style.display='none';return;}
+  box.style.display='block';
+  box.innerHTML=`<div class="cr2"><span>Benefício</span><span>${R(vb)}</span></div>
+    <div class="cr2"><span>Honorários</span><span>${R(vh)}</span></div>
+    <div class="cr2 tot"><span>Líquido da cliente</span><span>${R(vb-vh)}</span></div>`;
+}
+async function mcTrocarQuadro(){
+  const q=$('mc-quadro').value;
+  const{data:L}=await sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem');
+  $('mc-lista').innerHTML=(L||[]).map(l=>`<option value="${l.id}">${esc(l.nome)}</option>`).join('');
+}
+async function salvarCardCliente(id){
+  const nome=$('mc-nome').value.trim();
+  if(!nome){toast('Preencha o nome','er');return;}
+  const quadro=$('mc-quadro').value;
+  const payload={
+    nome_completo:nome,
+    telefone_principal:$('mc-tel').value.trim()||null,
+    cpf:$('mc-cpf').value.trim()||null,
+    canal_whatsapp:$('mc-canal').value||null,
+    origem:$('mc-origem').value||null,
+    trello_url:$('mc-trello').value.trim()||null,
+    quadro:quadro,
+    lista_id:$('mc-lista').value||null,
+    data_entrega:$('mc-entrega').value||null,
+    data_nascimento_bebe:$('mc-dn').value||null,
+    valor_beneficio_esperado:m2f($('mc-vb'))||null,
+    valor_honorarios:m2f($('mc-vh'))||null,
+    observacoes:$('mc-obs').value.trim()||null,
+    atualizado_em:new Date().toISOString()
+  };
+  const etqSel=[...document.querySelectorAll('#modalbox .ett.on')].map(e=>e.getAttribute('data-etq'));
+  const btn=$('mc-btn-salvar');btn.disabled=true;btn.textContent='Salvando...';
+  const{error}=await sb.from('crm_clientes').update(payload).eq('id',id);
+  if(error){toast('Erro ao salvar: '+error.message,'er');btn.disabled=false;btn.textContent='Salvar';return;}
+  await sb.from('crm_clientes_etiquetas').delete().eq('cliente_id',id);
+  if(etqSel.length)await sb.from('crm_clientes_etiquetas').insert(etqSel.map(e=>({cliente_id:id,etiqueta_id:e})));
+  finCarregado=false;
+  fecharModal();toast('Cliente atualizado','ok');
+  refrescarRotaAtual();
+}
+async function excluirClienteModal(id){
+  if(!confirm('Excluir esta cliente? Essa ação não pode ser desfeita.'))return;
+  const{error}=await sb.from('crm_clientes').delete().eq('id',id);
+  if(error){toast('Erro ao excluir','er');return;}
+  finCarregado=false;fecharModal();toast('Cliente excluída','ok');
+  refrescarRotaAtual();
 }
 
 // ---------- LISTAS ----------
@@ -944,16 +1075,16 @@ async function pageDash(){
       <div class="kpc"><div class="ki" style="background:var(--teal-l)">💲</div><div class="kpl">Sobra líquida</div><div class="kv" style="color:var(--teal)">${R(totR-com)}</div><div class="kh">Recebido − comissões</div></div>
     </div>
     ${atrs.length?`<div class="aw"><div class="at">⚠ Parcelas atrasadas (${atrs.length})</div><div class="card">${atrs.map(p=>`
-      <div class="lr"><div class="av" style="background:${avC(p.cliente_nome)}">${avL(p.cliente_nome)}</div>
+      <div class="lr" ${pCli(p)?`style="cursor:pointer" onclick="abrirCardCliente('${pCli(p)}')"`:''}><div class="av" style="background:${avC(p.cliente_nome)}">${avL(p.cliente_nome)}</div>
       <div style="flex:1;min-width:0"><div class="rn">${esc(p.cliente_nome)}</div><div class="rm" style="color:var(--red)">Venceu em ${fD(p.data_vencimento)} — ${dAtr(p.data_vencimento)} dias atrás</div></div>
       <div class="rr"><div class="rv rd">${R(p.valor_honorario)}</div>
-      <div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end"><button class="bic bg" onclick="abreMRec('${p.id}')">✓</button><button class="bic bp2" onclick="marcaInad('${p.id}')">⚑</button></div></div></div>`).join('')}</div></div>`:''}
+      <div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end"><button class="bic bg" onclick="event.stopPropagation();abreMRec('${p.id}')">✓</button><button class="bic bp2" onclick="event.stopPropagation();marcaInad('${p.id}')">⚑</button></div></div></div>`).join('')}</div></div>`:''}
     <div class="st" style="display:flex;justify-content:space-between;align-items:center"><span>Próximos recebimentos</span>
       <button style="background:none;border:none;font-size:11px;color:var(--teal);font-weight:700;cursor:pointer" onclick="location.hash='#/recebimentos'">Ver todos →</button></div>
     <div class="card">${prox.length?prox.map(p=>{
       const d=dVenc(p.data_vencimento);
       const db=d===0?`<span class="dh">hoje</span>`:d<=3?`<span class="dh">em ${d}d</span>`:d<=7?`<span class="dw">em ${d}d</span>`:`<span class="dn">em ${d}d</span>`;
-      return`<div class="lr"><div class="av" style="background:${avC(p.cliente_nome)}">${avL(p.cliente_nome)}</div>
+      return`<div class="lr" ${pCli(p)?`style="cursor:pointer" onclick="abrirCardCliente('${pCli(p)}')"`:''}><div class="av" style="background:${avC(p.cliente_nome)}">${avL(p.cliente_nome)}</div>
       <div style="flex:1;min-width:0"><div class="rn">${esc(p.cliente_nome)}</div><div class="rm">Parcela ${p.num_parcela}/${p.total_parcelas} — ${fD(p.data_vencimento)}${db}</div></div>
       <div class="rr"><div class="rv">${R(p.valor_honorario)}</div>${bdg('previsto')}</div></div>`;
     }).join(''):`<div class="emp"><div class="empi">✅</div><div class="empt">Tudo em dia!</div></div>`}</div>`;
@@ -1045,7 +1176,7 @@ function renderLista(){
     const ind=(REC.find(r=>(r.crm_cliente_id||r.cliente_id)==c.cid&&r.indicador_nome)||{}).indicador_nome;
     const wa=cli&&cli.whatsapp?`<a class="cl2 lwa" href="https://wa.me/55${cli.whatsapp.replace(/\D/g,'')}" target="_blank">💬 WhatsApp</a>`:'';
     const tr=cli&&cli.trello_url?`<a class="cl2 ltr" href="${escA(cli.trello_url)}" target="_blank">📋 Trello</a>`:'';
-    const fc=c.cid?`<button class="cl2 lcr" onclick="location.hash='#/cliente/${c.cid}'">◈ Ficha no CRM</button>`:'';
+    const fc=c.cid?`<button class="cl2 lcr" onclick="abrirCardCliente('${c.cid}')">◈ Abrir card</button>`:'';
     const key=`cc_${String(c.cid||c.nm).replace(/\W/g,'_')}`;
     const rid=c.ps[0]&&c.ps[0].recebimento_id;
     const ph=c.ps.map(p=>{
@@ -1083,8 +1214,10 @@ function renderMDia(iso){
     const ac=(s!=='recebido'&&s!=='cancelado')?`<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <button class="btn btnp" style="font-size:11px;padding:7px 12px" onclick="abreMRec('${p.id}')">✓ Marcar recebido</button>
         ${s==='atrasado'?`<button class="btn" style="font-size:11px;padding:7px 12px;background:var(--red-bg);color:var(--red);border:1.5px solid #FECACA" onclick="marcaInad('${p.id}')">⚑ Inadimplente</button>`:''}
-        <button class="btn btns" style="font-size:11px;padding:7px 12px" onclick="abreMEP('${p.id}')">✎ Editar</button></div>`
-      :`<div style="margin-top:8px"><button class="btn btns" style="font-size:11px;padding:7px 12px" onclick="abreMEP('${p.id}')">✎ Editar</button></div>`;
+        <button class="btn btns" style="font-size:11px;padding:7px 12px" onclick="abreMEP('${p.id}')">✎ Editar</button>
+        ${pCli(p)?`<button class="btn btns" style="font-size:11px;padding:7px 12px" onclick="abrirCardCliente('${pCli(p)}')">◈ Abrir card</button>`:''}</div>`
+      :`<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btns" style="font-size:11px;padding:7px 12px" onclick="abreMEP('${p.id}')">✎ Editar</button>
+        ${pCli(p)?`<button class="btn btns" style="font-size:11px;padding:7px 12px" onclick="abrirCardCliente('${pCli(p)}')">◈ Abrir card</button>`:''}</div>`;
     return`<div style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;gap:8px"><div style="font-weight:700;font-size:14px">${esc(p.cliente_nome)}</div>${bdg(s)}</div>
       <div style="font-size:17px;font-weight:800">${R(p.valor_honorario)}</div>${vc}
@@ -1112,17 +1245,23 @@ async function confirmaRec(){
   const data=$('mrecd').value;
   if(!data){toast('Informe a data.','er');return;}
   const btn=$('btn-confrec');btn.textContent='Salvando...';btn.disabled=true;
+  const p=PARC.find(x=>String(x.id)===String(preceberId));
   const{error}=await sb.from('pm_parcelas').update({status:'recebido',data_pagamento:data}).eq('id',preceberId);
   if(error){toast('Erro ao salvar.','er');btn.disabled=false;btn.textContent='✓ Confirmar';return;}
   fecharModal();toast('Recebimento confirmado!','ok');
-  await loadFin(true);recarregarFin();
+  await loadFin(true);
+  if(p)await checarFinalizacaoCliente(pCli(p));
+  recarregarFin();
 }
 async function marcaInad(pid){
   if(!confirm('Marcar como INADIMPLENTE?\nSairá da lista de atrasados.'))return;
+  const p=PARC.find(x=>String(x.id)===String(pid));
   const{error}=await sb.from('pm_parcelas').update({status:'inadimplente'}).eq('id',pid);
   if(error){toast('Erro.','er');return;}
   fecharModal();toast('Marcada como inadimplente.','in');
-  await loadFin(true);recarregarFin();
+  await loadFin(true);
+  if(p)await moverClienteFinanceiro(pCli(p),'Inadimplente');
+  recarregarFin();
 }
 async function cancelaP(pid){
   if(!confirm('Cancelar esta parcela?'))return;
@@ -1169,10 +1308,32 @@ async function removeRec(rid){
   await sb.from('pm_recebimentos').delete().eq('id',rid);
   toast('Recebimento removido.','in');await loadFin(true);recarregarFin();
 }
-function recarregarFin(){
+function refrescarRotaAtual(){
   const r=(location.hash.slice(1)||'').split('?')[0];
-  if(r==='/dashboard')pageDash();
+  const mq=r.match(/^\/quadro\/(.+)$/);
+  if(mq)pageQuadro(mq[1]);
+  else if(r==='/dashboard')pageDash();
   else if(r==='/recebimentos'){renderChips();renderCal();renderLista();}
+}
+function recarregarFin(){refrescarRotaAtual();}
+
+// ---------- MOVIMENTO AUTOMATICO NO QUADRO FINANCEIRO ----------
+async function moverClienteFinanceiro(crmClienteId,nomeLista){
+  if(!crmClienteId)return;
+  const{data:lista}=await sb.from('crm_listas').select('id').eq('quadro','financeiro').eq('nome',nomeLista).eq('arquivada',false).single();
+  if(!lista)return;
+  const{count}=await sb.from('crm_clientes').select('id',{count:'exact',head:true}).eq('lista_id',lista.id);
+  await sb.from('crm_clientes').update({
+    quadro:'financeiro',lista_id:lista.id,posicao:(count||0),atualizado_em:new Date().toISOString()
+  }).eq('id',crmClienteId);
+}
+
+async function checarFinalizacaoCliente(crmClienteId){
+  if(!crmClienteId)return;
+  const{data:parcelas}=await sb.from('pm_parcelas').select('status').eq('crm_cliente_id',crmClienteId).neq('status','cancelado');
+  if(!parcelas||!parcelas.length)return;
+  const todasRecebidas=parcelas.every(p=>p.status==='recebido');
+  if(todasRecebidas)await moverClienteFinanceiro(crmClienteId,'Finalizado');
 }
 
 // ============================================================
@@ -1391,6 +1552,7 @@ async function submitRec(){
 
   toast('Recebimento salvo!','ok');
   await loadFin(true);
+  await moverClienteFinanceiro(fCliId,'Em pagamento');
   location.hash='#/recebimentos';
 }
 

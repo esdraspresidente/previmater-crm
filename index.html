@@ -317,6 +317,50 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .emp{text-align:center;padding:44px 20px;color:var(--text3);}
 .empi{font-size:38px;margin-bottom:10px;}
 .empt{font-size:15px;font-weight:700;color:var(--text2);margin-bottom:5px;}
+
+/* NOTIFICACOES */
+#notifbtn{position:fixed;top:14px;right:16px;z-index:200;width:38px;height:38px;border-radius:50%;background:var(--white);border:1.5px solid var(--border);box-shadow:var(--sh);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text2);}
+#notifbtn:hover{border-color:var(--teal);color:var(--teal);}
+#notifbtn.h{display:none;}
+#notifbadge{position:absolute;top:-3px;right:-3px;background:var(--red);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:9px;display:none;align-items:center;justify-content:center;padding:0 4px;line-height:1;}
+#notifbadge.v{display:flex;}
+.notifitem{padding:11px 13px;border-radius:10px;cursor:pointer;transition:background .1s;display:flex;gap:9px;align-items:flex-start;margin-bottom:4px;}
+.notifitem:hover{background:var(--teal-l);}
+.notifitem.unread{background:#F3FAFA;}
+.notifitem .ni-txt{font-size:12.5px;color:var(--text2);line-height:1.4;}
+.notifitem .ni-time{font-size:10px;color:var(--text3);margin-top:3px;}
+.notifdot{width:7px;height:7px;border-radius:50%;background:var(--teal);flex-shrink:0;margin-top:5px;}
+
+/* ATIVIDADE / COMENTARIOS */
+.actbox{margin-top:6px;}
+.actinput-wrap{position:relative;margin-bottom:16px;}
+.actinput{background:#F3FAFA;border:1.5px solid var(--border);border-radius:11px;padding:10px 13px;font-size:13px;font-family:inherit;width:100%;min-height:56px;resize:vertical;color:var(--text);}
+.actinput:focus{outline:none;border-color:var(--teal);}
+.actsend{margin-top:7px;}
+.mentiondrop{position:absolute;left:0;right:0;bottom:100%;margin-bottom:4px;background:var(--white);border:1.5px solid var(--border);border-radius:10px;box-shadow:var(--shm);max-height:150px;overflow-y:auto;z-index:20;}
+.mentiondrop .sri{padding:8px 12px;font-size:12.5px;}
+.actfeed{display:flex;flex-direction:column;gap:10px;}
+.acti{display:flex;gap:9px;}
+.acti .av{width:28px;height:28px;font-size:11px;flex-shrink:0;}
+.acti-body{flex:1;min-width:0;}
+.acti-c .acti-bubble{background:#F3FAFA;border-radius:11px;border-top-left-radius:3px;padding:9px 12px;font-size:13px;color:var(--text);line-height:1.45;white-space:pre-wrap;word-break:break-word;}
+.acti-head{display:flex;align-items:baseline;gap:7px;margin-bottom:3px;}
+.acti-nome{font-size:12px;font-weight:700;color:var(--text);}
+.acti-time{font-size:10px;color:var(--text3);}
+.acti-a{font-size:12px;color:var(--text3);font-style:italic;padding-top:3px;}
+.acti-a .acti-head{margin-bottom:0;display:inline;}
+.mention-tag{color:var(--teal);font-weight:700;}
+
+/* ANEXOS */
+.anexolist{display:flex;flex-direction:column;gap:7px;margin-bottom:10px;}
+.anexoitem{display:flex;align-items:center;gap:9px;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;background:#F3FAFA;}
+.anexoicone{width:30px;height:30px;border-radius:8px;background:var(--teal-l);color:var(--teal);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.anexonome{font-size:12.5px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.anexometa{font-size:10px;color:var(--text3);}
+.anexoacoes{margin-left:auto;display:flex;gap:2px;flex-shrink:0;}
+.anexoupload{border:2px dashed var(--border);border-radius:11px;padding:14px;text-align:center;cursor:pointer;transition:all .15s;}
+.anexoupload:hover{border-color:var(--teal);background:var(--teal-l);}
+.anexoupload input{display:none;}
 </style>
 </head>
 <body>
@@ -336,6 +380,10 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
     <button class="lbtn" onclick="doLogin()">Entrar</button>
   </div>
 </div>
+
+<button id="notifbtn" class="h" onclick="abrirNotificacoes()" title="Notificações">
+  🔔<span id="notifbadge"></span>
+</button>
 
 <div id="app">
   <nav id="sb">
@@ -377,6 +425,7 @@ const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 
 const PCT_HONORARIOS=0.30;
+const ANEXO_BUCKET='crm-anexos';
 const QUADROS={
   comercial:{rotulo:'Comercial',icone:'◔',ordem:1},
   incubadora:{rotulo:'Incubadora',icone:'◍',ordem:2},
@@ -387,13 +436,15 @@ const CANAIS={meta_oficial:'Meta oficial',evolution:'Evolution',whatsgw:'WhatsGW
 const ORIGENS={contato_direto:'Contato Direto',indicacao:'Indicação',redes_sociais:'Redes Sociais',site:'Site',outro:'Outro'};
 const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
-let U=null,S=null,QPERM=[],ETQ=[];
-let dragCardId=null;
+let U=null,S=null,QPERM=[],ETQ=[],USUARIOS=[];
+let dragCardId=null,dragOrigLista=null;
 let CLI=[],REC=[],PARC=[],finCarregado=false;
 let dashMes=new Date();dashMes.setDate(1);
 let calMes=new Date();calMes.setDate(1);
 let rfiltro='todos';
 let fCliId=null,fTipo='i',fParcs=[],mparcId=null,mdiaData=null,preceberId=null;
+let NOTIF=[],notifPollTimer=null;
+let mcOriginal=null,mcClienteId=null,mcMencoes=[];
 
 // ============================================================
 // UTIL
@@ -416,6 +467,21 @@ const dVenc=s=>Math.floor((new Date(s+'T12:00:00')-today())/86400000);
 const fMes=d=>`${MESES[d.getMonth()]} ${d.getFullYear()}`;
 const avC=n=>{const c=['#0A9396','#1D4ED8','#B06000','#C0392B','#6B3FA0','#0E7490','#9D174D'];let h=0;for(const ch of(n||'?'))h=(h*31+ch.charCodeAt(0))%c.length;return c[h];};
 const avL=n=>(n||'?').charAt(0).toUpperCase();
+function tempoRel(iso){
+  if(!iso)return'';
+  const s=Math.floor((Date.now()-new Date(iso).getTime())/1000);
+  if(s<60)return'agora há pouco';
+  if(s<3600)return Math.floor(s/60)+'min atrás';
+  if(s<86400)return Math.floor(s/3600)+'h atrás';
+  if(s<86400*7)return Math.floor(s/86400)+'d atrás';
+  return new Date(iso).toLocaleDateString('pt-BR');
+}
+function fmtBytes(b){
+  if(!b)return'';
+  if(b<1024)return b+' B';
+  if(b<1024*1024)return (b/1024).toFixed(0)+' KB';
+  return (b/(1024*1024)).toFixed(1)+' MB';
+}
 
 function moneyToFloat(v){if(!v)return 0;return parseFloat(String(v).replace(/\./g,'').replace(',','.'))||0;}
 function m2f(el){return el?moneyToFloat(el.value):0;}
@@ -474,6 +540,8 @@ async function carregarUsuario(){
   QPERM=(p||[]).map(x=>x.quadro).filter(q=>QUADROS[q]).sort((a,b)=>QUADROS[a].ordem-QUADROS[b].ordem);
   const{data:e}=await sb.from('crm_etiquetas').select('*').order('nome');
   ETQ=e||[];
+  const{data:us}=await sb.from('crm_usuarios').select('id,nome,email');
+  USUARIOS=us||[];
 }
 async function doLogin(){
   const em=$('le').value.trim(),pw=$('lp').value,err=$('lerr');
@@ -491,6 +559,8 @@ async function doLogin(){
 async function doLogout(){
   await sb.auth.signOut();
   S=null;U=null;QPERM=[];ETQ=[];CLI=[];REC=[];PARC=[];finCarregado=false;
+  clearInterval(notifPollTimer);notifPollTimer=null;
+  $('notifbtn').classList.add('h');
   $('app').classList.remove('v');$('ln').classList.remove('h');
 }
 function mostrarApp(){
@@ -498,6 +568,10 @@ function mostrarApp(){
   $('sbav').textContent=(U.nome||'?').charAt(0).toUpperCase();
   $('sbnm').textContent=U.nome;$('sbem').textContent=U.email;
   montarSidebar();
+  $('notifbtn').classList.remove('h');
+  carregarNotificacoes();
+  clearInterval(notifPollTimer);
+  notifPollTimer=setInterval(carregarNotificacoes,60000);
 }
 function temFinanceiro(){return QPERM.includes('financeiro');}
 function montarSidebar(){
@@ -540,6 +614,183 @@ function route(){
   if(r==='/recebimentos')return pageRec();
   if(r==='/recebimento/novo')return pageNovoRec();
   $('pc').innerHTML='<div class="emp"><div class="empt">Tela não encontrada</div></div>';
+}
+
+// ============================================================
+// NOTIFICACOES
+// ============================================================
+async function carregarNotificacoes(){
+  if(!U)return;
+  const{data,error}=await sb.from('crm_notificacoes').select('*').eq('usuario_id',U.id).order('criado_em',{ascending:false}).limit(40);
+  if(error)return;
+  NOTIF=data||[];
+  const naoLidas=NOTIF.filter(n=>!n.lida).length;
+  const b=$('notifbadge');
+  if(naoLidas>0){b.textContent=naoLidas>9?'9+':naoLidas;b.classList.add('v');}
+  else b.classList.remove('v');
+}
+function abrirNotificacoes(){
+  const h=NOTIF.length?NOTIF.map(n=>`
+    <div class="notifitem ${n.lida?'':'unread'}" onclick="clicarNotificacao('${n.id}','${escA(n.cliente_id)}')">
+      ${n.lida?'':'<div class="notifdot"></div>'}
+      <div style="flex:1;min-width:0">
+        <div class="ni-txt">${esc(n.texto)}</div>
+        <div class="ni-time">${tempoRel(n.criado_em)}</div>
+      </div>
+    </div>`).join(''):'<div class="emp" style="padding:30px 10px"><div class="empi">🔔</div><div class="empt" style="font-size:13px">Nenhuma notificação ainda</div></div>';
+  abrirModal(`<button class="mbc" onclick="fecharModal()">×</button>
+    <div class="mbt">Notificações</div><div class="mbs">Menções em comentários</div>
+    <div style="max-height:60vh;overflow-y:auto">${h}</div>`);
+}
+async function clicarNotificacao(id,clienteId){
+  await sb.from('crm_notificacoes').update({lida:true}).eq('id',id);
+  await carregarNotificacoes();
+  fecharModal();
+  if(clienteId&&clienteId!=='null')abrirCardCliente(clienteId);
+}
+
+// ============================================================
+// ATIVIDADE (comentarios + historico automatico)
+// ============================================================
+async function registrarAtividade(clienteId,descricao,usuarioId){
+  if(!clienteId)return;
+  await sb.from('crm_atividades').insert({cliente_id:clienteId,usuario_id:usuarioId===undefined?U.id:usuarioId,descricao});
+}
+async function carregarAtividade(clienteId){
+  const[{data:coms},{data:ativs}]=await Promise.all([
+    sb.from('crm_comentarios').select('*').eq('cliente_id',clienteId).order('criado_em',{ascending:false}),
+    sb.from('crm_atividades').select('*').eq('cliente_id',clienteId).order('criado_em',{ascending:false})
+  ]);
+  const itens=[
+    ...(coms||[]).map(c=>({tipo:'c',data:c.criado_em,payload:c})),
+    ...(ativs||[]).map(a=>({tipo:'a',data:a.criado_em,payload:a}))
+  ].sort((x,y)=>new Date(y.data)-new Date(x.data));
+  return itens;
+}
+function nomeUsuario(id){
+  if(!id)return'Sistema';
+  const u=USUARIOS.find(x=>x.id===id);
+  return u?u.nome:'Usuário';
+}
+function renderMencoesTexto(t){
+  return esc(t).replace(/@([^\s@][^@]{0,40}?)(?=\s|$)/g,(m,nome)=>{
+    const ok=USUARIOS.some(u=>u.nome.toLowerCase()===nome.trim().toLowerCase());
+    return ok?`<span class="mention-tag">@${nome}</span>`:m;
+  });
+}
+async function renderAtividadeFeed(clienteId){
+  const cont=$('mc-atividade-feed');
+  if(!cont)return;
+  const itens=await carregarAtividade(clienteId);
+  if(!itens.length){cont.innerHTML='<div class="fhint" style="text-align:center;padding:14px 0">Nenhuma atividade ainda.</div>';return;}
+  cont.innerHTML=itens.map(it=>{
+    if(it.tipo==='c'){
+      const c=it.payload,nm=nomeUsuario(c.autor_usuario_id);
+      return`<div class="acti acti-c">
+        <div class="av" style="background:${avC(nm)}">${avL(nm)}</div>
+        <div class="acti-body">
+          <div class="acti-head"><span class="acti-nome">${esc(nm)}</span><span class="acti-time">${tempoRel(c.criado_em)}</span></div>
+          <div class="acti-bubble">${renderMencoesTexto(c.texto)}</div>
+        </div></div>`;
+    }else{
+      const a=it.payload,nm=nomeUsuario(a.usuario_id);
+      return`<div class="acti acti-a">
+        <div class="av" style="background:${a.usuario_id?avC(nm):'#7FA8A8'};width:22px;height:22px;font-size:9px;margin-top:2px">${avL(nm)}</div>
+        <div class="acti-body"><span class="acti-head"><span class="acti-nome" style="font-weight:700">${esc(nm)}</span> ${esc(a.descricao)} · <span class="acti-time">${tempoRel(a.criado_em)}</span></span></div></div>`;
+    }
+  }).join('');
+}
+function actInputHandler(el){
+  const v=el.value;
+  const cursor=el.selectionStart;
+  const antes=v.slice(0,cursor);
+  const m=antes.match(/@([^\s@]{0,25})$/);
+  const drop=$('mc-mention-drop');
+  if(!m){if(drop)drop.remove();return;}
+  const termo=m[1].toLowerCase();
+  const opts=USUARIOS.filter(u=>u.nome.toLowerCase().includes(termo)&&u.id!==U.id);
+  if(!opts.length){if(drop)drop.remove();return;}
+  const html=opts.map(u=>`<div class="sri" onmousedown="event.preventDefault();selecionarMencao('${u.id}','${escA(u.nome)}')">
+    <div class="av" style="width:22px;height:22px;font-size:10px;background:${avC(u.nome)}">${avL(u.nome)}</div>${esc(u.nome)}</div>`).join('');
+  let d=$('mc-mention-drop');
+  if(!d){d=document.createElement('div');d.id='mc-mention-drop';d.className='mentiondrop';el.parentElement.appendChild(d);}
+  d.innerHTML=html;
+}
+function selecionarMencao(id,nome){
+  const el=$('mc-comentario-input');
+  const v=el.value,cursor=el.selectionStart;
+  const antes=v.slice(0,cursor).replace(/@[^\s@]{0,25}$/,'@'+nome+' ');
+  el.value=antes+v.slice(cursor);
+  const d=$('mc-mention-drop');if(d)d.remove();
+  if(!mcMencoes.find(x=>x.id===id))mcMencoes.push({id,nome});
+  el.focus();
+}
+async function enviarComentario(clienteId){
+  const el=$('mc-comentario-input'),texto=el.value.trim();
+  if(!texto){toast('Escreva um comentário','er');return;}
+  const btn=$('mc-comentario-btn');btn.disabled=true;btn.textContent='Enviando...';
+  const{data,error}=await sb.from('crm_comentarios').insert({cliente_id:clienteId,autor_usuario_id:U.id,texto}).select('id').single();
+  btn.disabled=false;btn.textContent='Comentar';
+  if(error){toast('Erro ao comentar','er');return;}
+  const nomesNoTexto=USUARIOS.filter(u=>texto.toLowerCase().includes('@'+u.nome.toLowerCase())&&u.id!==U.id);
+  const alvos=[...mcMencoes.filter(m=>m.id!==U.id),...nomesNoTexto.map(u=>({id:u.id,nome:u.nome}))];
+  const idsUnicos=[...new Set(alvos.map(a=>a.id))];
+  if(idsUnicos.length){
+    const{data:cli}=await sb.from('crm_clientes').select('nome_completo').eq('id',clienteId).single();
+    const rows=idsUnicos.map(uid=>({usuario_id:uid,cliente_id:clienteId,comentario_id:data.id,
+      texto:`${U.nome} mencionou você no card de ${cli?cli.nome_completo:'um cliente'}`}));
+    await sb.from('crm_notificacoes').insert(rows);
+  }
+  el.value='';mcMencoes=[];
+  renderAtividadeFeed(clienteId);
+}
+
+// ============================================================
+// ANEXOS
+// ============================================================
+async function carregarAnexos(clienteId){
+  const cont=$('mc-anexos-lista');
+  if(!cont)return;
+  const{data,error}=await sb.from('crm_anexos').select('*').eq('cliente_id',clienteId).order('criado_em',{ascending:false});
+  if(error||!data||!data.length){cont.innerHTML='<div class="fhint">Nenhum anexo ainda.</div>';return;}
+  cont.innerHTML=data.map(a=>`
+    <div class="anexoitem">
+      <div class="anexoicone">📎</div>
+      <div style="flex:1;min-width:0">
+        <div class="anexonome">${esc(a.nome_arquivo)}</div>
+        <div class="anexometa">${fmtBytes(a.tamanho_bytes)} · ${tempoRel(a.criado_em)}</div>
+      </div>
+      <div class="anexoacoes">
+        <button class="bic bg" title="Baixar" onclick="baixarAnexo('${escA(a.caminho_storage)}','${escA(a.nome_arquivo)}')">⬇</button>
+        <button class="bic bd" title="Excluir" onclick="excluirAnexo('${a.id}','${escA(a.caminho_storage)}','${clienteId}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+async function uploadAnexo(input,clienteId){
+  const files=[...input.files];
+  if(!files.length)return;
+  for(const f of files){
+    const caminho=`${clienteId}/${Date.now()}_${f.name.replace(/[^\w.\-]/g,'_')}`;
+    const{error:eu}=await sb.storage.from(ANEXO_BUCKET).upload(caminho,f);
+    if(eu){toast('Erro ao enviar '+f.name+': '+eu.message,'er');continue;}
+    await sb.from('crm_anexos').insert({cliente_id:clienteId,usuario_id:U.id,nome_arquivo:f.name,caminho_storage:caminho,tamanho_bytes:f.size});
+  }
+  toast('Anexo(s) enviado(s)','ok');
+  input.value='';
+  carregarAnexos(clienteId);
+  registrarAtividade(clienteId,`anexou ${files.length>1?files.length+' arquivos':'um arquivo'}`);
+}
+async function baixarAnexo(caminho,nome){
+  const{data,error}=await sb.storage.from(ANEXO_BUCKET).createSignedUrl(caminho,60);
+  if(error||!data){toast('Erro ao gerar link','er');return;}
+  window.open(data.signedUrl,'_blank');
+}
+async function excluirAnexo(id,caminho,clienteId){
+  if(!confirm('Excluir este anexo?'))return;
+  await sb.storage.from(ANEXO_BUCKET).remove([caminho]);
+  await sb.from('crm_anexos').delete().eq('id',id);
+  toast('Anexo excluído','in');
+  carregarAnexos(clienteId);
 }
 
 // ============================================================
@@ -646,7 +897,12 @@ function entregaHtml(d){
 }
 function ligarDragDrop(){
   document.querySelectorAll('.kc').forEach(card=>{
-    card.addEventListener('dragstart',e=>{dragCardId=card.getAttribute('data-card');card.classList.add('dragging');e.dataTransfer.effectAllowed='move';});
+    card.addEventListener('dragstart',e=>{
+      dragCardId=card.getAttribute('data-card');
+      const kl=card.closest('.kl');
+      dragOrigLista=kl?kl.getAttribute('data-lista'):null;
+      card.classList.add('dragging');e.dataTransfer.effectAllowed='move';
+    });
     card.addEventListener('dragend',()=>{card.classList.remove('dragging');document.querySelectorAll('.kl').forEach(l=>l.classList.remove('dragover'));});
   });
   document.querySelectorAll('.klb').forEach(body=>{
@@ -661,7 +917,9 @@ function ligarDragDrop(){
       e.preventDefault();body.closest('.kl').classList.remove('dragover');
       const lid=body.getAttribute('data-drop');
       if(lid==='__sem__')return;
+      const cid=dragCardId,origLista=dragOrigLista;
       await salvarOrdemLista(lid,body);
+      if(cid&&origLista&&origLista!==lid)await registrarMovimentoLista(cid,origLista,lid);
     });
   });
 }
@@ -679,6 +937,13 @@ async function salvarOrdemLista(listaId,body){
   const res=await Promise.all(ids.map((id,i)=>sb.from('crm_clientes').update({lista_id:listaId,posicao:i,atualizado_em:new Date().toISOString()}).eq('id',id)));
   if(res.find(r=>r.error)){toast('Não foi possível mover','er');route();return;}
   toast('Cliente movido','ok');atualizarContadores();
+}
+async function registrarMovimentoLista(clienteId,origListaId,destListaId){
+  const[{data:lo},{data:ld}]=await Promise.all([
+    sb.from('crm_listas').select('nome').eq('id',origListaId).single(),
+    sb.from('crm_listas').select('nome').eq('id',destListaId).single()
+  ]);
+  registrarAtividade(clienteId,`moveu o cartão de "${lo?lo.nome:'?'}" para "${ld?ld.nome:'?'}"`);
 }
 function atualizarContadores(){
   document.querySelectorAll('.kl').forEach(l=>{
@@ -734,6 +999,8 @@ async function moverConfirmar(id){
   await moverPara(id,q,l,p);
 }
 async function moverPara(clienteId,quadro,listaId,pos){
+  const{data:atualCli}=await sb.from('crm_clientes').select('lista_id,quadro').eq('id',clienteId).single();
+  const origListaId=atualCli?atualCli.lista_id:null;
   const{data:naLista}=await sb.from('crm_clientes').select('id,posicao').eq('lista_id',listaId).neq('id',clienteId).order('posicao');
   const ord=(naLista||[]).map(x=>x.id);
   ord.splice(pos,0,clienteId);
@@ -744,6 +1011,7 @@ async function moverPara(clienteId,quadro,listaId,pos){
   }));
   if(res.find(r=>r.error)){toast('Não foi possível mover','er');return;}
   fecharModal();toast('Cartão movido','ok');
+  if(origListaId&&origListaId!==listaId)await registrarMovimentoLista(clienteId,origListaId,listaId);
   const at=location.hash.match(/^#\/quadro\/(.+)$/);
   if(at)pageQuadro(at[1]);else location.hash='#/quadro/'+quadro;
 }
@@ -759,6 +1027,8 @@ async function abrirCardCliente(id){
   renderCardClienteModal(c,etqSel,listas||[]);
 }
 function renderCardClienteModal(c,etqSel,listas){
+  mcOriginal={nome_completo:c.nome_completo,quadro:c.quadro,lista_id:c.lista_id};
+  mcClienteId=c.id;mcMencoes=[];
   const optQ=QPERM.map(q=>`<option value="${q}" ${c.quadro===q?'selected':''}>${QUADROS[q].rotulo}</option>`).join('');
   const optL=listas.map(l=>`<option value="${l.id}" ${c.lista_id===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
   const optCanal=`<option value="">—</option>`+Object.keys(CANAIS).map(k=>`<option value="${k}" ${c.canal_whatsapp===k?'selected':''}>${CANAIS[k]}</option>`).join('');
@@ -789,7 +1059,25 @@ function renderCardClienteModal(c,etqSel,listas){
     <div class="fld ff" style="margin-bottom:13px"><label>Observações</label><textarea id="mc-obs">${esc(c.observacoes)}</textarea></div>
     <div class="fld ff" style="margin-bottom:18px"><label>Link do Trello</label><input type="url" id="mc-trello" placeholder="https://trello.com/c/..." value="${escA(c.trello_url)}"/></div>
 
-    <div class="brow" style="justify-content:space-between">
+    <div class="hr"></div>
+    <div class="fst">Anexos</div>
+    <div class="anexolist" id="mc-anexos-lista"><div class="fhint">Carregando...</div></div>
+    <label class="anexoupload" style="display:block;margin-bottom:18px">
+      <input type="file" multiple onchange="uploadAnexo(this,'${c.id}')"/>
+      <span style="font-size:12px;color:var(--text2);font-weight:600">📎 Clique para anexar arquivos</span>
+    </label>
+
+    <div class="hr"></div>
+    <div class="fst">Atividade</div>
+    <div class="actbox">
+      <div class="actinput-wrap">
+        <textarea class="actinput" id="mc-comentario-input" placeholder="Escreva um comentário... use @ para mencionar alguém" oninput="actInputHandler(this)"></textarea>
+        <button class="btn btnp actsend" id="mc-comentario-btn" onclick="enviarComentario('${c.id}')">Comentar</button>
+      </div>
+      <div class="actfeed" id="mc-atividade-feed"><div class="fhint" style="text-align:center;padding:14px 0">Carregando...</div></div>
+    </div>
+
+    <div class="brow" style="justify-content:space-between;margin-top:18px">
       <button class="btnd" onclick="excluirClienteModal('${c.id}')">Excluir cliente</button>
       <div style="display:flex;gap:9px">
         <button class="btn btns" onclick="fecharModal()">Fechar</button>
@@ -797,6 +1085,8 @@ function renderCardClienteModal(c,etqSel,listas){
       </div>
     </div>`,true);
   mcRecalcBox(c.valor_beneficio_esperado,c.valor_honorarios);
+  carregarAnexos(c.id);
+  renderAtividadeFeed(c.id);
 }
 function mcRecalc(veioHonorario){
   const vb=m2f($('mc-vb'));
@@ -820,7 +1110,7 @@ async function mcTrocarQuadro(){
 async function salvarCardCliente(id){
   const nome=$('mc-nome').value.trim();
   if(!nome){toast('Preencha o nome','er');return;}
-  const quadro=$('mc-quadro').value;
+  const quadro=$('mc-quadro').value,listaId=$('mc-lista').value||null;
   const payload={
     nome_completo:nome,
     telefone_principal:$('mc-tel').value.trim()||null,
@@ -829,7 +1119,7 @@ async function salvarCardCliente(id){
     origem:$('mc-origem').value||null,
     trello_url:$('mc-trello').value.trim()||null,
     quadro:quadro,
-    lista_id:$('mc-lista').value||null,
+    lista_id:listaId,
     data_entrega:$('mc-entrega').value||null,
     data_nascimento_bebe:$('mc-dn').value||null,
     valor_beneficio_esperado:m2f($('mc-vb'))||null,
@@ -844,6 +1134,15 @@ async function salvarCardCliente(id){
   await sb.from('crm_clientes_etiquetas').delete().eq('cliente_id',id);
   if(etqSel.length)await sb.from('crm_clientes_etiquetas').insert(etqSel.map(e=>({cliente_id:id,etiqueta_id:e})));
   finCarregado=false;
+
+  if(mcOriginal){
+    if(mcOriginal.lista_id!==listaId&&mcOriginal.lista_id){
+      await registrarMovimentoLista(id,mcOriginal.lista_id,listaId);
+    }else if(mcOriginal.nome_completo!==nome){
+      registrarAtividade(id,`renomeou o cartão de "${mcOriginal.nome_completo}" para "${nome}"`);
+    }
+  }
+
   fecharModal();toast('Cliente atualizado','ok');
   refrescarRotaAtual();
 }
@@ -1017,13 +1316,14 @@ async function salvarCliente(id){
   };
   const etqSel=[...document.querySelectorAll('#etp .ett.on')].map(e=>e.getAttribute('data-etq'));
   btn.disabled=true;btn.textContent='Salvando...';
-  let cid=id,error;
+  let cid=id,error,ehNovo=!id;
   if(id){({error}=await sb.from('crm_clientes').update(payload).eq('id',id));}
   else{const r=await sb.from('crm_clientes').insert(payload).select('id').single();error=r.error;if(r.data)cid=r.data.id;}
   if(error){toast('Erro ao salvar: '+error.message,'er');btn.disabled=false;btn.textContent=id?'Salvar alterações':'Criar cliente';return;}
   await sb.from('crm_clientes_etiquetas').delete().eq('cliente_id',cid);
   if(etqSel.length)await sb.from('crm_clientes_etiquetas').insert(etqSel.map(e=>({cliente_id:cid,etiqueta_id:e})));
   finCarregado=false;
+  if(ehNovo)registrarAtividade(cid,'criou o cadastro deste cartão');
   toast(id?'Cliente atualizado':'Cliente criado','ok');
   location.hash='#/quadro/'+quadro;
 }
@@ -1260,7 +1560,7 @@ async function marcaInad(pid){
   if(error){toast('Erro.','er');return;}
   fecharModal();toast('Marcada como inadimplente.','in');
   await loadFin(true);
-  if(p)await moverClienteFinanceiro(pCli(p),'Inadimplente');
+  if(p)await moverClienteFinanceiro(pCli(p),'Inadimplente',true);
   recarregarFin();
 }
 async function cancelaP(pid){
@@ -1318,14 +1618,17 @@ function refrescarRotaAtual(){
 function recarregarFin(){refrescarRotaAtual();}
 
 // ---------- MOVIMENTO AUTOMATICO NO QUADRO FINANCEIRO ----------
-async function moverClienteFinanceiro(crmClienteId,nomeLista){
+async function moverClienteFinanceiro(crmClienteId,nomeLista,logar){
   if(!crmClienteId)return;
   const{data:lista}=await sb.from('crm_listas').select('id').eq('quadro','financeiro').eq('nome',nomeLista).eq('arquivada',false).single();
   if(!lista)return;
+  const{data:clienteAtual}=await sb.from('crm_clientes').select('lista_id').eq('id',crmClienteId).single();
+  if(clienteAtual&&clienteAtual.lista_id===lista.id)return;
   const{count}=await sb.from('crm_clientes').select('id',{count:'exact',head:true}).eq('lista_id',lista.id);
   await sb.from('crm_clientes').update({
     quadro:'financeiro',lista_id:lista.id,posicao:(count||0),atualizado_em:new Date().toISOString()
   }).eq('id',crmClienteId);
+  if(logar)await registrarAtividade(crmClienteId,`moveu automaticamente o cartão para "${nomeLista}" (Financeiro)`,null);
 }
 
 async function checarFinalizacaoCliente(crmClienteId){
@@ -1333,7 +1636,7 @@ async function checarFinalizacaoCliente(crmClienteId){
   const{data:parcelas}=await sb.from('pm_parcelas').select('status').eq('crm_cliente_id',crmClienteId).neq('status','cancelado');
   if(!parcelas||!parcelas.length)return;
   const todasRecebidas=parcelas.every(p=>p.status==='recebido');
-  if(todasRecebidas)await moverClienteFinanceiro(crmClienteId,'Finalizado');
+  if(todasRecebidas)await moverClienteFinanceiro(crmClienteId,'Finalizado',true);
 }
 
 // ============================================================
@@ -1552,7 +1855,7 @@ async function submitRec(){
 
   toast('Recebimento salvo!','ok');
   await loadFin(true);
-  await moverClienteFinanceiro(fCliId,'Em pagamento');
+  await moverClienteFinanceiro(fCliId,'Em pagamento',true);
   location.hash='#/recebimentos';
 }
 

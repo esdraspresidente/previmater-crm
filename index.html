@@ -127,6 +127,23 @@
     font-size: 13px;
     color: var(--text-secondary);
   }
+  .topbar .nav {
+    display: flex;
+    gap: 18px;
+  }
+  .nav-link {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-decoration: none;
+    padding-bottom: 2px;
+  }
+  .nav-link:hover { color: var(--primary); }
+  .nav-link.ativo {
+    color: var(--primary);
+    border-bottom: 2px solid var(--primary);
+  }
   .btn-ghost {
     border: 0.5px solid var(--border);
     background: transparent;
@@ -278,6 +295,90 @@
   }
   .form-save-msg.ok { background: var(--sage-bg); color: var(--sage-text); }
   .form-save-msg.err { background: var(--brick-bg); color: var(--brick-text); }
+
+  /* ---------- painel de campanha ---------- */
+  .campanha-wrap { padding: 20px; }
+  .alert-banner {
+    background: var(--brick-bg);
+    color: var(--brick-text);
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 24px 0 10px;
+  }
+  .section-title:first-child { margin-top: 0; }
+  .previmater-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg-card);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .previmater-table th {
+    text-align: left;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    background: var(--bg-column);
+    padding: 8px 12px;
+  }
+  .previmater-table td {
+    font-size: 13px;
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-top: 0.5px solid var(--border);
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge.ok { background: var(--sage-bg); color: var(--sage-text); }
+  .badge.alerta { background: var(--brick-bg); color: var(--brick-text); }
+  .badge.neutro { background: var(--bg-column); color: var(--text-secondary); }
+  .teto-input {
+    width: 64px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    border: 0.5px solid var(--border);
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .btn-mini {
+    border: 0.5px solid var(--border);
+    background: transparent;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    margin-left: 6px;
+  }
+  .btn-mini:hover { background: var(--bg-column); }
+  .add-instancia-form {
+    background: var(--bg-card);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    gap: 10px;
+    align-items: end;
+  }
+  .add-instancia-form .field { margin-bottom: 0; }
 </style>
 </head>
 <body>
@@ -373,6 +474,10 @@
       renderFormCliente(matchCliente[1]);
       return;
     }
+    if (rota === '/campanha') {
+      renderCampanha();
+      return;
+    }
     app.innerHTML = '<div class="loading-msg">Tela ainda não criada.</div>';
   }
 
@@ -453,7 +558,7 @@
   // ------------------------------------------------------------
   async function renderKanban() {
     const app = document.getElementById('app');
-    app.innerHTML = topbarHtml(true) + '<div class="loading-msg">Carregando clientes...</div>';
+    app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + '<div class="loading-msg">Carregando clientes...</div>';
     ligarEventosTopbar();
 
     const { data, error } = await sb
@@ -462,7 +567,7 @@
       .order('criado_em', { ascending: false });
 
     if (error) {
-      app.innerHTML = topbarHtml(true) + `<div class="error-box">Não foi possível carregar os clientes.<br>${error.message}</div>`;
+      app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + `<div class="error-box">Não foi possível carregar os clientes.<br>${error.message}</div>`;
       ligarEventosTopbar();
       return;
     }
@@ -488,7 +593,7 @@
       `;
     });
 
-    app.innerHTML = topbarHtml(true) + `
+    app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + `
       <div class="kanban-wrap">
         <div class="kanban-board">${colunasHtml}</div>
       </div>
@@ -514,12 +619,19 @@
     return div.innerHTML;
   }
 
-  function topbarHtml(mostrarNovoCliente) {
+  function topbarHtml(opcoes) {
+    opcoes = opcoes || {};
+    const rotaAtual = opcoes.rotaAtual || '';
+    const linkClientes = `<a class="nav-link ${rotaAtual === '/clientes' ? 'ativo' : ''}" onclick="location.hash='#/clientes'">Clientes</a>`;
+    const linkCampanha = currentUser.nivel === 'proprietario'
+      ? `<a class="nav-link ${rotaAtual === '/campanha' ? 'ativo' : ''}" onclick="location.hash='#/campanha'">Campanha</a>`
+      : '';
     return `
       <div class="topbar">
         <div class="brand">PreviMater CRM</div>
+        <div class="nav">${linkClientes}${linkCampanha}</div>
         <div class="who">
-          ${mostrarNovoCliente ? '<button class="btn-ghost" id="btn-novo-cliente">+ novo cliente</button>' : ''}
+          ${opcoes.novoCliente ? '<button class="btn-ghost" id="btn-novo-cliente">+ novo cliente</button>' : ''}
           <span>${currentUser.nome} · ${currentUser.nivel === 'proprietario' ? 'proprietário' : 'administrativo'}</span>
           <button class="btn-ghost" id="btn-sair">Sair</button>
         </div>
@@ -564,13 +676,13 @@
     const ehNovo = !clienteId;
 
     if (ehNovo) {
-      app.innerHTML = topbarHtml(true) + montarHtmlForm(null);
+      app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + montarHtmlForm(null);
       ligarEventosTopbar();
       ligarEventosForm(null);
       return;
     }
 
-    app.innerHTML = topbarHtml(true) + '<div class="loading-msg">Carregando cliente...</div>';
+    app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + '<div class="loading-msg">Carregando cliente...</div>';
     ligarEventosTopbar();
 
     const { data, error } = await sb
@@ -580,12 +692,12 @@
       .single();
 
     if (error || !data) {
-      app.innerHTML = topbarHtml(true) + '<div class="error-box">Cliente não encontrado.</div>';
+      app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + '<div class="error-box">Cliente não encontrado.</div>';
       ligarEventosTopbar();
       return;
     }
 
-    app.innerHTML = topbarHtml(true) + montarHtmlForm(data);
+    app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + montarHtmlForm(data);
     ligarEventosTopbar();
     ligarEventosForm(data);
   }
@@ -752,6 +864,218 @@
     }
     location.hash = '#/clientes';
     render();
+  }
+
+  // ------------------------------------------------------------
+  // PAINEL DA CAMPANHA WHATSGW
+  // ------------------------------------------------------------
+  const NOMES_CANAL_INSTANCIA = { meta_oficial: 'Meta oficial', evolution: 'Evolution', whatsgw: 'WhatsGW' };
+
+  async function renderCampanha() {
+    const app = document.getElementById('app');
+    const topo = topbarHtml({ rotaAtual: '/campanha' });
+
+    if (currentUser.nivel !== 'proprietario') {
+      app.innerHTML = topo + '<div class="error-box">Essa tela é restrita a proprietários.</div>';
+      ligarEventosTopbar();
+      return;
+    }
+
+    app.innerHTML = topo + '<div class="loading-msg">Carregando painel da campanha...</div>';
+    ligarEventosTopbar();
+
+    const [{ data: instancias, error: erroInstancias }, { data: disparos, error: erroDisparos }] = await Promise.all([
+      sb.from('crm_instancias_whatsapp').select('*').order('numero_telefone'),
+      sb.from('crm_campanha_disparos').select('*').order('criado_em', { ascending: false }).limit(30)
+    ]);
+
+    if (erroInstancias) {
+      app.innerHTML = topo + `<div class="error-box">Não foi possível carregar os números.<br>${erroInstancias.message}</div>`;
+      ligarEventosTopbar();
+      return;
+    }
+
+    const listaInstancias = instancias || [];
+    const listaDisparos = disparos || [];
+
+    const numerosDegradados = listaInstancias.filter(i => i.status === 'degradado' || (i.taxa_entrega !== null && i.taxa_entrega < 80));
+    const bannerAlerta = numerosDegradados.length > 0
+      ? `<div class="alert-banner">Atenção: ${numerosDegradados.length === 1 ? 'o número ' + numerosDegradados[0].numero_telefone + ' está' : numerosDegradados.length + ' números estão'} com taxa de entrega baixa ou degradado(s). Considere pausar ou reduzir o teto diário.</div>`
+      : '';
+
+    app.innerHTML = topo + `
+      <div class="campanha-wrap">
+        ${bannerAlerta}
+
+        <div class="section-title">Números / instâncias</div>
+        <button class="btn-ghost" id="btn-toggle-add-instancia" style="margin-bottom:12px;">+ novo número</button>
+        <div id="add-instancia-container"></div>
+
+        ${listaInstancias.length === 0
+          ? '<div class="loading-msg">Nenhum número cadastrado ainda.</div>'
+          : tabelaInstanciasHtml(listaInstancias)}
+
+        <div class="section-title">Últimos disparos</div>
+        ${listaDisparos.length === 0
+          ? '<div class="loading-msg">Nenhum disparo registrado ainda.</div>'
+          : tabelaDisparosHtml(listaDisparos, listaInstancias)}
+      </div>
+    `;
+
+    document.getElementById('btn-toggle-add-instancia').addEventListener('click', mostrarFormNovaInstancia);
+    ligarEventosTabelaInstancias();
+  }
+
+  function tabelaInstanciasHtml(lista) {
+    const linhas = lista.map(i => {
+      const taxaTxt = i.taxa_entrega !== null && i.taxa_entrega !== undefined ? `${Number(i.taxa_entrega).toFixed(0)}%` : '—';
+      const taxaBadgeClasse = (i.taxa_entrega === null || i.taxa_entrega === undefined) ? 'neutro' : (i.taxa_entrega < 80 ? 'alerta' : 'ok');
+      const statusBadgeClasse = i.status === 'ativo' ? 'ok' : (i.status === 'degradado' ? 'alerta' : 'neutro');
+      return `
+        <tr data-instancia-id="${i.id}">
+          <td>${escapeHtml(i.numero_telefone)}</td>
+          <td>${NOMES_CANAL_INSTANCIA[i.canal] || i.canal}</td>
+          <td>
+            <input type="number" min="0" class="teto-input teto-input-linha" value="${i.teto_diario_atual}">
+            <button class="btn-mini btn-salvar-teto">Salvar</button>
+          </td>
+          <td>${i.disparos_hoje} / ${i.teto_diario_atual}</td>
+          <td><span class="badge ${taxaBadgeClasse}">${taxaTxt}</span></td>
+          <td><span class="badge ${statusBadgeClasse}">${i.status}</span></td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <table class="previmater-table">
+        <thead>
+          <tr>
+            <th>Número</th>
+            <th>Canal</th>
+            <th>Teto diário</th>
+            <th>Disparos hoje</th>
+            <th>Taxa entrega</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    `;
+  }
+
+  function tabelaDisparosHtml(disparos, instancias) {
+    const mapaInstancias = {};
+    instancias.forEach(i => { mapaInstancias[i.id] = i.numero_telefone; });
+
+    const nomesStatus = {
+      agendado: 'neutro', enviado: 'neutro', entregue: 'ok',
+      lido: 'ok', respondido: 'ok', falhou: 'alerta'
+    };
+
+    const linhas = disparos.map(d => {
+      const dataFmt = d.data_hora_agendada ? new Date(d.data_hora_agendada).toLocaleString('pt-BR') : '—';
+      return `
+        <tr>
+          <td>${escapeHtml(d.contato_nome) || '—'}</td>
+          <td>${escapeHtml(d.contato_telefone)}</td>
+          <td>${escapeHtml(mapaInstancias[d.instancia_id]) || '—'}</td>
+          <td>${dataFmt}</td>
+          <td><span class="badge ${nomesStatus[d.status] || 'neutro'}">${d.status}</span></td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <table class="previmater-table">
+        <thead>
+          <tr>
+            <th>Contato</th>
+            <th>Telefone</th>
+            <th>Número usado</th>
+            <th>Agendado para</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    `;
+  }
+
+  function ligarEventosTabelaInstancias() {
+    document.querySelectorAll('tr[data-instancia-id]').forEach(linha => {
+      const instanciaId = linha.getAttribute('data-instancia-id');
+      const btnSalvar = linha.querySelector('.btn-salvar-teto');
+      const inputTeto = linha.querySelector('.teto-input-linha');
+      btnSalvar.addEventListener('click', () => salvarTetoInstancia(instanciaId, inputTeto));
+    });
+  }
+
+  async function salvarTetoInstancia(instanciaId, inputEl) {
+    const novoTeto = parseInt(inputEl.value, 10);
+    if (isNaN(novoTeto) || novoTeto < 0) {
+      alert('Digite um número válido pro teto diário.');
+      return;
+    }
+    const { error } = await sb
+      .from('crm_instancias_whatsapp')
+      .update({ teto_diario_atual: novoTeto, atualizado_em: new Date().toISOString() })
+      .eq('id', instanciaId);
+    if (error) {
+      alert('Não foi possível salvar: ' + error.message);
+      return;
+    }
+    renderCampanha();
+  }
+
+  function mostrarFormNovaInstancia() {
+    const container = document.getElementById('add-instancia-container');
+    container.innerHTML = `
+      <div class="add-instancia-form">
+        <div class="field">
+          <label for="ni-numero">Número (com DDD)</label>
+          <input id="ni-numero" type="text" placeholder="41999999999">
+        </div>
+        <div class="field">
+          <label for="ni-canal">Canal</label>
+          <select id="ni-canal">
+            <option value="whatsgw">WhatsGW</option>
+            <option value="evolution">Evolution</option>
+            <option value="meta_oficial">Meta oficial</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ni-teto">Teto diário inicial</label>
+          <input id="ni-teto" type="number" min="0" value="20">
+        </div>
+        <button class="btn-primary" style="width:auto; padding:0 16px; height:40px;" id="btn-criar-instancia">Adicionar</button>
+      </div>
+    `;
+    document.getElementById('btn-criar-instancia').addEventListener('click', criarInstancia);
+  }
+
+  async function criarInstancia() {
+    const numero = document.getElementById('ni-numero').value.trim();
+    const canal = document.getElementById('ni-canal').value;
+    const teto = parseInt(document.getElementById('ni-teto').value, 10) || 0;
+
+    if (!numero) {
+      alert('Digite o número de telefone.');
+      return;
+    }
+
+    const { error } = await sb.from('crm_instancias_whatsapp').insert({
+      numero_telefone: numero,
+      canal,
+      teto_diario_atual: teto,
+      disparos_hoje: 0,
+      status: 'ativo'
+    });
+
+    if (error) {
+      alert('Não foi possível adicionar: ' + error.message);
+      return;
+    }
+    renderCampanha();
   }
 </script>
 </body>

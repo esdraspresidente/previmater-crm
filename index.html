@@ -79,10 +79,7 @@
     font-size: 14px;
     color: var(--text-primary);
   }
-  .field input:focus {
-    outline: none;
-    border-color: var(--primary);
-  }
+  .field input:focus { outline: none; border-color: var(--primary); }
   .btn-primary {
     width: 100%;
     height: 42px;
@@ -112,37 +109,18 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 20px;
+    padding: 12px 20px;
     border-bottom: 0.5px solid var(--border);
+    flex-wrap: wrap;
+    gap: 10px;
   }
-  .topbar .brand {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--primary);
-  }
+  .topbar .brand { font-size: 18px; font-weight: 700; color: var(--primary); }
   .topbar .who {
     display: flex;
     align-items: center;
     gap: 12px;
     font-size: 13px;
     color: var(--text-secondary);
-  }
-  .topbar .nav {
-    display: flex;
-    gap: 18px;
-  }
-  .nav-link {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    cursor: pointer;
-    text-decoration: none;
-    padding-bottom: 2px;
-  }
-  .nav-link:hover { color: var(--primary); }
-  .nav-link.ativo {
-    color: var(--primary);
-    border-bottom: 2px solid var(--primary);
   }
   .btn-ghost {
     border: 0.5px solid var(--border);
@@ -157,16 +135,40 @@
   }
   .btn-ghost:hover { background: var(--bg-column); }
 
+  /* ---------- abas de quadro ---------- */
+  .quadro-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 0 20px;
+    border-bottom: 0.5px solid var(--border);
+    overflow-x: auto;
+  }
+  .quadro-tab {
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+  }
+  .quadro-tab:hover { color: var(--primary); }
+  .quadro-tab.ativo {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+  }
+
   /* ---------- kanban ---------- */
   .kanban-wrap { padding: 20px; }
   .kanban-board {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(220px, 1fr));
+    display: flex;
     gap: 12px;
     overflow-x: auto;
+    align-items: flex-start;
+    padding-bottom: 12px;
   }
+  .kanban-col { min-width: 230px; flex: 0 0 230px; }
   .col-header {
-    border-radius: 0;
     background: var(--bg-column);
     padding: 8px 10px;
     font-size: 13px;
@@ -174,12 +176,22 @@
     color: var(--text-primary);
     margin-bottom: 8px;
     letter-spacing: 0.2px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
   }
-  .col-count {
-    font-weight: 400;
+  .col-count { font-weight: 400; color: var(--text-secondary); font-size: 12px; }
+  .col-arquivar {
+    border: none;
+    background: transparent;
     color: var(--text-secondary);
-    font-size: 12px;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 0 2px;
   }
+  .col-arquivar:hover { color: var(--brick-text); }
   .client-card {
     background: var(--bg-card);
     border: 0.5px solid var(--border);
@@ -189,30 +201,41 @@
     cursor: pointer;
   }
   .client-card:hover { border-color: var(--primary); }
-  .client-card .nome {
-    font-size: 14px;
+  .client-card .nome { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+  .client-card .meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .card-etiquetas { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .etiqueta-chip {
+    font-size: 10px;
     font-weight: 700;
-    color: var(--text-primary);
+    color: #FFFFFF;
+    padding: 2px 7px;
+    border-radius: 5px;
+    letter-spacing: 0.2px;
   }
-  .client-card .meta {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-top: 2px;
-  }
-  .empty-col {
-    font-size: 12px;
-    color: var(--text-secondary);
-    padding: 6px 2px;
-  }
+  .empty-col { font-size: 12px; color: var(--text-secondary); padding: 6px 2px; }
   .loading-msg, .error-box {
     padding: 40px 20px;
     text-align: center;
     color: var(--text-secondary);
     font-size: 14px;
   }
+  .add-col-btn {
+    min-width: 180px;
+    flex: 0 0 180px;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 12px;
+    cursor: pointer;
+  }
+  .add-col-btn:hover { border-color: var(--primary); color: var(--primary); }
 
-  /* ---------- formulario de cliente ---------- */
-  .form-wrap { padding: 20px; max-width: 640px; }
+  /* ---------- formularios ---------- */
+  .form-wrap { padding: 20px; max-width: 660px; }
   .form-back {
     display: inline-block;
     font-size: 13px;
@@ -229,17 +252,8 @@
     border-radius: 12px;
     padding: 24px;
   }
-  .form-card h2 {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--primary);
-    margin: 0 0 20px;
-  }
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 14px;
-  }
+  .form-card h2 { font-size: 18px; font-weight: 700; color: var(--primary); margin: 0 0 20px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .field select, .field textarea {
     width: 100%;
     padding: 8px 12px;
@@ -252,10 +266,19 @@
   }
   .field select { height: 40px; }
   .field textarea { resize: vertical; min-height: 70px; }
-  .field select:focus, .field textarea:focus {
-    outline: none;
-    border-color: var(--primary);
+  .field select:focus, .field textarea:focus { outline: none; border-color: var(--primary); }
+  .etiqueta-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+  .etiqueta-toggle {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 11px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    opacity: 0.4;
+    color: #FFFFFF;
   }
+  .etiqueta-toggle.marcada { opacity: 1; }
   .form-actions {
     display: flex;
     justify-content: space-between;
@@ -287,16 +310,11 @@
     padding: 0;
   }
   .btn-danger-text:hover { text-decoration: underline; }
-  .form-save-msg {
-    font-size: 13px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    margin-bottom: 14px;
-  }
+  .form-save-msg { font-size: 13px; padding: 8px 10px; border-radius: 8px; margin-bottom: 14px; }
   .form-save-msg.ok { background: var(--sage-bg); color: var(--sage-text); }
   .form-save-msg.err { background: var(--brick-bg); color: var(--brick-text); }
 
-  /* ---------- painel de campanha ---------- */
+  /* ---------- tabelas (campanha, etiquetas) ---------- */
   .campanha-wrap { padding: 20px; }
   .alert-banner {
     background: var(--brick-bg);
@@ -307,12 +325,7 @@
     font-size: 13px;
     font-weight: 600;
   }
-  .section-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--primary);
-    margin: 24px 0 10px;
-  }
+  .section-title { font-size: 15px; font-weight: 700; color: var(--primary); margin: 24px 0 10px; }
   .section-title:first-child { margin-top: 0; }
   .previmater-table {
     width: 100%;
@@ -336,13 +349,7 @@
     padding: 8px 12px;
     border-top: 0.5px solid var(--border);
   }
-  .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 600;
-  }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
   .badge.ok { background: var(--sage-bg); color: var(--sage-text); }
   .badge.alerta { background: var(--brick-bg); color: var(--brick-text); }
   .badge.neutro { background: var(--bg-column); color: var(--text-secondary); }
@@ -379,6 +386,12 @@
     align-items: end;
   }
   .add-instancia-form .field { margin-bottom: 0; }
+  .cor-input { width: 46px; height: 34px; padding: 2px; border-radius: 6px; border: 0.5px solid var(--border); }
+
+  @media (max-width: 640px) {
+    .form-row { grid-template-columns: 1fr; }
+    .add-instancia-form { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -395,33 +408,54 @@
   // ------------------------------------------------------------
   // ESTADO
   // ------------------------------------------------------------
-  let currentUser = null; // { nome, nivel, email }
+  let currentUser = null;      // { id, nome, nivel, email }
   let currentSession = null;
+  let quadrosPermitidos = [];  // ex: ['comercial','incubadora','operacional','financeiro']
+  let etiquetasCache = [];     // [{id, nome, cor}]
 
-  const FASES = [
-    { chave: 'Protocolo Enviado', cor: 'var(--gray)' },
-    { chave: 'Em Analise', cor: 'var(--amber)' },
-    { chave: 'Exigencia', cor: 'var(--amber)' },
-    { chave: 'Exigencia Cumprida', cor: 'var(--sage)' },
-    { chave: 'Beneficio Negado', cor: 'var(--brick)' },
-    { chave: 'Beneficio Concedido', cor: 'var(--sage)' },
-    { chave: 'Pagamento-Encerrado', cor: 'var(--primary)' }
-  ];
+  const QUADROS = {
+    comercial: {
+      rotulo: 'Comercial',
+      fases: [
+        { chave: 'Lead novo',             cor: 'var(--gray)' },
+        { chave: 'Em triagem',            cor: 'var(--amber)' },
+        { chave: 'Aguardando documentos', cor: 'var(--amber)' },
+        { chave: 'Contrato enviado',      cor: 'var(--sage)' },
+        { chave: 'Contrato assinado',     cor: 'var(--primary)' }
+      ]
+    },
+    incubadora: { rotulo: 'Incubadora', fases: null }, // colunas = meses, vem do banco
+    operacional: {
+      rotulo: 'Operacional',
+      fases: [
+        { chave: 'Beneficio Protocolado', cor: 'var(--gray)',    rotulo: 'Benefício protocolado' },
+        { chave: 'Em Analise',            cor: 'var(--amber)',   rotulo: 'Em análise' },
+        { chave: 'Exigencia',             cor: 'var(--amber)',   rotulo: 'Exigência' },
+        { chave: 'Exigencia Cumprida',    cor: 'var(--sage)',    rotulo: 'Exigência cumprida' },
+        { chave: 'Beneficio Negado',      cor: 'var(--brick)',   rotulo: 'Benefício negado' },
+        { chave: 'Beneficio Concedido',   cor: 'var(--sage)',    rotulo: 'Benefício concedido' }
+      ]
+    },
+    financeiro: {
+      rotulo: 'Financeiro',
+      fases: [
+        { chave: 'Aguardando pagamento INSS', cor: 'var(--gray)' },
+        { chave: 'Beneficio recebido',        cor: 'var(--amber)',  rotulo: 'Benefício recebido' },
+        { chave: 'Honorarios a receber',      cor: 'var(--amber)',  rotulo: 'Honorários a receber' },
+        { chave: 'Pago-Encerrado',            cor: 'var(--sage)',   rotulo: 'Pago / encerrado' }
+      ]
+    }
+  };
 
-  function nomeFaseExibicao(chave) {
-    return chave.replace('-', ' ').replace(/([a-z])([A-Z])/g, '$1 $2')
-      .replace('Analise', 'análise')
-      .replace('Beneficio', 'Benefício')
-      .replace('Exigencia', 'Exigência')
-      .replace('Encerrado', 'encerrado');
-  }
+  const MESES_NOME = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                      'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  function rotuloFase(f) { return f.rotulo || f.chave; }
 
   // ------------------------------------------------------------
   // ROTEAMENTO POR HASH
   // ------------------------------------------------------------
-  function getRoute() {
-    return location.hash.slice(1) || '/';
-  }
+  function getRoute() { return location.hash.slice(1) || '/'; }
 
   window.addEventListener('hashchange', render);
   window.addEventListener('DOMContentLoaded', init);
@@ -429,21 +463,27 @@
   async function init() {
     const { data } = await sb.auth.getSession();
     currentSession = data.session;
-    if (currentSession) {
-      await carregarUsuarioAtual();
-    }
+    if (currentSession) await carregarUsuarioAtual();
     render();
   }
 
   async function carregarUsuarioAtual() {
     const { data, error } = await sb
       .from('crm_usuarios')
-      .select('nome, nivel, email')
+      .select('id, nome, nivel, email')
       .eq('auth_user_id', currentSession.user.id)
       .single();
-    if (!error && data) {
-      currentUser = data;
-    }
+    if (error || !data) return;
+    currentUser = data;
+
+    const { data: perms } = await sb
+      .from('crm_permissoes_quadro')
+      .select('quadro')
+      .eq('usuario_id', currentUser.id);
+    quadrosPermitidos = (perms || []).map(p => p.quadro);
+
+    const { data: etqs } = await sb.from('crm_etiquetas').select('*').order('nome');
+    etiquetasCache = etqs || [];
   }
 
   // ------------------------------------------------------------
@@ -457,32 +497,30 @@
       return;
     }
     const rota = getRoute();
-    if (rota === '/' ) {
-      location.hash = '#/clientes';
+
+    if (rota === '/') {
+      const primeiro = quadrosPermitidos[0] || 'comercial';
+      location.hash = '#/quadro/' + primeiro;
       return;
     }
-    if (rota === '/clientes') {
-      renderKanban();
-      return;
-    }
-    if (rota === '/cliente/novo') {
-      renderFormCliente(null);
-      return;
-    }
+
+    const matchQuadro = rota.match(/^\/quadro\/(.+)$/);
+    if (matchQuadro) { renderQuadro(matchQuadro[1]); return; }
+
+    if (rota === '/cliente/novo') { renderFormCliente(null); return; }
+
     const matchCliente = rota.match(/^\/cliente\/(.+)$/);
-    if (matchCliente) {
-      renderFormCliente(matchCliente[1]);
-      return;
-    }
-    if (rota === '/campanha') {
-      renderCampanha();
-      return;
-    }
-    app.innerHTML = '<div class="loading-msg">Tela ainda não criada.</div>';
+    if (matchCliente) { renderFormCliente(matchCliente[1]); return; }
+
+    if (rota === '/etiquetas') { renderEtiquetas(); return; }
+    if (rota === '/campanha') { renderCampanha(); return; }
+
+    app.innerHTML = topbarHtml({}) + '<div class="loading-msg">Tela não encontrada.</div>';
+    ligarEventosTopbar();
   }
 
   // ------------------------------------------------------------
-  // TELA DE LOGIN
+  // LOGIN
   // ------------------------------------------------------------
   function telaLogin() {
     return `
@@ -509,9 +547,7 @@
     const email = document.getElementById('login-email');
     const senha = document.getElementById('login-senha');
     btn.addEventListener('click', () => fazerLogin(email.value, senha.value));
-    senha.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') fazerLogin(email.value, senha.value);
-    });
+    senha.addEventListener('keydown', e => { if (e.key === 'Enter') fazerLogin(email.value, senha.value); });
   }
 
   async function fazerLogin(email, senha) {
@@ -534,14 +570,14 @@
     currentSession = data.session;
     await carregarUsuarioAtual();
     if (!currentUser) {
-      errBox.innerHTML = '<div class="error-msg">Login certo, mas este usuário não está cadastrado no CRM. Fale com o Esdras.</div>';
+      errBox.innerHTML = '<div class="error-msg">Login certo, mas este usuário não está cadastrado no CRM.</div>';
       btn.disabled = false;
       btn.textContent = 'Entrar';
       await sb.auth.signOut();
       currentSession = null;
       return;
     }
-    location.hash = '#/clientes';
+    location.hash = '#/';
     render();
   }
 
@@ -549,93 +585,38 @@
     await sb.auth.signOut();
     currentSession = null;
     currentUser = null;
+    quadrosPermitidos = [];
+    etiquetasCache = [];
     location.hash = '#/';
     render();
   }
 
   // ------------------------------------------------------------
-  // TELA KANBAN
+  // TOPBAR + ABAS DE QUADRO
   // ------------------------------------------------------------
-  async function renderKanban() {
-    const app = document.getElementById('app');
-    app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + '<div class="loading-msg">Carregando clientes...</div>';
-    ligarEventosTopbar();
-
-    const { data, error } = await sb
-      .from('crm_clientes')
-      .select('id, nome_completo, fase_kanban, canal_whatsapp, valor_beneficio_esperado')
-      .order('criado_em', { ascending: false });
-
-    if (error) {
-      app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + `<div class="error-box">Não foi possível carregar os clientes.<br>${error.message}</div>`;
-      ligarEventosTopbar();
-      return;
-    }
-
-    const porFase = {};
-    FASES.forEach(f => porFase[f.chave] = []);
-    (data || []).forEach(c => {
-      if (porFase[c.fase_kanban]) porFase[c.fase_kanban].push(c);
-    });
-
-    let colunasHtml = '';
-    FASES.forEach(f => {
-      const clientesFase = porFase[f.chave];
-      colunasHtml += `
-        <div>
-          <div class="col-header" style="border-top: 4px solid ${f.cor};">
-            ${nomeFaseExibicao(f.chave)} <span class="col-count">(${clientesFase.length})</span>
-          </div>
-          ${clientesFase.length === 0
-            ? '<div class="empty-col">Nenhum cliente</div>'
-            : clientesFase.map(cartaoClienteHtml).join('')}
-        </div>
-      `;
-    });
-
-    app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + `
-      <div class="kanban-wrap">
-        <div class="kanban-board">${colunasHtml}</div>
-      </div>
-    `;
-    ligarEventosTopbar();
-  }
-
-  function cartaoClienteHtml(c) {
-    const valor = c.valor_beneficio_esperado
-      ? c.valor_beneficio_esperado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-      : '';
-    return `
-      <div class="client-card" onclick="location.hash='#/cliente/${c.id}'">
-        <div class="nome">${escapeHtml(c.nome_completo)}</div>
-        <div class="meta">${valor}</div>
-      </div>
-    `;
-  }
-
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str || '';
-    return div.innerHTML;
-  }
-
   function topbarHtml(opcoes) {
     opcoes = opcoes || {};
-    const rotaAtual = opcoes.rotaAtual || '';
-    const linkClientes = `<a class="nav-link ${rotaAtual === '/clientes' ? 'ativo' : ''}" onclick="location.hash='#/clientes'">Clientes</a>`;
-    const linkCampanha = currentUser.nivel === 'proprietario'
-      ? `<a class="nav-link ${rotaAtual === '/campanha' ? 'ativo' : ''}" onclick="location.hash='#/campanha'">Campanha</a>`
-      : '';
+    const abas = quadrosPermitidos
+      .filter(q => QUADROS[q])
+      .map(q => `<div class="quadro-tab ${opcoes.quadroAtivo === q ? 'ativo' : ''}" onclick="location.hash='#/quadro/${q}'">${QUADROS[q].rotulo}</div>`)
+      .join('');
+
+    const extras = [];
+    extras.push(`<div class="quadro-tab ${opcoes.quadroAtivo === 'etiquetas' ? 'ativo' : ''}" onclick="location.hash='#/etiquetas'">Etiquetas</div>`);
+    if (currentUser.nivel === 'proprietario') {
+      extras.push(`<div class="quadro-tab ${opcoes.quadroAtivo === 'campanha' ? 'ativo' : ''}" onclick="location.hash='#/campanha'">Campanha</div>`);
+    }
+
     return `
       <div class="topbar">
         <div class="brand">PreviMater CRM</div>
-        <div class="nav">${linkClientes}${linkCampanha}</div>
         <div class="who">
           ${opcoes.novoCliente ? '<button class="btn-ghost" id="btn-novo-cliente">+ novo cliente</button>' : ''}
-          <span>${currentUser.nome} · ${currentUser.nivel === 'proprietario' ? 'proprietário' : 'administrativo'}</span>
+          <span>${escapeHtml(currentUser.nome)} · ${currentUser.nivel === 'proprietario' ? 'proprietário' : 'administrativo'}</span>
           <button class="btn-ghost" id="btn-sair">Sair</button>
         </div>
       </div>
+      <div class="quadro-tabs">${abas}${extras.join('')}</div>
     `;
   }
 
@@ -647,8 +628,189 @@
   }
 
   // ------------------------------------------------------------
-  // MASCARA DE DINHEIRO (padrao ja usado no App Recebimentos)
+  // QUADRO (kanban)
   // ------------------------------------------------------------
+  async function renderQuadro(quadro) {
+    const app = document.getElementById('app');
+
+    if (!QUADROS[quadro]) {
+      app.innerHTML = topbarHtml({}) + '<div class="error-box">Quadro não encontrado.</div>';
+      ligarEventosTopbar();
+      return;
+    }
+    if (!quadrosPermitidos.includes(quadro)) {
+      app.innerHTML = topbarHtml({}) + '<div class="error-box">Você não tem acesso a este quadro.</div>';
+      ligarEventosTopbar();
+      return;
+    }
+
+    const topo = topbarHtml({ novoCliente: true, quadroAtivo: quadro });
+    app.innerHTML = topo + '<div class="loading-msg">Carregando...</div>';
+    ligarEventosTopbar();
+
+    const { data: clientes, error } = await sb
+      .from('crm_clientes')
+      .select('id, nome_completo, quadro, fase_kanban, data_nascimento_bebe, valor_beneficio_esperado, crm_clientes_etiquetas(etiqueta_id)')
+      .eq('quadro', quadro)
+      .order('criado_em', { ascending: false });
+
+    if (error) {
+      app.innerHTML = topo + `<div class="error-box">Não foi possível carregar.<br>${escapeHtml(error.message)}</div>`;
+      ligarEventosTopbar();
+      return;
+    }
+
+    const lista = clientes || [];
+    const boardHtml = quadro === 'incubadora'
+      ? await montarBoardIncubadora(lista)
+      : montarBoardFases(quadro, lista);
+
+    app.innerHTML = topo + `<div class="kanban-wrap"><div class="kanban-board">${boardHtml}</div></div>`;
+    ligarEventosTopbar();
+    ligarEventosBoard();
+  }
+
+  function montarBoardFases(quadro, clientes) {
+    const fases = QUADROS[quadro].fases;
+    const porFase = {};
+    fases.forEach(f => porFase[f.chave] = []);
+    clientes.forEach(c => { if (porFase[c.fase_kanban]) porFase[c.fase_kanban].push(c); });
+
+    return fases.map(f => `
+      <div class="kanban-col">
+        <div class="col-header" style="border-top: 4px solid ${f.cor};">
+          <span>${rotuloFase(f)} <span class="col-count">(${porFase[f.chave].length})</span></span>
+        </div>
+        ${porFase[f.chave].length === 0
+          ? '<div class="empty-col">Nenhum cliente</div>'
+          : porFase[f.chave].map(cartaoClienteHtml).join('')}
+      </div>
+    `).join('');
+  }
+
+  async function montarBoardIncubadora(clientes) {
+    const { data: colunas } = await sb
+      .from('crm_incubadora_colunas')
+      .select('*')
+      .eq('arquivada', false)
+      .order('ano')
+      .order('mes');
+
+    const listaColunas = colunas || [];
+
+    if (listaColunas.length === 0) {
+      return `<button class="add-col-btn" id="btn-nova-coluna-mes">+ criar primeiro mês</button>`;
+    }
+
+    const porColuna = {};
+    listaColunas.forEach(col => porColuna[col.id] = []);
+    const semColuna = [];
+
+    clientes.forEach(c => {
+      if (!c.data_nascimento_bebe) { semColuna.push(c); return; }
+      const [ano, mes] = c.data_nascimento_bebe.split('-').map(Number);
+      const col = listaColunas.find(x => x.ano === ano && x.mes === mes);
+      if (col) porColuna[col.id].push(c);
+      else semColuna.push(c);
+    });
+
+    let html = listaColunas.map(col => `
+      <div class="kanban-col">
+        <div class="col-header" style="border-top: 4px solid var(--amber);">
+          <span>${escapeHtml(col.rotulo)} <span class="col-count">(${porColuna[col.id].length})</span></span>
+          <button class="col-arquivar" data-arquivar-coluna="${col.id}" title="Arquivar este mês">&times;</button>
+        </div>
+        ${porColuna[col.id].length === 0
+          ? '<div class="empty-col">Nenhum cliente</div>'
+          : porColuna[col.id].map(cartaoClienteHtml).join('')}
+      </div>
+    `).join('');
+
+    if (semColuna.length > 0) {
+      html += `
+        <div class="kanban-col">
+          <div class="col-header" style="border-top: 4px solid var(--gray);">
+            <span>Sem mês definido <span class="col-count">(${semColuna.length})</span></span>
+          </div>
+          ${semColuna.map(cartaoClienteHtml).join('')}
+        </div>
+      `;
+    }
+
+    html += `<button class="add-col-btn" id="btn-nova-coluna-mes">+ novo mês</button>`;
+    return html;
+  }
+
+  function cartaoClienteHtml(c) {
+    const valor = c.valor_beneficio_esperado
+      ? Number(c.valor_beneficio_esperado).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+      : '';
+    const idsEtiquetas = (c.crm_clientes_etiquetas || []).map(e => e.etiqueta_id);
+    const chips = idsEtiquetas.map(id => {
+      const et = etiquetasCache.find(x => x.id === id);
+      if (!et) return '';
+      return `<span class="etiqueta-chip" style="background:${escapeAttr(et.cor)};">${escapeHtml(et.nome)}</span>`;
+    }).join('');
+
+    return `
+      <div class="client-card" onclick="location.hash='#/cliente/${c.id}'">
+        <div class="nome">${escapeHtml(c.nome_completo)}</div>
+        ${valor ? `<div class="meta">${valor}</div>` : ''}
+        ${chips ? `<div class="card-etiquetas">${chips}</div>` : ''}
+      </div>
+    `;
+  }
+
+  function ligarEventosBoard() {
+    const btnNovaCol = document.getElementById('btn-nova-coluna-mes');
+    if (btnNovaCol) btnNovaCol.addEventListener('click', criarColunaMes);
+
+    document.querySelectorAll('[data-arquivar-coluna]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        arquivarColunaMes(btn.getAttribute('data-arquivar-coluna'));
+      });
+    });
+  }
+
+  async function criarColunaMes() {
+    const entrada = prompt('Qual mês criar? Digite no formato MM/AAAA (ex: 03/2026)');
+    if (!entrada) return;
+    const partes = entrada.trim().split('/');
+    const mes = parseInt(partes[0], 10);
+    const ano = parseInt(partes[1], 10);
+    if (isNaN(mes) || isNaN(ano) || mes < 1 || mes > 12 || ano < 2000) {
+      alert('Formato inválido. Use MM/AAAA, por exemplo 03/2026.');
+      return;
+    }
+    const rotulo = MESES_NOME[mes - 1] + '/' + ano;
+    const { error } = await sb.from('crm_incubadora_colunas')
+      .upsert({ rotulo, ano, mes, arquivada: false }, { onConflict: 'ano,mes' });
+    if (error) { alert('Não foi possível criar: ' + error.message); return; }
+    renderQuadro('incubadora');
+  }
+
+  async function arquivarColunaMes(colunaId) {
+    if (!confirm('Arquivar este mês? Os clientes continuam cadastrados, só a coluna some do quadro.')) return;
+    const { error } = await sb.from('crm_incubadora_colunas').update({ arquivada: true }).eq('id', colunaId);
+    if (error) { alert('Não foi possível arquivar: ' + error.message); return; }
+    renderQuadro('incubadora');
+  }
+
+  // ------------------------------------------------------------
+  // UTILITARIOS
+  // ------------------------------------------------------------
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str === null || str === undefined ? '' : str;
+    return div.innerHTML;
+  }
+
+  function escapeAttr(str) {
+    if (!str) return '';
+    return String(str).replace(/"/g, '&quot;');
+  }
+
   function formatarMoedaInput(el) {
     let digits = el.value.replace(/\D/g, '');
     if (!digits) digits = '0';
@@ -669,47 +831,59 @@
   }
 
   // ------------------------------------------------------------
-  // TELA DE FORMULARIO DE CLIENTE (novo ou edicao)
+  // FORMULARIO DE CLIENTE
   // ------------------------------------------------------------
   async function renderFormCliente(clienteId) {
     const app = document.getElementById('app');
+    const topo = topbarHtml({});
     const ehNovo = !clienteId;
 
     if (ehNovo) {
-      app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + montarHtmlForm(null);
+      app.innerHTML = topo + montarHtmlForm(null, []);
       ligarEventosTopbar();
       ligarEventosForm(null);
       return;
     }
 
-    app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + '<div class="loading-msg">Carregando cliente...</div>';
+    app.innerHTML = topo + '<div class="loading-msg">Carregando cliente...</div>';
     ligarEventosTopbar();
 
     const { data, error } = await sb
       .from('crm_clientes')
-      .select('*')
+      .select('*, crm_clientes_etiquetas(etiqueta_id)')
       .eq('id', clienteId)
       .single();
 
     if (error || !data) {
-      app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + '<div class="error-box">Cliente não encontrado.</div>';
+      app.innerHTML = topo + '<div class="error-box">Cliente não encontrado.</div>';
       ligarEventosTopbar();
       return;
     }
 
-    app.innerHTML = topbarHtml({ novoCliente: true, rotaAtual: '/clientes' }) + montarHtmlForm(data);
+    const etiquetasDoCliente = (data.crm_clientes_etiquetas || []).map(e => e.etiqueta_id);
+    app.innerHTML = topo + montarHtmlForm(data, etiquetasDoCliente);
     ligarEventosTopbar();
     ligarEventosForm(data);
   }
 
-  function montarHtmlForm(c) {
+  function montarHtmlForm(c, etiquetasMarcadas) {
     const ehNovo = !c;
+    const quadroAtual = (c && c.quadro) || quadrosPermitidos[0] || 'comercial';
     const opcoesCanal = ['meta_oficial', 'evolution', 'whatsgw'];
     const nomesCanal = { meta_oficial: 'Meta oficial', evolution: 'Evolution', whatsgw: 'WhatsGW' };
 
+    const optsQuadro = quadrosPermitidos.map(q =>
+      `<option value="${q}" ${quadroAtual === q ? 'selected' : ''}>${QUADROS[q].rotulo}</option>`
+    ).join('');
+
+    const chipsEtiqueta = etiquetasCache.map(et => {
+      const marcada = etiquetasMarcadas.includes(et.id);
+      return `<span class="etiqueta-toggle ${marcada ? 'marcada' : ''}" data-etiqueta-id="${et.id}" style="background:${escapeAttr(et.cor)};">${escapeHtml(et.nome)}</span>`;
+    }).join('');
+
     return `
       <div class="form-wrap">
-        <a class="form-back" onclick="location.hash='#/clientes'">&larr; voltar para o kanban</a>
+        <a class="form-back" onclick="history.back()">&larr; voltar</a>
         <div class="form-card">
           <h2>${ehNovo ? 'Novo cliente' : 'Editar cliente'}</h2>
           <div id="form-msg"></div>
@@ -732,27 +906,30 @@
 
           <div class="form-row">
             <div class="field">
-              <label for="f-canal">Canal WhatsApp</label>
-              <select id="f-canal">
-                <option value="">-- selecione --</option>
-                ${opcoesCanal.map(op => `<option value="${op}" ${c && c.canal_whatsapp === op ? 'selected' : ''}>${nomesCanal[op]}</option>`).join('')}
-              </select>
+              <label for="f-quadro">Quadro</label>
+              <select id="f-quadro">${optsQuadro}</select>
             </div>
             <div class="field">
-              <label for="f-fase">Fase do kanban</label>
-              <select id="f-fase">
-                ${FASES.map(f => `<option value="${f.chave}" ${c && c.fase_kanban === f.chave ? 'selected' : (!c && f.chave === 'Protocolo Enviado' ? 'selected' : '')}>${nomeFaseExibicao(f.chave)}</option>`).join('')}
-              </select>
+              <label for="f-fase">Fase</label>
+              <select id="f-fase"></select>
             </div>
+          </div>
+
+          <div class="field">
+            <label for="f-canal">Canal WhatsApp</label>
+            <select id="f-canal">
+              <option value="">-- selecione --</option>
+              ${opcoesCanal.map(op => `<option value="${op}" ${c && c.canal_whatsapp === op ? 'selected' : ''}>${nomesCanal[op]}</option>`).join('')}
+            </select>
           </div>
 
           <div class="form-row">
             <div class="field">
-              <label for="f-dn-bebe">Data nascimento do bebê</label>
+              <label for="f-dn-bebe">Data de nascimento do bebê</label>
               <input id="f-dn-bebe" type="date" value="${(c && c.data_nascimento_bebe) || ''}">
             </div>
             <div class="field">
-              <label for="f-ds">Data saída do emprego</label>
+              <label for="f-ds">Data de saída do emprego</label>
               <input id="f-ds" type="date" value="${(c && c.data_saida_emprego) || ''}">
             </div>
           </div>
@@ -769,8 +946,15 @@
           </div>
 
           <div class="field">
-            <label for="f-desbloqueio">Data desbloqueio INSS (se houver)</label>
+            <label for="f-desbloqueio">Data de desbloqueio INSS (se houver)</label>
             <input id="f-desbloqueio" type="date" value="${(c && c.data_desbloqueio_inss) || ''}">
+          </div>
+
+          <div class="field">
+            <label>Etiquetas</label>
+            <div class="etiqueta-picker" id="etiqueta-picker">
+              ${chipsEtiqueta || '<span class="empty-col">Nenhuma etiqueta criada ainda.</span>'}
+            </div>
           </div>
 
           <div class="field">
@@ -779,9 +963,7 @@
           </div>
 
           <div class="form-actions">
-            <div>
-              ${!ehNovo ? '<button class="btn-danger-text" id="btn-excluir-cliente">Excluir cliente</button>' : '<span></span>'}
-            </div>
+            <div>${!ehNovo ? '<button class="btn-danger-text" id="btn-excluir-cliente">Excluir cliente</button>' : '<span></span>'}</div>
             <div class="form-actions-right">
               <button class="btn-secondary" id="btn-cancelar-form">Cancelar</button>
               <button class="btn-primary" style="width:auto; padding:0 20px;" id="btn-salvar-cliente">${ehNovo ? 'Criar cliente' : 'Salvar alterações'}</button>
@@ -792,16 +974,35 @@
     `;
   }
 
-  function escapeAttr(str) {
-    if (!str) return '';
-    return String(str).replace(/"/g, '&quot;');
+  function preencherFasesDoQuadro(quadro, faseSelecionada) {
+    const selFase = document.getElementById('f-fase');
+    const cfg = QUADROS[quadro];
+
+    if (quadro === 'incubadora') {
+      selFase.innerHTML = '<option value="Incubadora">Definido pelo mês do nascimento</option>';
+      selFase.disabled = true;
+      return;
+    }
+
+    selFase.disabled = false;
+    selFase.innerHTML = cfg.fases.map(f =>
+      `<option value="${escapeAttr(f.chave)}" ${faseSelecionada === f.chave ? 'selected' : ''}>${rotuloFase(f)}</option>`
+    ).join('');
   }
 
   function ligarEventosForm(clienteExistente) {
-    document.getElementById('f-valor-beneficio').addEventListener('input', (e) => formatarMoedaInput(e.target));
-    document.getElementById('f-valor-honorarios').addEventListener('input', (e) => formatarMoedaInput(e.target));
+    const selQuadro = document.getElementById('f-quadro');
+    preencherFasesDoQuadro(selQuadro.value, clienteExistente && clienteExistente.fase_kanban);
+    selQuadro.addEventListener('change', () => preencherFasesDoQuadro(selQuadro.value, null));
 
-    document.getElementById('btn-cancelar-form').addEventListener('click', () => { location.hash = '#/clientes'; });
+    document.getElementById('f-valor-beneficio').addEventListener('input', e => formatarMoedaInput(e.target));
+    document.getElementById('f-valor-honorarios').addEventListener('input', e => formatarMoedaInput(e.target));
+
+    document.querySelectorAll('#etiqueta-picker .etiqueta-toggle').forEach(chip => {
+      chip.addEventListener('click', () => chip.classList.toggle('marcada'));
+    });
+
+    document.getElementById('btn-cancelar-form').addEventListener('click', () => history.back());
     document.getElementById('btn-salvar-cliente').addEventListener('click', () => salvarCliente(clienteExistente));
 
     const btnExcluir = document.getElementById('btn-excluir-cliente');
@@ -819,11 +1020,13 @@
       return;
     }
 
+    const quadro = document.getElementById('f-quadro').value;
     const payload = {
       nome_completo: nome,
       cpf: document.getElementById('f-cpf').value.trim() || null,
       telefone_principal: document.getElementById('f-telefone').value.trim() || null,
       canal_whatsapp: document.getElementById('f-canal').value || null,
+      quadro: quadro,
       fase_kanban: document.getElementById('f-fase').value,
       data_nascimento_bebe: document.getElementById('f-dn-bebe').value || null,
       data_saida_emprego: document.getElementById('f-ds').value || null,
@@ -834,36 +1037,138 @@
       atualizado_em: new Date().toISOString()
     };
 
+    const etiquetasMarcadas = Array.from(
+      document.querySelectorAll('#etiqueta-picker .etiqueta-toggle.marcada')
+    ).map(el => el.getAttribute('data-etiqueta-id'));
+
     btn.disabled = true;
     btn.textContent = 'Salvando...';
 
-    let error;
+    let clienteId, error;
     if (clienteExistente) {
-      ({ error } = await sb.from('crm_clientes').update(payload).eq('id', clienteExistente.id));
+      clienteId = clienteExistente.id;
+      ({ error } = await sb.from('crm_clientes').update(payload).eq('id', clienteId));
     } else {
-      ({ error } = await sb.from('crm_clientes').insert(payload));
+      const resp = await sb.from('crm_clientes').insert(payload).select('id').single();
+      error = resp.error;
+      if (resp.data) clienteId = resp.data.id;
     }
 
     if (error) {
-      msgBox.innerHTML = `<div class="form-save-msg err">Não foi possível salvar: ${error.message}</div>`;
+      msgBox.innerHTML = `<div class="form-save-msg err">Não foi possível salvar: ${escapeHtml(error.message)}</div>`;
       btn.disabled = false;
       btn.textContent = clienteExistente ? 'Salvar alterações' : 'Criar cliente';
       return;
     }
 
-    location.hash = '#/clientes';
+    // atualiza etiquetas: apaga as antigas e grava as marcadas
+    await sb.from('crm_clientes_etiquetas').delete().eq('cliente_id', clienteId);
+    if (etiquetasMarcadas.length > 0) {
+      await sb.from('crm_clientes_etiquetas').insert(
+        etiquetasMarcadas.map(eid => ({ cliente_id: clienteId, etiqueta_id: eid }))
+      );
+    }
+
+    location.hash = '#/quadro/' + quadro;
     render();
   }
 
   async function excluirCliente(clienteId) {
     if (!confirm('Tem certeza que quer excluir este cliente? Essa ação não pode ser desfeita.')) return;
     const { error } = await sb.from('crm_clientes').delete().eq('id', clienteId);
+    if (error) { alert('Não foi possível excluir: ' + error.message); return; }
+    location.hash = '#/';
+    render();
+  }
+
+  // ------------------------------------------------------------
+  // TELA DE ETIQUETAS
+  // ------------------------------------------------------------
+  async function renderEtiquetas() {
+    const app = document.getElementById('app');
+    const topo = topbarHtml({ quadroAtivo: 'etiquetas' });
+
+    app.innerHTML = topo + '<div class="loading-msg">Carregando etiquetas...</div>';
+    ligarEventosTopbar();
+
+    const { data, error } = await sb.from('crm_etiquetas').select('*').order('nome');
     if (error) {
-      alert('Não foi possível excluir: ' + error.message);
+      app.innerHTML = topo + `<div class="error-box">Não foi possível carregar.<br>${escapeHtml(error.message)}</div>`;
+      ligarEventosTopbar();
       return;
     }
-    location.hash = '#/clientes';
-    render();
+    etiquetasCache = data || [];
+
+    const linhas = etiquetasCache.map(et => `
+      <tr data-etiqueta-id="${et.id}">
+        <td><input type="text" class="teto-input et-nome" style="width:180px;" value="${escapeAttr(et.nome)}"></td>
+        <td><input type="color" class="cor-input et-cor" value="${escapeAttr(et.cor)}"></td>
+        <td><span class="etiqueta-chip" style="background:${escapeAttr(et.cor)};">${escapeHtml(et.nome)}</span></td>
+        <td>
+          <button class="btn-mini btn-salvar-etiqueta">Salvar</button>
+          <button class="btn-mini btn-excluir-etiqueta">Excluir</button>
+        </td>
+      </tr>
+    `).join('');
+
+    app.innerHTML = topo + `
+      <div class="campanha-wrap">
+        <div class="section-title">Etiquetas</div>
+
+        <div class="add-instancia-form">
+          <div class="field">
+            <label for="ne-nome">Nome da etiqueta</label>
+            <input id="ne-nome" type="text" placeholder="Ex: Tem direito">
+          </div>
+          <div class="field">
+            <label for="ne-cor">Cor</label>
+            <input id="ne-cor" type="color" class="cor-input" value="#6B8F5C">
+          </div>
+          <div></div>
+          <button class="btn-primary" style="width:auto; padding:0 16px; height:40px;" id="btn-criar-etiqueta">Criar</button>
+        </div>
+
+        ${etiquetasCache.length === 0
+          ? '<div class="loading-msg">Nenhuma etiqueta criada ainda.</div>'
+          : `<table class="previmater-table">
+               <thead><tr><th>Nome</th><th>Cor</th><th>Como aparece</th><th></th></tr></thead>
+               <tbody>${linhas}</tbody>
+             </table>`}
+      </div>
+    `;
+
+    ligarEventosTopbar();
+    document.getElementById('btn-criar-etiqueta').addEventListener('click', criarEtiqueta);
+    document.querySelectorAll('tr[data-etiqueta-id]').forEach(linha => {
+      const id = linha.getAttribute('data-etiqueta-id');
+      linha.querySelector('.btn-salvar-etiqueta').addEventListener('click', () => {
+        salvarEtiqueta(id, linha.querySelector('.et-nome').value, linha.querySelector('.et-cor').value);
+      });
+      linha.querySelector('.btn-excluir-etiqueta').addEventListener('click', () => excluirEtiqueta(id));
+    });
+  }
+
+  async function criarEtiqueta() {
+    const nome = document.getElementById('ne-nome').value.trim();
+    const cor = document.getElementById('ne-cor').value;
+    if (!nome) { alert('Digite o nome da etiqueta.'); return; }
+    const { error } = await sb.from('crm_etiquetas').insert({ nome, cor });
+    if (error) { alert('Não foi possível criar: ' + error.message); return; }
+    renderEtiquetas();
+  }
+
+  async function salvarEtiqueta(id, nome, cor) {
+    if (!nome.trim()) { alert('O nome não pode ficar vazio.'); return; }
+    const { error } = await sb.from('crm_etiquetas').update({ nome: nome.trim(), cor }).eq('id', id);
+    if (error) { alert('Não foi possível salvar: ' + error.message); return; }
+    renderEtiquetas();
+  }
+
+  async function excluirEtiqueta(id) {
+    if (!confirm('Excluir esta etiqueta? Ela será removida de todos os clientes que a tiverem.')) return;
+    const { error } = await sb.from('crm_etiquetas').delete().eq('id', id);
+    if (error) { alert('Não foi possível excluir: ' + error.message); return; }
+    renderEtiquetas();
   }
 
   // ------------------------------------------------------------
@@ -873,7 +1178,7 @@
 
   async function renderCampanha() {
     const app = document.getElementById('app');
-    const topo = topbarHtml({ rotaAtual: '/campanha' });
+    const topo = topbarHtml({ quadroAtivo: 'campanha' });
 
     if (currentUser.nivel !== 'proprietario') {
       app.innerHTML = topo + '<div class="error-box">Essa tela é restrita a proprietários.</div>';
@@ -884,13 +1189,13 @@
     app.innerHTML = topo + '<div class="loading-msg">Carregando painel da campanha...</div>';
     ligarEventosTopbar();
 
-    const [{ data: instancias, error: erroInstancias }, { data: disparos, error: erroDisparos }] = await Promise.all([
+    const [{ data: instancias, error: erroInstancias }, { data: disparos }] = await Promise.all([
       sb.from('crm_instancias_whatsapp').select('*').order('numero_telefone'),
       sb.from('crm_campanha_disparos').select('*').order('criado_em', { ascending: false }).limit(30)
     ]);
 
     if (erroInstancias) {
-      app.innerHTML = topo + `<div class="error-box">Não foi possível carregar os números.<br>${erroInstancias.message}</div>`;
+      app.innerHTML = topo + `<div class="error-box">Não foi possível carregar os números.<br>${escapeHtml(erroInstancias.message)}</div>`;
       ligarEventosTopbar();
       return;
     }
@@ -898,23 +1203,22 @@
     const listaInstancias = instancias || [];
     const listaDisparos = disparos || [];
 
-    const numerosDegradados = listaInstancias.filter(i => i.status === 'degradado' || (i.taxa_entrega !== null && i.taxa_entrega < 80));
-    const bannerAlerta = numerosDegradados.length > 0
-      ? `<div class="alert-banner">Atenção: ${numerosDegradados.length === 1 ? 'o número ' + numerosDegradados[0].numero_telefone + ' está' : numerosDegradados.length + ' números estão'} com taxa de entrega baixa ou degradado(s). Considere pausar ou reduzir o teto diário.</div>`
+    const degradados = listaInstancias.filter(i => i.status === 'degradado' || (i.taxa_entrega !== null && i.taxa_entrega < 80));
+    const banner = degradados.length > 0
+      ? `<div class="alert-banner">Atenção: ${degradados.length === 1
+          ? 'o número ' + escapeHtml(degradados[0].numero_telefone) + ' está'
+          : degradados.length + ' números estão'} com taxa de entrega baixa ou degradado(s). Considere pausar ou reduzir o teto diário.</div>`
       : '';
 
     app.innerHTML = topo + `
       <div class="campanha-wrap">
-        ${bannerAlerta}
-
+        ${banner}
         <div class="section-title">Números / instâncias</div>
         <button class="btn-ghost" id="btn-toggle-add-instancia" style="margin-bottom:12px;">+ novo número</button>
         <div id="add-instancia-container"></div>
-
         ${listaInstancias.length === 0
           ? '<div class="loading-msg">Nenhum número cadastrado ainda.</div>'
           : tabelaInstanciasHtml(listaInstancias)}
-
         <div class="section-title">Últimos disparos</div>
         ${listaDisparos.length === 0
           ? '<div class="loading-msg">Nenhum disparo registrado ainda.</div>'
@@ -922,80 +1226,66 @@
       </div>
     `;
 
+    ligarEventosTopbar();
     document.getElementById('btn-toggle-add-instancia').addEventListener('click', mostrarFormNovaInstancia);
     ligarEventosTabelaInstancias();
   }
 
   function tabelaInstanciasHtml(lista) {
     const linhas = lista.map(i => {
-      const taxaTxt = i.taxa_entrega !== null && i.taxa_entrega !== undefined ? `${Number(i.taxa_entrega).toFixed(0)}%` : '—';
-      const taxaBadgeClasse = (i.taxa_entrega === null || i.taxa_entrega === undefined) ? 'neutro' : (i.taxa_entrega < 80 ? 'alerta' : 'ok');
-      const statusBadgeClasse = i.status === 'ativo' ? 'ok' : (i.status === 'degradado' ? 'alerta' : 'neutro');
+      const taxaTxt = (i.taxa_entrega !== null && i.taxa_entrega !== undefined) ? `${Number(i.taxa_entrega).toFixed(0)}%` : '—';
+      const taxaClasse = (i.taxa_entrega === null || i.taxa_entrega === undefined) ? 'neutro' : (i.taxa_entrega < 80 ? 'alerta' : 'ok');
+      const statusClasse = i.status === 'ativo' ? 'ok' : (i.status === 'degradado' ? 'alerta' : 'neutro');
       return `
         <tr data-instancia-id="${i.id}">
           <td>${escapeHtml(i.numero_telefone)}</td>
-          <td>${NOMES_CANAL_INSTANCIA[i.canal] || i.canal}</td>
+          <td>${NOMES_CANAL_INSTANCIA[i.canal] || escapeHtml(i.canal)}</td>
           <td>
             <input type="number" min="0" class="teto-input teto-input-linha" value="${i.teto_diario_atual}">
             <button class="btn-mini btn-salvar-teto">Salvar</button>
           </td>
           <td>${i.disparos_hoje} / ${i.teto_diario_atual}</td>
-          <td><span class="badge ${taxaBadgeClasse}">${taxaTxt}</span></td>
-          <td><span class="badge ${statusBadgeClasse}">${i.status}</span></td>
+          <td><span class="badge ${taxaClasse}">${taxaTxt}</span></td>
+          <td><span class="badge ${statusClasse}">${escapeHtml(i.status)}</span></td>
         </tr>
       `;
     }).join('');
 
     return `
       <table class="previmater-table">
-        <thead>
-          <tr>
-            <th>Número</th>
-            <th>Canal</th>
-            <th>Teto diário</th>
-            <th>Disparos hoje</th>
-            <th>Taxa entrega</th>
-            <th>Status</th>
-          </tr>
-        </thead>
+        <thead><tr>
+          <th>Número</th><th>Canal</th><th>Teto diário</th>
+          <th>Disparos hoje</th><th>Taxa entrega</th><th>Status</th>
+        </tr></thead>
         <tbody>${linhas}</tbody>
       </table>
     `;
   }
 
   function tabelaDisparosHtml(disparos, instancias) {
-    const mapaInstancias = {};
-    instancias.forEach(i => { mapaInstancias[i.id] = i.numero_telefone; });
-
-    const nomesStatus = {
+    const mapa = {};
+    instancias.forEach(i => { mapa[i.id] = i.numero_telefone; });
+    const classeStatus = {
       agendado: 'neutro', enviado: 'neutro', entregue: 'ok',
       lido: 'ok', respondido: 'ok', falhou: 'alerta'
     };
 
-    const linhas = disparos.map(d => {
-      const dataFmt = d.data_hora_agendada ? new Date(d.data_hora_agendada).toLocaleString('pt-BR') : '—';
-      return `
-        <tr>
-          <td>${escapeHtml(d.contato_nome) || '—'}</td>
-          <td>${escapeHtml(d.contato_telefone)}</td>
-          <td>${escapeHtml(mapaInstancias[d.instancia_id]) || '—'}</td>
-          <td>${dataFmt}</td>
-          <td><span class="badge ${nomesStatus[d.status] || 'neutro'}">${d.status}</span></td>
-        </tr>
-      `;
-    }).join('');
+    const linhas = disparos.map(d => `
+      <tr>
+        <td>${escapeHtml(d.contato_nome) || '—'}</td>
+        <td>${escapeHtml(d.contato_telefone)}</td>
+        <td>${escapeHtml(mapa[d.instancia_id]) || '—'}</td>
+        <td>${d.data_hora_agendada ? new Date(d.data_hora_agendada).toLocaleString('pt-BR') : '—'}</td>
+        <td><span class="badge ${classeStatus[d.status] || 'neutro'}">${escapeHtml(d.status)}</span></td>
+      </tr>
+    `).join('');
 
     return `
       <table class="previmater-table">
-        <thead>
-          <tr>
-            <th>Contato</th>
-            <th>Telefone</th>
-            <th>Número usado</th>
-            <th>Agendado para</th>
-            <th>Status</th>
-          </tr>
-        </thead>
+        <thead><tr>
+          <th>Contato</th><th>Telefone</th><th>Número usado</th>
+          <th>Agendado para</th><th>Status</th>
+        </tr></thead>
         <tbody>${linhas}</tbody>
       </table>
     `;
@@ -1003,27 +1293,20 @@
 
   function ligarEventosTabelaInstancias() {
     document.querySelectorAll('tr[data-instancia-id]').forEach(linha => {
-      const instanciaId = linha.getAttribute('data-instancia-id');
-      const btnSalvar = linha.querySelector('.btn-salvar-teto');
-      const inputTeto = linha.querySelector('.teto-input-linha');
-      btnSalvar.addEventListener('click', () => salvarTetoInstancia(instanciaId, inputTeto));
+      const id = linha.getAttribute('data-instancia-id');
+      linha.querySelector('.btn-salvar-teto').addEventListener('click', () => {
+        salvarTetoInstancia(id, linha.querySelector('.teto-input-linha'));
+      });
     });
   }
 
   async function salvarTetoInstancia(instanciaId, inputEl) {
     const novoTeto = parseInt(inputEl.value, 10);
-    if (isNaN(novoTeto) || novoTeto < 0) {
-      alert('Digite um número válido pro teto diário.');
-      return;
-    }
-    const { error } = await sb
-      .from('crm_instancias_whatsapp')
+    if (isNaN(novoTeto) || novoTeto < 0) { alert('Digite um número válido pro teto diário.'); return; }
+    const { error } = await sb.from('crm_instancias_whatsapp')
       .update({ teto_diario_atual: novoTeto, atualizado_em: new Date().toISOString() })
       .eq('id', instanciaId);
-    if (error) {
-      alert('Não foi possível salvar: ' + error.message);
-      return;
-    }
+    if (error) { alert('Não foi possível salvar: ' + error.message); return; }
     renderCampanha();
   }
 
@@ -1057,24 +1340,12 @@
     const numero = document.getElementById('ni-numero').value.trim();
     const canal = document.getElementById('ni-canal').value;
     const teto = parseInt(document.getElementById('ni-teto').value, 10) || 0;
-
-    if (!numero) {
-      alert('Digite o número de telefone.');
-      return;
-    }
+    if (!numero) { alert('Digite o número de telefone.'); return; }
 
     const { error } = await sb.from('crm_instancias_whatsapp').insert({
-      numero_telefone: numero,
-      canal,
-      teto_diario_atual: teto,
-      disparos_hoje: 0,
-      status: 'ativo'
+      numero_telefone: numero, canal, teto_diario_atual: teto, disparos_hoje: 0, status: 'ativo'
     });
-
-    if (error) {
-      alert('Não foi possível adicionar: ' + error.message);
-      return;
-    }
+    if (error) { alert('Não foi possível adicionar: ' + error.message); return; }
     renderCampanha();
   }
 </script>

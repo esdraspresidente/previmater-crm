@@ -392,7 +392,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .mcrsec{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;}
 .mcquickwrap{position:relative;}
 .mcquick{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0 18px;}
-.mvpop{position:absolute;top:calc(100% - 10px);left:0;background:var(--white);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shl);width:300px;max-height:65vh;overflow-y:auto;z-index:40;padding:16px;}
+.mvpop{position:fixed;background:var(--white);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shl);width:300px;max-height:65vh;overflow-y:auto;z-index:210;padding:16px;}
 .mvpop.h{display:none;}
 .mvph{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
 .mvpt{font-size:14px;font-weight:800;color:var(--text);}
@@ -410,7 +410,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .etp-sel{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
 .etp-add{background:var(--bg);border:1.5px dashed var(--border);color:var(--text3);font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;cursor:pointer;font-family:inherit;}
 .etp-add:hover{border-color:var(--teal);color:var(--teal);}
-.etp-picker{position:absolute;top:calc(100% + 6px);left:0;background:var(--white);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shl);width:260px;z-index:30;padding:14px;}
+.etp-picker{position:fixed;background:var(--white);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shl);width:260px;z-index:210;padding:14px;}
 .etp-picker.h{display:none;}
 .etp-phead{display:flex;align-items:center;justify-content:center;position:relative;font-size:12.5px;font-weight:800;color:var(--text);margin-bottom:12px;}
 .etp-xclose{position:absolute;right:0;top:-2px;background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;line-height:1;}
@@ -686,9 +686,9 @@ window.addEventListener('hashchange',route);
 window.addEventListener('DOMContentLoaded',boot);
 document.addEventListener('click',e=>{
   const p=$('mc-etq-picker');
-  if(p&&!p.classList.contains('h')&&!e.target.closest('.mcetq'))p.classList.add('h');
+  if(p&&!p.classList.contains('h')&&!e.target.closest('.mcetq')&&!e.target.closest('.etq-trigger'))p.classList.add('h');
   const mv=$('mvpop');
-  if(mv&&!mv.classList.contains('h')&&!e.target.closest('.mcquickwrap'))mv.classList.add('h');
+  if(mv&&!mv.classList.contains('h')&&!e.target.closest('.mcquickwrap')&&!e.target.closest('.mv-trigger'))mv.classList.add('h');
 });
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
@@ -1116,12 +1116,24 @@ async function modalMover(clienteId){
 }
 
 // ---------- MOVER CARTAO (balão dentro do próprio card, sem esconder o card) ----------
-async function abrirMoverPopover(){
+function posicionarFlutuante(el,botao,largura){
+  if(!botao)return;
+  const r=botao.getBoundingClientRect();
+  let left=r.left;
+  if(left+largura>window.innerWidth-12)left=window.innerWidth-largura-12;
+  if(left<12)left=12;
+  let top=r.bottom+6;
+  const maxTop=window.innerHeight-40;
+  if(top>maxTop)top=maxTop;
+  el.style.left=left+'px';
+  el.style.top=top+'px';
+}
+async function abrirMoverPopover(botao){
   const id=mcClienteId;
   if(!id)return;
-  const box=$('modalbox');if(box){try{box.scrollTo({top:0,behavior:'smooth'});}catch(_){box.scrollTop=0;}}
   const pop=$('mvpop');
   if(!pop)return;
+  posicionarFlutuante(pop,botao,300);
   pop.classList.remove('h');
   pop.innerHTML='<div class="mvph"><div class="mvpt">Mover cartão</div><button class="mvpx" onclick="fecharMoverPopover()">×</button></div><div class="fhint">Carregando...</div>';
   const{data:c}=await sb.from('crm_clientes').select('id,nome_completo,quadro,lista_id,posicao').eq('id',id).single();
@@ -1247,9 +1259,9 @@ function renderCardClienteModal(c,etqSel,listas){
   abrirModalCard(`
     <div class="mchead-sticky" id="mchead-sticky">
       <div class="mchs-nome">${esc(c.nome_completo)}</div>
-      <button class="mchs-lista" onclick="abrirMoverPopover()" title="Mover cartão">${esc(QUADROS[c.quadro]?QUADROS[c.quadro].rotulo:c.quadro)}${listaAtual?' · '+esc(listaAtual.nome):''}</button>
+      <button class="mchs-lista mv-trigger" onclick="abrirMoverPopover(this)" title="Mover cartão">${esc(QUADROS[c.quadro]?QUADROS[c.quadro].rotulo:c.quadro)}${listaAtual?' · '+esc(listaAtual.nome):''}</button>
       <div class="mchs-acts">
-        <button onclick="mcTogEtqPicker()">🏷 Etiqueta</button>
+        <button class="etq-trigger" onclick="mcTogEtqPicker(this)">🏷 Etiqueta</button>
         <button onclick="$('mc-anexo-input').click()">${clipeSvg()} Anexo</button>
       </div>
     </div>
@@ -1259,7 +1271,7 @@ function renderCardClienteModal(c,etqSel,listas){
     <div class="mbs">Cliente desde ${fD(c.criado_em?c.criado_em.slice(0,10):null)}</div>
 
     <div class="mcetq" id="mc-etq-wrap">
-      <div class="etp-sel" id="mc-etq-chips">${mcChipsHtml()}<button class="etp-add" onclick="mcTogEtqPicker()">+ Etiqueta</button></div>
+      <div class="etp-sel" id="mc-etq-chips">${mcChipsHtml()}<button class="etp-add etq-trigger" onclick="mcTogEtqPicker(this)">+ Etiqueta</button></div>
       <div class="etp-picker h" id="mc-etq-picker">
         <div class="etp-phead">Etiquetas<button class="etp-xclose" onclick="mcTogEtqPicker()">×</button></div>
         <input class="etp-search" type="text" placeholder="Buscar etiquetas..." oninput="mcFiltrarEtq(this.value)"/>
@@ -1271,7 +1283,7 @@ function renderCardClienteModal(c,etqSel,listas){
     <div class="mcquickwrap">
     <div class="mcquick">
       <button class="mcqbtn" onclick="$('mc-anexo-input').click()">${clipeSvg()} Anexar arquivo</button>
-      <button class="mcqbtn" onclick="abrirMoverPopover()">⇄ Mover cartão</button>
+      <button class="mcqbtn mv-trigger" onclick="abrirMoverPopover(this)">⇄ Mover cartão</button>
       <div class="mcentregabox">📅 <input type="date" id="mc-entrega" value="${c.data_entrega||''}" onchange="mcEntregaChange()"/></div>
       <span id="mc-entrega-top">${entregaBadgeHtml(c.data_entrega)}</span>
     </div>
@@ -1348,12 +1360,17 @@ function mcChipsHtml(){
   if(!mcEtqSelAtual.length)return'<span class="fhint">Nenhuma etiqueta</span>';
   return mcEtqSelAtual.map(id=>{const t=ETQ.find(x=>x.id===id);return t?`<span class="chip" style="background:${escA(t.cor)}">${esc(t.nome)}</span>`:'';}).join('');
 }
-function mcTogEtqPicker(){const p=$('mc-etq-picker');if(p)p.classList.toggle('h');}
+function mcTogEtqPicker(botao){
+  const p=$('mc-etq-picker');if(!p)return;
+  const vaiAbrir=p.classList.contains('h');
+  if(vaiAbrir&&botao)posicionarFlutuante(p,botao,260);
+  p.classList.toggle('h');
+}
 function mcToggleEtq(id){
   const idx=mcEtqSelAtual.indexOf(id);
   if(idx>=0)mcEtqSelAtual.splice(idx,1);else mcEtqSelAtual.push(id);
   const chips=$('mc-etq-chips');
-  if(chips)chips.innerHTML=mcChipsHtml()+'<button class="etp-add" onclick="mcTogEtqPicker()">+ Etiqueta</button>';
+  if(chips)chips.innerHTML=mcChipsHtml()+'<button class="etp-add etq-trigger" onclick="mcTogEtqPicker(this)">+ Etiqueta</button>';
 }
 function mcFiltrarEtq(termo){
   const t=(termo||'').toLowerCase();

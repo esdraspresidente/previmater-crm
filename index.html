@@ -93,7 +93,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .card{background:var(--white);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--sh);}
 
 /* KANBAN */
-.kb{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;height:calc(100vh - 210px);padding-bottom:16px;}
+.kb{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding-bottom:14px;}
 .kl{flex:0 0 262px;width:262px;background:var(--white);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--sh);display:flex;flex-direction:column;max-height:calc(100vh - 226px);transition:flex-basis .15s,width .15s;}
 .kl.collapsed{flex:0 0 42px;width:42px;}
 .kl.collapsed .klb,.kl.collapsed .klf{display:none;}
@@ -119,7 +119,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .kc:hover .kcmv{opacity:1;}
 @media(max-width:900px){.kcmv{opacity:1;}}
 .kcmv:hover{background:var(--teal);color:#fff;}
-.chip{font-size:9px;font-weight:800;color:#fff;padding:2px 7px;border-radius:6px;letter-spacing:.3px;text-transform:uppercase;}
+.chip{font-size:11px;font-weight:700;color:#fff;padding:4px 10px;border-radius:5px;}
 .ent{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;padding:3px 8px;border-radius:7px;}
 .ent-ok{background:var(--gray-bg);color:var(--gray);}
 .ent-soon{background:var(--yellow-bg);color:var(--yellow);}
@@ -386,22 +386,30 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 @media(max-width:760px){.mccols2{grid-template-columns:1fr;}}
 .mcright{background:var(--bg);border-radius:14px;padding:16px;}
 .mcrsec{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;}
-.mcquick{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 18px;}
+.mcquick{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0 18px;}
 .mcqbtn{background:var(--bg);border:1.5px solid var(--border);color:var(--text2);font-size:12px;font-weight:700;padding:7px 13px;border-radius:9px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;}
 .mcqbtn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-l);}
 .ent-lg{font-size:12px;padding:6px 13px;border-radius:9px;}
 
-/* ETIQUETAS — mostrar só selecionadas + seletor */
+/* ETIQUETAS — mostrar só selecionadas + seletor estilo Trello */
 .mcetq{position:relative;margin-bottom:6px;}
 .etp-sel{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
 .etp-add{background:var(--bg);border:1.5px dashed var(--border);color:var(--text3);font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;cursor:pointer;font-family:inherit;}
 .etp-add:hover{border-color:var(--teal);color:var(--teal);}
-.etp-picker{position:absolute;top:calc(100% + 6px);left:0;background:var(--white);border:1.5px solid var(--border);border-radius:10px;box-shadow:var(--shm);width:230px;z-index:30;max-height:230px;overflow-y:auto;}
+.etp-picker{position:absolute;top:calc(100% + 6px);left:0;background:var(--white);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shl);width:260px;z-index:30;padding:14px;}
 .etp-picker.h{display:none;}
-.etp-opt{display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;color:var(--text2);}
-.etp-opt:hover{background:var(--teal-l);}
-.etp-dot{width:12px;height:12px;border-radius:4px;flex-shrink:0;}
-.etp-check{margin-left:auto;color:var(--teal);font-weight:800;}
+.etp-phead{display:flex;align-items:center;justify-content:center;position:relative;font-size:12.5px;font-weight:800;color:var(--text);margin-bottom:12px;}
+.etp-xclose{position:absolute;right:0;top:-2px;background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;line-height:1;}
+.etp-xclose:hover{color:var(--text);}
+.etp-search{width:100%;background:#F3FAFA;border:1.5px solid var(--border);border-radius:8px;padding:8px 11px;font-size:12.5px;font-family:inherit;color:var(--text);margin-bottom:12px;}
+.etp-search:focus{outline:none;border-color:var(--teal);}
+.etp-list{display:flex;flex-direction:column;gap:7px;max-height:250px;overflow-y:auto;margin-bottom:10px;}
+.etp-row{display:flex;align-items:center;gap:9px;cursor:pointer;}
+.etp-row input{width:16px;height:16px;flex-shrink:0;accent-color:var(--teal);cursor:pointer;}
+.etp-bar{flex:1;padding:9px 12px;border-radius:6px;font-size:12.5px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.18);transition:filter .1s;}
+.etp-row:hover .etp-bar{filter:brightness(1.06);}
+.etp-newbtn{width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text2);font-size:12px;font-weight:700;padding:9px;border-radius:9px;cursor:pointer;font-family:inherit;}
+.etp-newbtn:hover{border-color:var(--teal);color:var(--teal);}
 </style>
 </head>
 <body>
@@ -496,8 +504,13 @@ function esc(s){const d=document.createElement('div');d.textContent=(s===null||s
 function escA(s){return s?String(s).replace(/"/g,'&quot;'):'';}
 function toast(m,t){const e=$('toast');e.textContent=m;e.className='v '+(t||'ok');clearTimeout(e._t);e._t=setTimeout(()=>e.className='',2600);}
 function togSB(){$('sb').classList.toggle('o');$('ov').classList.toggle('o');}
-function fecharModal(){$('modal').classList.add('h');}
-function fecharSeFundo(e){if(e.target===e.currentTarget)fecharModal();}
+let mcPreviewAberto=false;
+function fecharModal(){$('modal').classList.add('h');mcPreviewAberto=false;}
+function fecharSeFundo(e){if(e.target===e.currentTarget)fecharInteligente();}
+function fecharInteligente(){
+  if(mcPreviewAberto&&mcClienteId){mcPreviewAberto=false;abrirCardCliente(mcClienteId);return;}
+  fecharModal();
+}
 function abrirModal(h,largo){const box=$('modalbox');box.onscroll=null;box.classList.remove('mb-card');box.innerHTML=h;box.classList.toggle('mb-wide',!!largo);$('modal').classList.remove('h');}
 function abrirModalCard(h){
   const box=$('modalbox');
@@ -660,6 +673,9 @@ window.addEventListener('DOMContentLoaded',boot);
 document.addEventListener('click',e=>{
   const p=$('mc-etq-picker');
   if(p&&!p.classList.contains('h')&&!e.target.closest('.mcetq'))p.classList.add('h');
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&$('modal')&&!$('modal').classList.contains('h'))fecharInteligente();
 });
 function route(){
   if(!U)return;
@@ -844,7 +860,8 @@ async function visualizarAnexo(caminho,nome){
   if(anexoEhImagem(nome))corpo=`<img src="${escA(url)}" style="width:100%;border-radius:12px;display:block"/>`;
   else if(ext==='pdf')corpo=`<iframe src="${escA(url)}" style="width:100%;height:72vh;border:none;border-radius:10px"></iframe>`;
   else corpo=`<div class="emp"><div class="empi">📄</div><div class="empt">Pré-visualização não disponível para este tipo de arquivo</div><a href="${escA(url)}" target="_blank" class="btn btnp" style="display:inline-block;margin-top:8px;text-decoration:none">Abrir / baixar arquivo</a></div>`;
-  abrirModal(`<button class="mbc" onclick="fecharModal()">×</button><div class="mbt">${esc(nome)}</div><div class="mbs">&nbsp;</div>${corpo}`,true);
+  mcPreviewAberto=true;
+  abrirModal(`<button class="mbc" onclick="fecharInteligente()">×</button><div class="mbt">${esc(nome)}</div><div class="mbs">&nbsp;</div>${corpo}`,true);
 }
 async function uploadAnexo(input,clienteId){
   const files=[...input.files];
@@ -1108,6 +1125,7 @@ async function moverPara(clienteId,quadro,listaId,pos){
 // ---------- CARD DO CLIENTE COMO MODAL (estilo Trello) ----------
 async function abrirCardCliente(id){
   if(!id){toast('Este registro não está vinculado a um cliente do CRM.','er');return;}
+  mcPreviewAberto=false;
   abrirModal('<div class="emp">Carregando...</div>',true);
   const{data:c,error}=await sb.from('crm_clientes').select('*,crm_clientes_etiquetas(etiqueta_id)').eq('id',id).single();
   if(error||!c){abrirModal('<div class="emp"><div class="empt">Cliente não encontrado</div></div>',true);return;}
@@ -1123,7 +1141,7 @@ function renderCardClienteModal(c,etqSel,listas){
   const optL=listas.map(l=>`<option value="${l.id}" ${c.lista_id===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
   const optCanal=`<option value="">—</option>`+Object.keys(CANAIS).map(k=>`<option value="${k}" ${c.canal_whatsapp===k?'selected':''}>${CANAIS[k]}</option>`).join('');
   const optOrig=`<option value="">—</option>`+Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
-  const etqPicker=ETQ.map(t=>`<div class="etp-opt" data-etq="${t.id}" onclick="mcToggleEtq('${t.id}')"><span class="etp-dot" style="background:${escA(t.cor)}"></span>${esc(t.nome)}<span class="etp-check">${etqSel.includes(t.id)?'✓':''}</span></div>`).join('')||'<div class="fhint" style="padding:10px 12px">Nenhuma etiqueta criada. Crie em Configurações → Etiquetas.</div>';
+  const etqPicker=ETQ.map(t=>`<label class="etp-row" data-nome="${escA((t.nome||'').toLowerCase())}"><input type="checkbox" ${etqSel.includes(t.id)?'checked':''} onchange="mcToggleEtq('${t.id}')"/><span class="etp-bar" style="background:${escA(t.cor)}">${esc(t.nome)}</span></label>`).join('')||'<div class="fhint" style="padding:6px 2px">Nenhuma etiqueta criada ainda.</div>';
   abrirModalCard(`
     <div class="mchead-sticky" id="mchead-sticky">
       <div class="mchs-nome">${esc(c.nome_completo)}</div>
@@ -1137,16 +1155,21 @@ function renderCardClienteModal(c,etqSel,listas){
     <button class="mbc" onclick="fecharModal()">×</button>
     <input type="text" id="mc-nome" class="mctit" value="${escA(c.nome_completo)}"/>
     <div class="mbs">Cliente desde ${fD(c.criado_em?c.criado_em.slice(0,10):null)}</div>
-    <div id="mc-entrega-top" style="margin-bottom:14px">${entregaBadgeHtml(c.data_entrega)}</div>
 
     <div class="mcetq" id="mc-etq-wrap">
       <div class="etp-sel" id="mc-etq-chips">${mcChipsHtml()}<button class="etp-add" onclick="mcTogEtqPicker()">+ Etiqueta</button></div>
-      <div class="etp-picker h" id="mc-etq-picker">${etqPicker}</div>
+      <div class="etp-picker h" id="mc-etq-picker">
+        <div class="etp-phead">Etiquetas<button class="etp-xclose" onclick="mcTogEtqPicker()">×</button></div>
+        <input class="etp-search" type="text" placeholder="Buscar etiquetas..." oninput="mcFiltrarEtq(this.value)"/>
+        <div class="etp-list" id="mc-etq-list">${etqPicker}</div>
+        <button class="etp-newbtn" onclick="location.hash='#/etiquetas'">+ Gerenciar etiquetas</button>
+      </div>
     </div>
 
     <div class="mcquick">
       <button class="mcqbtn" onclick="$('mc-anexo-input').click()">📎 Anexar arquivo</button>
       <button class="mcqbtn" onclick="modalMover('${c.id}')">⇄ Mover cartão</button>
+      <span id="mc-entrega-top">${entregaBadgeHtml(c.data_entrega)}</span>
     </div>
 
     <div class="mccols2">
@@ -1226,8 +1249,12 @@ function mcToggleEtq(id){
   if(idx>=0)mcEtqSelAtual.splice(idx,1);else mcEtqSelAtual.push(id);
   const chips=$('mc-etq-chips');
   if(chips)chips.innerHTML=mcChipsHtml()+'<button class="etp-add" onclick="mcTogEtqPicker()">+ Etiqueta</button>';
-  const opt=document.querySelector(`.etp-opt[data-etq="${id}"] .etp-check`);
-  if(opt)opt.textContent=mcEtqSelAtual.includes(id)?'✓':'';
+}
+function mcFiltrarEtq(termo){
+  const t=(termo||'').toLowerCase();
+  document.querySelectorAll('#mc-etq-list .etp-row').forEach(r=>{
+    r.style.display=r.getAttribute('data-nome').includes(t)?'flex':'none';
+  });
 }
 function mcRecalc(veioHonorario){
   const vb=m2f($('mc-vb'));

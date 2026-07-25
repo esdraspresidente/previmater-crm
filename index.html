@@ -390,7 +390,14 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 @media(max-width:760px){.mccols2{grid-template-columns:1fr;}}
 .mcright{background:var(--bg);border-radius:14px;padding:16px;}
 .mcrsec{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;}
+.mcquickwrap{position:relative;}
 .mcquick{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0 18px;}
+.mvpop{position:absolute;top:calc(100% - 10px);left:0;background:var(--white);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shl);width:300px;max-height:65vh;overflow-y:auto;z-index:40;padding:16px;}
+.mvpop.h{display:none;}
+.mvph{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.mvpt{font-size:14px;font-weight:800;color:var(--text);}
+.mvpx{background:none;border:none;font-size:17px;color:var(--text3);cursor:pointer;line-height:1;}
+.mvpx:hover{color:var(--text);}
 .mcqbtn{background:var(--bg);border:1.5px solid var(--border);color:var(--text2);font-size:12px;font-weight:700;padding:7px 13px;border-radius:9px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;}
 .mcqbtn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-l);}
 .mcentregabox{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--border);border-radius:9px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--text2);}
@@ -680,9 +687,14 @@ window.addEventListener('DOMContentLoaded',boot);
 document.addEventListener('click',e=>{
   const p=$('mc-etq-picker');
   if(p&&!p.classList.contains('h')&&!e.target.closest('.mcetq'))p.classList.add('h');
+  const mv=$('mvpop');
+  if(mv&&!mv.classList.contains('h')&&!e.target.closest('.mcquickwrap'))mv.classList.add('h');
 });
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'&&$('modal')&&!$('modal').classList.contains('h'))fecharInteligente();
+  if(e.key!=='Escape')return;
+  const mv=$('mvpop');
+  if(mv&&!mv.classList.contains('h')){mv.classList.add('h');return;}
+  if($('modal')&&!$('modal').classList.contains('h'))fecharInteligente();
 },true);
 function route(){
   if(!U)return;
@@ -1079,20 +1091,18 @@ function atualizarContadores(){
 }
 
 // ---------- MOVER CARTAO ----------
-async function modalMover(clienteId,voltarCard){
-  if(voltarCard)mcPreviewAberto=true;
-  const fechaBtn=voltarCard?'fecharInteligente()':'fecharModal()';
-  abrirModal(`<button class="mbc" onclick="${fechaBtn}">×</button><div class="mbt">Mover cartão</div><div class="mbs">Carregando...</div>`);
+async function modalMover(clienteId){
+  abrirModal('<div class="mbt">Mover cartão</div><div class="mbs">Carregando...</div>');
   const{data:c}=await sb.from('crm_clientes').select('id,nome_completo,quadro,lista_id,posicao').eq('id',clienteId).single();
   if(!c){toast('Cliente não encontrado','er');fecharModal();return;}
   const{data:LA}=await sb.from('crm_listas').select('*').eq('quadro',c.quadro).eq('arquivada',false).order('ordem');
   const L=LA||[],idx=L.findIndex(l=>l.id===c.lista_id);
   let sug='';
-  if(idx>0)sug+=`<button class="mvs" onclick="moverPara('${c.id}','${c.quadro}','${L[idx-1].id}',0,${!!voltarCard})">← ${esc(L[idx-1].nome)}</button>`;
-  if(idx>=0&&idx<L.length-1)sug+=`<button class="mvs" onclick="moverPara('${c.id}','${c.quadro}','${L[idx+1].id}',0,${!!voltarCard})">→ ${esc(L[idx+1].nome)}</button>`;
+  if(idx>0)sug+=`<button class="mvs" onclick="moverPara('${c.id}','${c.quadro}','${L[idx-1].id}',0)">← ${esc(L[idx-1].nome)}</button>`;
+  if(idx>=0&&idx<L.length-1)sug+=`<button class="mvs" onclick="moverPara('${c.id}','${c.quadro}','${L[idx+1].id}',0)">→ ${esc(L[idx+1].nome)}</button>`;
   const optQ=QPERM.map(q=>`<option value="${q}" ${c.quadro===q?'selected':''}>${QUADROS[q].rotulo}</option>`).join('');
   const optL=L.map(l=>`<option value="${l.id}" ${c.lista_id===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
-  abrirModal(`<button class="mbc" onclick="${fechaBtn}">×</button><div class="mbt">Mover cartão</div><div class="mbs">${esc(c.nome_completo)}</div>
+  abrirModal(`<div class="mbt">Mover cartão</div><div class="mbs">${esc(c.nome_completo)}</div>
     ${sug?`<div class="mvsl">Sugeridas</div><div class="mvsug">${sug}</div>`:''}
     <div class="mvsl">Selecionar destino</div>
     <div class="fld" style="margin-bottom:12px"><label>Quadro</label><select id="mv-quadro" onchange="mvTrocarQuadro()">${optQ}</select></div>
@@ -1100,9 +1110,82 @@ async function modalMover(clienteId,voltarCard){
       <div class="fld"><label>Lista</label><select id="mv-lista" onchange="mvTrocarLista()">${optL}</select></div>
       <div class="fld"><label>Posição</label><select id="mv-pos"></select></div>
     </div>
-    <div class="brow"><button class="btn btns" onclick="${fechaBtn}">Cancelar</button>
-    <button class="btn btnp" onclick="moverConfirmar('${c.id}',${!!voltarCard})">Mover</button></div>`);
+    <div class="brow"><button class="btn btns" onclick="fecharModal()">Cancelar</button>
+    <button class="btn btnp" onclick="moverConfirmar('${c.id}')">Mover</button></div>`);
   await mvTrocarLista(c.posicao);
+}
+
+// ---------- MOVER CARTAO (balão dentro do próprio card, sem esconder o card) ----------
+async function abrirMoverPopover(){
+  const id=mcClienteId;
+  if(!id)return;
+  const box=$('modalbox');if(box){try{box.scrollTo({top:0,behavior:'smooth'});}catch(_){box.scrollTop=0;}}
+  const pop=$('mvpop');
+  if(!pop)return;
+  pop.classList.remove('h');
+  pop.innerHTML='<div class="mvph"><div class="mvpt">Mover cartão</div><button class="mvpx" onclick="fecharMoverPopover()">×</button></div><div class="fhint">Carregando...</div>';
+  const{data:c}=await sb.from('crm_clientes').select('id,nome_completo,quadro,lista_id,posicao').eq('id',id).single();
+  if(!c){toast('Cliente não encontrado','er');fecharMoverPopover();return;}
+  const{data:LA}=await sb.from('crm_listas').select('*').eq('quadro',c.quadro).eq('arquivada',false).order('ordem');
+  const L=LA||[],idx=L.findIndex(l=>l.id===c.lista_id);
+  let sug='';
+  if(idx>0)sug+=`<button class="mvs" onclick="mvpMoverSugerida('${L[idx-1].id}')">← ${esc(L[idx-1].nome)}</button>`;
+  if(idx>=0&&idx<L.length-1)sug+=`<button class="mvs" onclick="mvpMoverSugerida('${L[idx+1].id}')">→ ${esc(L[idx+1].nome)}</button>`;
+  const optQ=QPERM.map(q=>`<option value="${q}" ${c.quadro===q?'selected':''}>${QUADROS[q].rotulo}</option>`).join('');
+  const optL=L.map(l=>`<option value="${l.id}" ${c.lista_id===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
+  pop.innerHTML=`
+    <div class="mvph"><div class="mvpt">Mover cartão</div><button class="mvpx" onclick="fecharMoverPopover()">×</button></div>
+    ${sug?`<div class="mvsl">Sugeridas</div><div class="mvsug">${sug}</div>`:''}
+    <div class="mvsl">Selecionar destino</div>
+    <div class="fld" style="margin-bottom:10px"><label>Quadro</label><select id="mvp-quadro" onchange="mvpTrocarQuadro()">${optQ}</select></div>
+    <div class="fg" style="margin-bottom:14px">
+      <div class="fld"><label>Lista</label><select id="mvp-lista" onchange="mvpTrocarLista()">${optL}</select></div>
+      <div class="fld"><label>Posição</label><select id="mvp-pos"></select></div>
+    </div>
+    <button class="btn btnp" style="width:100%" onclick="mvpConfirmar()">Mover</button>`;
+  await mvpTrocarLista(c.posicao);
+}
+function fecharMoverPopover(){const p=$('mvpop');if(p)p.classList.add('h');}
+async function mvpTrocarQuadro(){
+  const q=$('mvp-quadro').value;
+  const{data:L}=await sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem');
+  $('mvp-lista').innerHTML=(L||[]).map(l=>`<option value="${l.id}">${esc(l.nome)}</option>`).join('');
+  await mvpTrocarLista();
+}
+async function mvpTrocarLista(posAtual){
+  const lid=$('mvp-lista').value,sel=$('mvp-pos');
+  if(!lid){sel.innerHTML='<option value="0">1</option>';return;}
+  const{count}=await sb.from('crm_clientes').select('id',{count:'exact',head:true}).eq('lista_id',lid);
+  let opts='';
+  for(let i=0;i<=(count||0);i++)opts+=`<option value="${i}" ${(posAtual!==undefined&&posAtual===i)?'selected':''}>${i+1}</option>`;
+  sel.innerHTML=opts;
+}
+async function mvpMoverSugerida(listaId){
+  $('mvp-lista').value=listaId;
+  await mvpConfirmar(listaId,0);
+}
+async function mvpConfirmar(listaIdArg,posArg){
+  const id=mcClienteId;
+  const quadro=$('mvp-quadro').value;
+  const listaId=listaIdArg||$('mvp-lista').value;
+  const pos=listaIdArg!==undefined&&posArg!==undefined?posArg:(parseInt($('mvp-pos').value,10)||0);
+  if(!listaId){toast('Escolha uma lista','er');return;}
+  const{data:atualCli}=await sb.from('crm_clientes').select('lista_id,quadro').eq('id',id).single();
+  const origListaId=atualCli?atualCli.lista_id:null;
+  const{data:naLista}=await sb.from('crm_clientes').select('id,posicao').eq('lista_id',listaId).neq('id',id).order('posicao');
+  const ord=(naLista||[]).map(x=>x.id);
+  ord.splice(pos,0,id);
+  const res=await Promise.all(ord.map((cid,i)=>{
+    const p={lista_id:listaId,posicao:i,atualizado_em:new Date().toISOString()};
+    if(cid===id)p.quadro=quadro;
+    return sb.from('crm_clientes').update(p).eq('id',cid);
+  }));
+  if(res.find(r=>r.error)){toast('Não foi possível mover','er');return;}
+  toast('Cartão movido','ok');
+  if(origListaId&&origListaId!==listaId)await registrarMovimentoLista(id,origListaId,listaId);
+  finCarregado=false;
+  fecharMoverPopover();
+  abrirCardCliente(id);
 }
 async function mvTrocarQuadro(){
   const q=$('mv-quadro').value;
@@ -1164,7 +1247,7 @@ function renderCardClienteModal(c,etqSel,listas){
   abrirModalCard(`
     <div class="mchead-sticky" id="mchead-sticky">
       <div class="mchs-nome">${esc(c.nome_completo)}</div>
-      <button class="mchs-lista" onclick="modalMover('${c.id}',true)" title="Mover cartão">${esc(QUADROS[c.quadro]?QUADROS[c.quadro].rotulo:c.quadro)}${listaAtual?' · '+esc(listaAtual.nome):''}</button>
+      <button class="mchs-lista" onclick="abrirMoverPopover()" title="Mover cartão">${esc(QUADROS[c.quadro]?QUADROS[c.quadro].rotulo:c.quadro)}${listaAtual?' · '+esc(listaAtual.nome):''}</button>
       <div class="mchs-acts">
         <button onclick="mcTogEtqPicker()">🏷 Etiqueta</button>
         <button onclick="$('mc-anexo-input').click()">${clipeSvg()} Anexo</button>
@@ -1185,11 +1268,14 @@ function renderCardClienteModal(c,etqSel,listas){
       </div>
     </div>
 
+    <div class="mcquickwrap">
     <div class="mcquick">
       <button class="mcqbtn" onclick="$('mc-anexo-input').click()">${clipeSvg()} Anexar arquivo</button>
-      <button class="mcqbtn" onclick="modalMover('${c.id}',true)">⇄ Mover cartão</button>
+      <button class="mcqbtn" onclick="abrirMoverPopover()">⇄ Mover cartão</button>
       <div class="mcentregabox">📅 <input type="date" id="mc-entrega" value="${c.data_entrega||''}" onchange="mcEntregaChange()"/></div>
       <span id="mc-entrega-top">${entregaBadgeHtml(c.data_entrega)}</span>
+    </div>
+    <div class="mvpop h" id="mvpop"></div>
     </div>
 
     <div class="mccols2">

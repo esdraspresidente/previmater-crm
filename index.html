@@ -93,8 +93,10 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .card{background:var(--white);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--sh);}
 
 /* KANBAN */
-.kb{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding-bottom:14px;}
-.kl{flex:0 0 262px;width:262px;background:var(--white);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--sh);display:flex;flex-direction:column;max-height:calc(100vh - 226px);transition:flex-basis .15s,width .15s;}
+.kb{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding-bottom:14px;height:calc(100vh - 172px);}
+@media(max-width:900px){.kb{height:calc(100vh - 226px);}}
+.kl{flex:0 0 262px;width:262px;background:var(--white);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--sh);display:flex;flex-direction:column;max-height:calc(100vh - 188px);transition:flex-basis .15s,width .15s;}
+@media(max-width:900px){.kl{max-height:calc(100vh - 242px);}}
 .kl.collapsed{flex:0 0 42px;width:42px;}
 .kl.collapsed .klb,.kl.collapsed .klf{display:none;}
 .kl.collapsed .klh{flex-direction:column-reverse;height:100%;padding:10px 6px;gap:10px;justify-content:flex-end;}
@@ -113,6 +115,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .kc.dragging{opacity:.4;cursor:grabbing;}
 .kcn{font-size:13px;font-weight:700;color:var(--text);line-height:1.3;padding-right:26px;}
 .kcm{font-size:11px;color:var(--text3);margin-top:3px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.kc-anexo{display:inline-flex;align-items:center;color:var(--text3);font-weight:700;}
 .kcv{font-size:12px;font-weight:800;color:var(--teal);}
 .kce{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px;}
 .kcmv{position:absolute;top:7px;right:7px;background:var(--bg);border:none;color:var(--text3);width:24px;height:24px;border-radius:7px;cursor:pointer;font-size:12px;line-height:1;opacity:0;transition:opacity .13s;}
@@ -389,6 +392,9 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .mcquick{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0 18px;}
 .mcqbtn{background:var(--bg);border:1.5px solid var(--border);color:var(--text2);font-size:12px;font-weight:700;padding:7px 13px;border-radius:9px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;}
 .mcqbtn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-l);}
+.mcentregabox{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--border);border-radius:9px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--text2);}
+.mcentregabox input[type=date]{border:none;background:none;font-family:inherit;font-size:12px;font-weight:700;color:var(--text);padding:0;cursor:pointer;}
+.mcentregabox input[type=date]:focus{outline:none;}
 .ent-lg{font-size:12px;padding:6px 13px;border-radius:9px;}
 
 /* ETIQUETAS — mostrar só selecionadas + seletor estilo Trello */
@@ -676,7 +682,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&$('modal')&&!$('modal').classList.contains('h'))fecharInteligente();
-});
+},true);
 function route(){
   if(!U)return;
   const r=(location.hash.slice(1)||'/').split('?')[0];
@@ -935,6 +941,14 @@ async function pageQuadro(q){
     C.forEach(c=>{c.finResumo=porCliente[c.id]||null;});
   }
 
+  if(C.length){
+    const ids=C.map(c=>c.id);
+    const{data:anx}=await sb.from('crm_anexos').select('cliente_id').in('cliente_id',ids);
+    const anxCont={};
+    (anx||[]).forEach(a=>{anxCont[a.cliente_id]=(anxCont[a.cliente_id]||0)+1;});
+    C.forEach(c=>{c.anexosCount=anxCont[c.id]||0;});
+  }
+
   const porLista={};L.forEach(l=>porLista[l.id]=[]);
   const orfaos=[];
   C.forEach(c=>{if(porLista[c.lista_id])porLista[c.lista_id].push(c);else orfaos.push(c);});
@@ -978,6 +992,7 @@ function cardHtml(c){
   const meta=[];
   if(c.telefone_principal)meta.push(esc(c.telefone_principal));
   if(c.data_nascimento_bebe)meta.push('DN '+fD(c.data_nascimento_bebe));
+  if(c.anexosCount)meta.push(`<span class="kc-anexo">${clipeSvg()}${c.anexosCount}</span>`);
   let finHtml='';
   if(c.finResumo){
     const f=c.finResumo;
@@ -992,6 +1007,7 @@ function cardHtml(c){
       ${chips?`<div class="kce">${chips}</div>`:''}
     </div>`;
 }
+function clipeSvg(){return'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:2px"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';}
 function entregaHtml(d){
   if(!d)return'';
   const dias=dVenc(d);
@@ -1169,6 +1185,7 @@ function renderCardClienteModal(c,etqSel,listas){
     <div class="mcquick">
       <button class="mcqbtn" onclick="$('mc-anexo-input').click()">📎 Anexar arquivo</button>
       <button class="mcqbtn" onclick="modalMover('${c.id}')">⇄ Mover cartão</button>
+      <div class="mcentregabox">📅 <input type="date" id="mc-entrega" value="${c.data_entrega||''}" onchange="mcEntregaChange()"/></div>
       <span id="mc-entrega-top">${entregaBadgeHtml(c.data_entrega)}</span>
     </div>
 
@@ -1183,7 +1200,6 @@ function renderCardClienteModal(c,etqSel,listas){
           <div class="fld"><label>CPF</label><input type="text" id="mc-cpf" value="${escA(c.cpf)}" oninput="cpfMask(this)"/></div>
           <div class="fld"><label>Canal WhatsApp</label><select id="mc-canal">${optCanal}</select></div>
           <div class="fld"><label>Origem</label><select id="mc-origem">${optOrig}</select></div>
-          <div class="fld"><label>Data de entrega</label><input type="date" id="mc-entrega" value="${c.data_entrega||''}" onchange="mcEntregaChange()"/></div>
           <div class="fld"><label>DN do bebê</label><input type="date" id="mc-dn" value="${c.data_nascimento_bebe||''}"/></div>
           <div class="fld"><label>DS (saída do último emprego)</label><input type="date" id="mc-ds" value="${c.data_saida_emprego||''}"/></div>
           <div class="fld"><label>Benefício (R$)</label><input type="text" id="mc-vb" data-money="" inputmode="decimal" value="${floatToMoney(c.valor_beneficio_esperado)}" onchange="mcRecalc()"/></div>

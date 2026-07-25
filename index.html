@@ -59,7 +59,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 @media(max-width:900px){#sb{transform:translateX(-100%);}#sb.o{transform:none;}}
 #ov{position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:99;display:none;}
 #ov.o{display:block;}
-.sbh{padding:20px 18px 16px;border-bottom:1px solid var(--border2);}
+.sbh{padding:20px 18px 16px;border-bottom:1px solid var(--border2);display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
 .sbl{display:flex;align-items:center;gap:11px;}
 .sbi{width:38px;height:38px;border-radius:11px;overflow:hidden;flex-shrink:0;box-shadow:0 4px 12px rgba(10,147,150,.25);}
 .sblt{font-size:15px;font-weight:800;color:var(--text);letter-spacing:-.3px;line-height:1.1;}
@@ -94,7 +94,13 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 
 /* KANBAN */
 .kb{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;height:calc(100vh - 210px);padding-bottom:16px;}
-.kl{flex:0 0 262px;width:262px;background:var(--white);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--sh);display:flex;flex-direction:column;max-height:calc(100vh - 226px);}
+.kl{flex:0 0 262px;width:262px;background:var(--white);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--sh);display:flex;flex-direction:column;max-height:calc(100vh - 226px);transition:flex-basis .15s,width .15s;}
+.kl.collapsed{flex:0 0 42px;width:42px;}
+.kl.collapsed .klb,.kl.collapsed .klf{display:none;}
+.kl.collapsed .klh{flex-direction:column-reverse;height:100%;padding:10px 6px;gap:10px;justify-content:flex-end;}
+.kl.collapsed .klh>div{flex-direction:column;gap:8px;}
+.kl.collapsed .kln{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:11px;margin-top:4px;}
+.kl.collapsed .klc{writing-mode:horizontal-tb;}
 .kl.dragover{border-color:var(--teal);box-shadow:0 0 0 3px rgba(10,147,150,.16);}
 .klh{padding:12px 14px 10px;border-bottom:1px solid var(--border2);border-top:3px solid var(--teal);border-radius:var(--rl) var(--rl) 0 0;display:flex;align-items:center;justify-content:space-between;gap:6px;}
 .kln{font-size:12px;font-weight:800;color:var(--text);line-height:1.25;}
@@ -319,11 +325,11 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .empt{font-size:15px;font-weight:700;color:var(--text2);margin-bottom:5px;}
 
 /* NOTIFICACOES */
-#notifbtn{position:fixed;top:14px;right:16px;z-index:200;width:38px;height:38px;border-radius:50%;background:var(--white);border:1.5px solid var(--border);box-shadow:var(--sh);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text2);}
-#notifbtn:hover{border-color:var(--teal);color:var(--teal);}
-#notifbtn.h{display:none;}
-#notifbadge{position:absolute;top:-3px;right:-3px;background:var(--red);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:9px;display:none;align-items:center;justify-content:center;padding:0 4px;line-height:1;}
-#notifbadge.v{display:flex;}
+.nbtn{position:relative;background:var(--white);border:1.5px solid var(--border);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--text2);flex-shrink:0;transition:all .12s;}
+.nbtn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-l);}
+.nbtn.h{display:none;}
+.nbadge{position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:9px;font-weight:800;min-width:15px;height:15px;border-radius:8px;display:none;align-items:center;justify-content:center;padding:0 3px;line-height:1;}
+.nbadge.v{display:flex;}
 .notifitem{padding:11px 13px;border-radius:10px;cursor:pointer;transition:background .1s;display:flex;gap:9px;align-items:flex-start;margin-bottom:4px;}
 .notifitem:hover{background:var(--teal-l);}
 .notifitem.unread{background:#F3FAFA;}
@@ -361,6 +367,41 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .anexoupload{border:2px dashed var(--border);border-radius:11px;padding:14px;text-align:center;cursor:pointer;transition:all .15s;}
 .anexoupload:hover{border-color:var(--teal);background:var(--teal-l);}
 .anexoupload input{display:none;}
+.anexoicone{overflow:hidden;}
+.anexoicone img{width:100%;height:100%;object-fit:cover;}
+.anexonome{cursor:pointer;}
+.anexonome:hover{color:var(--teal);text-decoration:underline;}
+
+/* CARD MODAL — layout Trello (cabeçalho fixo + colunas) */
+.mb.mb-card{max-width:960px;padding:0;}
+.mchead-sticky{position:sticky;top:0;z-index:6;background:var(--white);display:none;align-items:center;gap:12px;padding:11px 24px;border-bottom:1px solid var(--border);border-radius:var(--rx) var(--rx) 0 0;}
+.mchead-sticky.v{display:flex;}
+.mchs-nome{font-size:13.5px;font-weight:800;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mchs-lista{font-size:10.5px;font-weight:700;color:var(--text2);background:var(--bg);padding:4px 10px;border-radius:8px;white-space:nowrap;flex-shrink:0;}
+.mchs-acts{display:flex;gap:6px;flex-shrink:0;}
+.mchs-acts button{background:var(--bg);border:1.5px solid var(--border);color:var(--text2);font-size:11px;font-weight:700;padding:6px 11px;border-radius:8px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+.mchs-acts button:hover{border-color:var(--teal);color:var(--teal);}
+.mcinner{padding:26px;}
+.mccols2{display:grid;grid-template-columns:1fr 300px;gap:24px;align-items:start;}
+@media(max-width:760px){.mccols2{grid-template-columns:1fr;}}
+.mcright{background:var(--bg);border-radius:14px;padding:16px;}
+.mcrsec{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;}
+.mcquick{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 18px;}
+.mcqbtn{background:var(--bg);border:1.5px solid var(--border);color:var(--text2);font-size:12px;font-weight:700;padding:7px 13px;border-radius:9px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;}
+.mcqbtn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-l);}
+.ent-lg{font-size:12px;padding:6px 13px;border-radius:9px;}
+
+/* ETIQUETAS — mostrar só selecionadas + seletor */
+.mcetq{position:relative;margin-bottom:6px;}
+.etp-sel{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.etp-add{background:var(--bg);border:1.5px dashed var(--border);color:var(--text3);font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;cursor:pointer;font-family:inherit;}
+.etp-add:hover{border-color:var(--teal);color:var(--teal);}
+.etp-picker{position:absolute;top:calc(100% + 6px);left:0;background:var(--white);border:1.5px solid var(--border);border-radius:10px;box-shadow:var(--shm);width:230px;z-index:30;max-height:230px;overflow-y:auto;}
+.etp-picker.h{display:none;}
+.etp-opt{display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;color:var(--text2);}
+.etp-opt:hover{background:var(--teal-l);}
+.etp-dot{width:12px;height:12px;border-radius:4px;flex-shrink:0;}
+.etp-check{margin-left:auto;color:var(--teal);font-weight:800;}
 </style>
 </head>
 <body>
@@ -381,16 +422,14 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
   </div>
 </div>
 
-<button id="notifbtn" class="h" onclick="abrirNotificacoes()" title="Notificações">
-  🔔<span id="notifbadge"></span>
-</button>
-
 <div id="app">
   <nav id="sb">
     <div class="sbh"><div class="sbl">
       <div class="sbi"><img src="icon192.png" style="width:100%;height:100%;object-fit:cover"/></div>
       <div><div class="sblt">PreviMater</div><div class="sbls">CRM</div></div>
-    </div></div>
+    </div>
+    <button id="notifbtn" class="nbtn h" onclick="abrirNotificacoes()" title="Notificações">🔔<span id="notifbadge" class="nbadge"></span></button>
+    </div>
     <div class="sbn" id="sbnav"></div>
     <div class="sbf">
       <div class="sbu"><div class="sbav" id="sbav"></div><div><div class="sbnm" id="sbnm"></div><div class="sbem" id="sbem"></div></div></div>
@@ -407,7 +446,10 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
         <div class="sbi" style="width:30px;height:30px;border-radius:9px"><img src="icon192.png" style="width:100%;height:100%;object-fit:cover"/></div>
         <span style="font-size:14px;font-weight:800">PreviMater</span>
       </div>
-      <button class="bnew" style="padding:7px 13px;font-size:12px" onclick="location.hash='#/cliente/novo'">+ Novo</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button id="notifbtnm" class="nbtn h" onclick="abrirNotificacoes()" title="Notificações">🔔<span id="notifbadgem" class="nbadge"></span></button>
+        <button class="bnew" style="padding:7px 13px;font-size:12px" onclick="location.hash='#/cliente/novo'">+ Novo</button>
+      </div>
     </div>
     <div id="pc"></div>
   </div>
@@ -444,7 +486,7 @@ let calMes=new Date();calMes.setDate(1);
 let rfiltro='todos';
 let fCliId=null,fTipo='i',fParcs=[],mparcId=null,mdiaData=null,preceberId=null;
 let NOTIF=[],notifPollTimer=null;
-let mcOriginal=null,mcClienteId=null,mcMencoes=[];
+let mcOriginal=null,mcClienteId=null,mcMencoes=[],mcEtqSelAtual=[];
 
 // ============================================================
 // UTIL
@@ -456,7 +498,22 @@ function toast(m,t){const e=$('toast');e.textContent=m;e.className='v '+(t||'ok'
 function togSB(){$('sb').classList.toggle('o');$('ov').classList.toggle('o');}
 function fecharModal(){$('modal').classList.add('h');}
 function fecharSeFundo(e){if(e.target===e.currentTarget)fecharModal();}
-function abrirModal(h,largo){const box=$('modalbox');box.innerHTML=h;box.classList.toggle('mb-wide',!!largo);$('modal').classList.remove('h');}
+function abrirModal(h,largo){const box=$('modalbox');box.onscroll=null;box.classList.remove('mb-card');box.innerHTML=h;box.classList.toggle('mb-wide',!!largo);$('modal').classList.remove('h');}
+function abrirModalCard(h){
+  const box=$('modalbox');
+  box.onscroll=null;
+  box.classList.remove('mb-wide');
+  box.classList.add('mb-card');
+  box.innerHTML=h;
+  $('modal').classList.remove('h');
+  box.scrollTop=0;
+  box.onscroll=mcHandleScroll;
+}
+function mcHandleScroll(e){
+  const sticky=$('mchead-sticky');
+  if(!sticky)return;
+  sticky.classList.toggle('v',e.target.scrollTop>64);
+}
 
 const R=v=>(parseFloat(v)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const fD=s=>{if(!s)return'—';return new Date(s+'T12:00:00').toLocaleDateString('pt-BR');};
@@ -560,7 +617,7 @@ async function doLogout(){
   await sb.auth.signOut();
   S=null;U=null;QPERM=[];ETQ=[];CLI=[];REC=[];PARC=[];finCarregado=false;
   clearInterval(notifPollTimer);notifPollTimer=null;
-  $('notifbtn').classList.add('h');
+  $('notifbtn').classList.add('h');$('notifbtnm').classList.add('h');
   $('app').classList.remove('v');$('ln').classList.remove('h');
 }
 function mostrarApp(){
@@ -568,7 +625,7 @@ function mostrarApp(){
   $('sbav').textContent=(U.nome||'?').charAt(0).toUpperCase();
   $('sbnm').textContent=U.nome;$('sbem').textContent=U.email;
   montarSidebar();
-  $('notifbtn').classList.remove('h');
+  $('notifbtn').classList.remove('h');$('notifbtnm').classList.remove('h');
   carregarNotificacoes();
   clearInterval(notifPollTimer);
   notifPollTimer=setInterval(carregarNotificacoes,60000);
@@ -600,6 +657,10 @@ function marcarNav(id){
 // ============================================================
 window.addEventListener('hashchange',route);
 window.addEventListener('DOMContentLoaded',boot);
+document.addEventListener('click',e=>{
+  const p=$('mc-etq-picker');
+  if(p&&!p.classList.contains('h')&&!e.target.closest('.mcetq'))p.classList.add('h');
+});
 function route(){
   if(!U)return;
   const r=(location.hash.slice(1)||'/').split('?')[0];
@@ -625,9 +686,11 @@ async function carregarNotificacoes(){
   if(error)return;
   NOTIF=data||[];
   const naoLidas=NOTIF.filter(n=>!n.lida).length;
-  const b=$('notifbadge');
-  if(naoLidas>0){b.textContent=naoLidas>9?'9+':naoLidas;b.classList.add('v');}
-  else b.classList.remove('v');
+  [$('notifbadge'),$('notifbadgem')].forEach(b=>{
+    if(!b)return;
+    if(naoLidas>0){b.textContent=naoLidas>9?'9+':naoLidas;b.classList.add('v');}
+    else b.classList.remove('v');
+  });
 }
 function abrirNotificacoes(){
   const h=NOTIF.length?NOTIF.map(n=>`
@@ -748,6 +811,8 @@ async function enviarComentario(clienteId){
 // ============================================================
 // ANEXOS
 // ============================================================
+function anexoExt(nome){return(nome||'').split('.').pop().toLowerCase();}
+function anexoEhImagem(nome){return['png','jpg','jpeg','gif','webp'].includes(anexoExt(nome));}
 async function carregarAnexos(clienteId){
   const cont=$('mc-anexos-lista');
   if(!cont)return;
@@ -755,9 +820,9 @@ async function carregarAnexos(clienteId){
   if(error||!data||!data.length){cont.innerHTML='<div class="fhint">Nenhum anexo ainda.</div>';return;}
   cont.innerHTML=data.map(a=>`
     <div class="anexoitem">
-      <div class="anexoicone">📎</div>
+      <div class="anexoicone" id="anexothumb-${a.id}">${anexoEhImagem(a.nome_arquivo)?'🖼':'📄'}</div>
       <div style="flex:1;min-width:0">
-        <div class="anexonome">${esc(a.nome_arquivo)}</div>
+        <div class="anexonome" onclick="visualizarAnexo('${escA(a.caminho_storage)}','${escA(a.nome_arquivo)}');return false" title="Visualizar">${esc(a.nome_arquivo)}</div>
         <div class="anexometa">${fmtBytes(a.tamanho_bytes)} · ${tempoRel(a.criado_em)}</div>
       </div>
       <div class="anexoacoes">
@@ -765,6 +830,21 @@ async function carregarAnexos(clienteId){
         <button class="bic bd" title="Excluir" onclick="excluirAnexo('${a.id}','${escA(a.caminho_storage)}','${clienteId}')">✕</button>
       </div>
     </div>`).join('');
+  data.filter(a=>anexoEhImagem(a.nome_arquivo)).forEach(async a=>{
+    const{data:s}=await sb.storage.from(ANEXO_BUCKET).createSignedUrl(a.caminho_storage,300);
+    const el=$('anexothumb-'+a.id);
+    if(s&&el)el.innerHTML=`<img src="${escA(s.signedUrl)}" alt=""/>`;
+  });
+}
+async function visualizarAnexo(caminho,nome){
+  const{data,error}=await sb.storage.from(ANEXO_BUCKET).createSignedUrl(caminho,180);
+  if(error||!data){toast('Não foi possível abrir o arquivo','er');return;}
+  const url=data.signedUrl,ext=anexoExt(nome);
+  let corpo;
+  if(anexoEhImagem(nome))corpo=`<img src="${escA(url)}" style="width:100%;border-radius:12px;display:block"/>`;
+  else if(ext==='pdf')corpo=`<iframe src="${escA(url)}" style="width:100%;height:72vh;border:none;border-radius:10px"></iframe>`;
+  else corpo=`<div class="emp"><div class="empi">📄</div><div class="empt">Pré-visualização não disponível para este tipo de arquivo</div><a href="${escA(url)}" target="_blank" class="btn btnp" style="display:inline-block;margin-top:8px;text-decoration:none">Abrir / baixar arquivo</a></div>`;
+  abrirModal(`<button class="mbc" onclick="fecharModal()">×</button><div class="mbt">${esc(nome)}</div><div class="mbs">&nbsp;</div>${corpo}`,true);
 }
 async function uploadAnexo(input,clienteId){
   const files=[...input.files];
@@ -850,13 +930,22 @@ async function pageQuadro(q){
     </div><div class="kb" id="kb">${kb}</div>`;
   ligarDragDrop();
 }
+function listaColapsada(id){try{return localStorage.getItem('kl_col_'+id)==='1';}catch(_){return false;}}
+function toggleColapsarLista(id){
+  const atual=listaColapsada(id);
+  try{if(atual)localStorage.removeItem('kl_col_'+id);else localStorage.setItem('kl_col_'+id,'1');}catch(_){}
+  const el=document.querySelector(`.kl[data-lista="${id}"]`);
+  if(el)el.classList.toggle('collapsed',!atual);
+}
 function listaHtml(l,cards,semAcoes){
   const cs=cards.length?cards.map(cardHtml).join(''):'<div class="kempty">Vazia</div>';
-  return `<div class="kl" data-lista="${l.id}">
+  const colapsada=!semAcoes&&listaColapsada(l.id);
+  return `<div class="kl ${colapsada?'collapsed':''}" data-lista="${l.id}">
       <div class="klh" style="border-top-color:${escA(l.cor)}">
         <div class="kln">${esc(l.nome)}</div>
         <div style="display:flex;align-items:center;gap:4px">
           <span class="klc">${cards.length}</span>
+          ${semAcoes?'':`<button class="klm" onclick="event.stopPropagation();toggleColapsarLista('${l.id}')" title="Minimizar/expandir lista">⬌</button>`}
           ${semAcoes?'':`<button class="klm" onclick="modalEditarLista('${l.id}')" title="Editar lista">⋯</button>`}
         </div>
       </div>
@@ -1028,65 +1117,117 @@ async function abrirCardCliente(id){
 }
 function renderCardClienteModal(c,etqSel,listas){
   mcOriginal={nome_completo:c.nome_completo,quadro:c.quadro,lista_id:c.lista_id};
-  mcClienteId=c.id;mcMencoes=[];
+  mcClienteId=c.id;mcMencoes=[];mcEtqSelAtual=etqSel.slice();
+  const listaAtual=listas.find(l=>l.id===c.lista_id);
   const optQ=QPERM.map(q=>`<option value="${q}" ${c.quadro===q?'selected':''}>${QUADROS[q].rotulo}</option>`).join('');
   const optL=listas.map(l=>`<option value="${l.id}" ${c.lista_id===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
   const optCanal=`<option value="">—</option>`+Object.keys(CANAIS).map(k=>`<option value="${k}" ${c.canal_whatsapp===k?'selected':''}>${CANAIS[k]}</option>`).join('');
   const optOrig=`<option value="">—</option>`+Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
-  const chips=ETQ.map(t=>`<span class="ett ${etqSel.includes(t.id)?'on':''}" data-etq="${t.id}" style="background:${escA(t.cor)}" onclick="this.classList.toggle('on')">${esc(t.nome)}</span>`).join('');
-  abrirModal(`
+  const etqPicker=ETQ.map(t=>`<div class="etp-opt" data-etq="${t.id}" onclick="mcToggleEtq('${t.id}')"><span class="etp-dot" style="background:${escA(t.cor)}"></span>${esc(t.nome)}<span class="etp-check">${etqSel.includes(t.id)?'✓':''}</span></div>`).join('')||'<div class="fhint" style="padding:10px 12px">Nenhuma etiqueta criada. Crie em Configurações → Etiquetas.</div>';
+  abrirModalCard(`
+    <div class="mchead-sticky" id="mchead-sticky">
+      <div class="mchs-nome">${esc(c.nome_completo)}</div>
+      <div class="mchs-lista">${esc(QUADROS[c.quadro]?QUADROS[c.quadro].rotulo:c.quadro)}${listaAtual?' · '+esc(listaAtual.nome):''}</div>
+      <div class="mchs-acts">
+        <button onclick="mcTogEtqPicker()">🏷 Etiqueta</button>
+        <button onclick="$('mc-anexo-input').click()">📎 Anexo</button>
+      </div>
+    </div>
+    <div class="mcinner">
     <button class="mbc" onclick="fecharModal()">×</button>
     <input type="text" id="mc-nome" class="mctit" value="${escA(c.nome_completo)}"/>
     <div class="mbs">Cliente desde ${fD(c.criado_em?c.criado_em.slice(0,10):null)}</div>
-    <div class="etp" style="margin-bottom:16px">${chips||'<span class="fhint">Nenhuma etiqueta criada ainda.</span>'}</div>
+    <div id="mc-entrega-top" style="margin-bottom:14px">${entregaBadgeHtml(c.data_entrega)}</div>
 
-    <div class="fg" style="margin-bottom:13px">
-      <div class="fld"><label>Quadro</label><select id="mc-quadro" onchange="mcTrocarQuadro()">${optQ}</select></div>
-      <div class="fld"><label>Lista</label><select id="mc-lista">${optL}</select></div>
+    <div class="mcetq" id="mc-etq-wrap">
+      <div class="etp-sel" id="mc-etq-chips">${mcChipsHtml()}<button class="etp-add" onclick="mcTogEtqPicker()">+ Etiqueta</button></div>
+      <div class="etp-picker h" id="mc-etq-picker">${etqPicker}</div>
     </div>
-    <div class="fg" style="margin-bottom:13px">
-      <div class="fld"><label>Telefone</label><input type="text" id="mc-tel" value="${escA(c.telefone_principal)}"/></div>
-      <div class="fld"><label>CPF</label><input type="text" id="mc-cpf" value="${escA(c.cpf)}" oninput="cpfMask(this)"/></div>
-      <div class="fld"><label>Canal WhatsApp</label><select id="mc-canal">${optCanal}</select></div>
-      <div class="fld"><label>Como chegou</label><select id="mc-origem">${optOrig}</select></div>
-      <div class="fld"><label>Data de entrega</label><input type="date" id="mc-entrega" value="${c.data_entrega||''}"/></div>
-      <div class="fld"><label>DN do bebê</label><input type="date" id="mc-dn" value="${c.data_nascimento_bebe||''}"/></div>
-      <div class="fld"><label>Benefício (R$)</label><input type="text" id="mc-vb" data-money="" inputmode="decimal" value="${floatToMoney(c.valor_beneficio_esperado)}" onchange="mcRecalc()"/></div>
-      <div class="fld"><label>Honorários (R$)</label><input type="text" id="mc-vh" data-money="" inputmode="decimal" value="${floatToMoney(c.valor_honorarios)}" onchange="mcRecalc(true)"/></div>
+
+    <div class="mcquick">
+      <button class="mcqbtn" onclick="$('mc-anexo-input').click()">📎 Anexar arquivo</button>
+      <button class="mcqbtn" onclick="modalMover('${c.id}')">⇄ Mover cartão</button>
     </div>
-    <div class="cb" id="mc-cbox" style="display:none;margin-bottom:13px"></div>
 
-    <div class="fld ff" style="margin-bottom:13px"><label>Observações</label><textarea id="mc-obs">${esc(c.observacoes)}</textarea></div>
-    <div class="fld ff" style="margin-bottom:18px"><label>Link do Trello</label><input type="url" id="mc-trello" placeholder="https://trello.com/c/..." value="${escA(c.trello_url)}"/></div>
+    <div class="mccols2">
+      <div>
+        <div class="fg" style="margin-bottom:13px">
+          <div class="fld"><label>Quadro</label><select id="mc-quadro" onchange="mcTrocarQuadro()">${optQ}</select></div>
+          <div class="fld"><label>Lista</label><select id="mc-lista">${optL}</select></div>
+        </div>
+        <div class="fg" style="margin-bottom:13px">
+          <div class="fld"><label>Telefone</label><input type="text" id="mc-tel" value="${escA(c.telefone_principal)}"/></div>
+          <div class="fld"><label>CPF</label><input type="text" id="mc-cpf" value="${escA(c.cpf)}" oninput="cpfMask(this)"/></div>
+          <div class="fld"><label>Canal WhatsApp</label><select id="mc-canal">${optCanal}</select></div>
+          <div class="fld"><label>Origem</label><select id="mc-origem">${optOrig}</select></div>
+          <div class="fld"><label>Data de entrega</label><input type="date" id="mc-entrega" value="${c.data_entrega||''}" onchange="mcEntregaChange()"/></div>
+          <div class="fld"><label>DN do bebê</label><input type="date" id="mc-dn" value="${c.data_nascimento_bebe||''}"/></div>
+          <div class="fld"><label>DS (saída do último emprego)</label><input type="date" id="mc-ds" value="${c.data_saida_emprego||''}"/></div>
+          <div class="fld"><label>Benefício (R$)</label><input type="text" id="mc-vb" data-money="" inputmode="decimal" value="${floatToMoney(c.valor_beneficio_esperado)}" onchange="mcRecalc()"/></div>
+          <div class="fld"><label>Honorários (R$)</label><input type="text" id="mc-vh" data-money="" inputmode="decimal" value="${floatToMoney(c.valor_honorarios)}" onchange="mcRecalc(true)"/></div>
+        </div>
+        <div class="cb" id="mc-cbox" style="display:none;margin-bottom:13px"></div>
 
-    <div class="hr"></div>
-    <div class="fst">Anexos</div>
-    <div class="anexolist" id="mc-anexos-lista"><div class="fhint">Carregando...</div></div>
-    <label class="anexoupload" style="display:block;margin-bottom:18px">
-      <input type="file" multiple onchange="uploadAnexo(this,'${c.id}')"/>
-      <span style="font-size:12px;color:var(--text2);font-weight:600">📎 Clique para anexar arquivos</span>
-    </label>
+        <div class="fld ff" style="margin-bottom:13px"><label>Observações</label><textarea id="mc-obs">${esc(c.observacoes)}</textarea></div>
+        <div class="fld ff" style="margin-bottom:18px"><label>Link do Trello</label><input type="url" id="mc-trello" placeholder="https://trello.com/c/..." value="${escA(c.trello_url)}"/></div>
 
-    <div class="hr"></div>
-    <div class="fst">Atividade</div>
-    <div class="actbox">
-      <div class="actinput-wrap">
-        <textarea class="actinput" id="mc-comentario-input" placeholder="Escreva um comentário... use @ para mencionar alguém" oninput="actInputHandler(this)"></textarea>
-        <button class="btn btnp actsend" id="mc-comentario-btn" onclick="enviarComentario('${c.id}')">Comentar</button>
+        <div class="hr"></div>
+        <div class="fst">Anexos</div>
+        <div class="anexolist" id="mc-anexos-lista"><div class="fhint">Carregando...</div></div>
+        <label class="anexoupload" style="display:block;margin-bottom:6px">
+          <input type="file" id="mc-anexo-input" multiple onchange="uploadAnexo(this,'${c.id}')"/>
+          <span style="font-size:12px;color:var(--text2);font-weight:600">📎 Clique para anexar arquivos</span>
+        </label>
+
+        <div class="brow" style="justify-content:space-between;margin-top:18px">
+          <button class="btnd" onclick="excluirClienteModal('${c.id}')">Excluir cliente</button>
+          <div style="display:flex;gap:9px">
+            <button class="btn btns" onclick="fecharModal()">Fechar</button>
+            <button class="btn btnp" id="mc-btn-salvar" onclick="salvarCardCliente('${c.id}')">Salvar</button>
+          </div>
+        </div>
       </div>
-      <div class="actfeed" id="mc-atividade-feed"><div class="fhint" style="text-align:center;padding:14px 0">Carregando...</div></div>
-    </div>
 
-    <div class="brow" style="justify-content:space-between;margin-top:18px">
-      <button class="btnd" onclick="excluirClienteModal('${c.id}')">Excluir cliente</button>
-      <div style="display:flex;gap:9px">
-        <button class="btn btns" onclick="fecharModal()">Fechar</button>
-        <button class="btn btnp" id="mc-btn-salvar" onclick="salvarCardCliente('${c.id}')">Salvar</button>
+      <div class="mcright">
+        <div class="mcrsec">💬 Comentários e atividade</div>
+        <div class="actbox">
+          <div class="actinput-wrap">
+            <textarea class="actinput" id="mc-comentario-input" placeholder="Escreva um comentário... use @ para mencionar alguém" oninput="actInputHandler(this)"></textarea>
+            <button class="btn btnp actsend" id="mc-comentario-btn" onclick="enviarComentario('${c.id}')">Comentar</button>
+          </div>
+          <div class="actfeed" id="mc-atividade-feed"><div class="fhint" style="text-align:center;padding:14px 0">Carregando...</div></div>
+        </div>
       </div>
-    </div>`,true);
+    </div>
+    </div>`);
   mcRecalcBox(c.valor_beneficio_esperado,c.valor_honorarios);
   carregarAnexos(c.id);
   renderAtividadeFeed(c.id);
+}
+function entregaBadgeHtml(d){
+  if(!d)return'<span class="fhint">Sem data de entrega definida</span>';
+  const dias=dVenc(d);
+  let cls='ent-ok',txt='Entrega em '+fD(d);
+  if(dias<0){cls='ent-late';txt='Venceu em '+fD(d)+' · '+Math.abs(dias)+'d atrás';}
+  else if(dias===0){cls='ent-soon';txt='Entrega hoje, '+fD(d);}
+  else if(dias<=3){cls='ent-soon';txt='Entrega em '+fD(d)+' · faltam '+dias+'d';}
+  return`<span class="ent ent-lg ${cls}">◷ ${txt}</span>`;
+}
+function mcEntregaChange(){
+  const el=$('mc-entrega-top');if(el)el.innerHTML=entregaBadgeHtml($('mc-entrega').value);
+}
+function mcChipsHtml(){
+  if(!mcEtqSelAtual.length)return'<span class="fhint">Nenhuma etiqueta</span>';
+  return mcEtqSelAtual.map(id=>{const t=ETQ.find(x=>x.id===id);return t?`<span class="chip" style="background:${escA(t.cor)}">${esc(t.nome)}</span>`:'';}).join('');
+}
+function mcTogEtqPicker(){const p=$('mc-etq-picker');if(p)p.classList.toggle('h');}
+function mcToggleEtq(id){
+  const idx=mcEtqSelAtual.indexOf(id);
+  if(idx>=0)mcEtqSelAtual.splice(idx,1);else mcEtqSelAtual.push(id);
+  const chips=$('mc-etq-chips');
+  if(chips)chips.innerHTML=mcChipsHtml()+'<button class="etp-add" onclick="mcTogEtqPicker()">+ Etiqueta</button>';
+  const opt=document.querySelector(`.etp-opt[data-etq="${id}"] .etp-check`);
+  if(opt)opt.textContent=mcEtqSelAtual.includes(id)?'✓':'';
 }
 function mcRecalc(veioHonorario){
   const vb=m2f($('mc-vb'));
@@ -1122,12 +1263,13 @@ async function salvarCardCliente(id){
     lista_id:listaId,
     data_entrega:$('mc-entrega').value||null,
     data_nascimento_bebe:$('mc-dn').value||null,
+    data_saida_emprego:$('mc-ds').value||null,
     valor_beneficio_esperado:m2f($('mc-vb'))||null,
     valor_honorarios:m2f($('mc-vh'))||null,
     observacoes:$('mc-obs').value.trim()||null,
     atualizado_em:new Date().toISOString()
   };
-  const etqSel=[...document.querySelectorAll('#modalbox .ett.on')].map(e=>e.getAttribute('data-etq'));
+  const etqSel=mcEtqSelAtual.slice();
   const btn=$('mc-btn-salvar');btn.disabled=true;btn.textContent='Salvando...';
   const{error}=await sb.from('crm_clientes').update(payload).eq('id',id);
   if(error){toast('Erro ao salvar: '+error.message,'er');btn.disabled=false;btn.textContent='Salvar';return;}
@@ -1236,7 +1378,7 @@ async function pageCliente(id){
         <div class="fld"><label>CPF</label><input type="text" id="f-cpf" inputmode="numeric" placeholder="000.000.000-00" value="${escA(c&&c.cpf)}" oninput="cpfMask(this)"/></div>
         <div class="fld"><label>Telefone / WhatsApp</label><input type="text" id="f-tel" value="${escA(c&&c.telefone_principal)}"/></div>
         <div class="fld"><label>Canal WhatsApp</label><select id="f-canal"><option value="">— selecione —</option>${optCanal}</select></div>
-        <div class="fld"><label>Como chegou ao escritório</label><select id="f-origem"><option value="">— selecione —</option>${optOrig}</select></div>
+        <div class="fld"><label>Origem</label><select id="f-origem"><option value="">— selecione —</option>${optOrig}</select></div>
         <div class="fld"><label>Data de nascimento do bebê</label><input type="date" id="f-dn" value="${(c&&c.data_nascimento_bebe)||''}"/></div>
         <div class="fld"><label>Link do Trello</label><input type="url" id="f-trello" placeholder="https://trello.com/c/..." value="${escA(c&&c.trello_url)}"/></div>
       </div>

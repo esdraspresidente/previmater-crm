@@ -424,6 +424,12 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .etp-row:hover .etp-bar{filter:brightness(1.06);}
 .etp-novo{margin-bottom:10px;}
 .etp-novo.h{display:none;}
+.gb-item{display:flex;flex-direction:column;gap:3px;padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--border);border-radius:8px;}
+.gb-item:hover{background:var(--bg);}
+.gb-nome{font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:7px;}
+.gb-meta{font-size:11.5px;color:var(--text3);}
+.gb-arq{background:#8A8F8F;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:8px;text-transform:uppercase;letter-spacing:.04em;}
+.gb-arqbanner{display:flex;align-items:center;gap:12px;justify-content:space-between;background:#F3F0E8;border:1px solid #E3D9BE;color:#7A6A32;font-size:12px;font-weight:600;padding:9px 13px;border-radius:9px;margin-bottom:14px;}
 .etp-newbtn{width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text2);font-size:12px;font-weight:700;padding:9px;border-radius:9px;cursor:pointer;font-family:inherit;}
 .etp-newbtn.h{display:none;}
 .etp-newbtn:hover{border-color:var(--teal);color:var(--teal);}
@@ -454,6 +460,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
       <div><div class="sblt">PreviMater</div><div class="sbls">CRM</div></div>
     </div>
     <button id="notifbtn" class="nbtn h" onclick="abrirNotificacoes()" title="Notificações">🔔<span id="notifbadge" class="nbadge"></span></button>
+    <button class="nbtn" onclick="abrirBuscaGlobal()" title="Buscar cliente">🔍</button>
     </div>
     <div class="sbn" id="sbnav"></div>
     <div class="sbf">
@@ -473,6 +480,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <button id="notifbtnm" class="nbtn h" onclick="abrirNotificacoes()" title="Notificações">🔔<span id="notifbadgem" class="nbadge"></span></button>
+        <button class="nbtn" onclick="abrirBuscaGlobal()" title="Buscar cliente">🔍</button>
         <button class="bnew" style="padding:7px 13px;font-size:12px" onclick="location.hash='#/cliente/novo'">+ Novo</button>
       </div>
     </div>
@@ -1290,6 +1298,7 @@ function renderCardClienteModal(c,etqSel,listas){
     <button class="mbc" onclick="fecharModal()">×</button>
     <input type="text" id="mc-nome" class="mctit" value="${escA(c.nome_completo)}"/>
     <div class="mbs">Cliente desde ${fD(c.criado_em?c.criado_em.slice(0,10):null)}</div>
+    ${c.arquivado_em?`<div class="gb-arqbanner"><span>📦 Este cartão foi arquivado automaticamente (30 dias parado em Finalizado)</span><button class="btn btns" style="padding:5px 12px;font-size:11.5px;flex-shrink:0" onclick="reativarCliente('${c.id}')">Reativar</button></div>`:''}
 
     <div class="mcetq" id="mc-etq-wrap">
       <div class="etp-sel" id="mc-etq-chips">${mcChipsHtml()}<button class="etp-add etq-trigger" onclick="mcTogEtqPicker(this)">+ Etiqueta</button></div>
@@ -1394,6 +1403,66 @@ function mcEntregaChange(){
 function mcBloqueioChange(){
   const el=$('mc-bloqueio-top');if(el)el.innerHTML=bloqueioBadgeHtml($('mc-bloqueio').value);
 }
+// ============================================================
+// BUSCA GLOBAL — inclui clientes arquivados, com aviso na tela
+// ============================================================
+let gbTimer=null;
+function abrirBuscaGlobal(){
+  abrirModal(`
+    <button class="mbc" onclick="fecharModal()">×</button>
+    <div class="mctit" style="margin-bottom:14px">🔍 Buscar cliente</div>
+    <input type="text" id="gb-input" class="etp-search" style="width:100%;margin-bottom:14px" placeholder="Nome, telefone, CPF, observações..." oninput="globalBuscaInput(this.value)"/>
+    <div id="gb-resultados"><div class="fhint" style="text-align:center;padding:14px 0">Busca em todos os quadros, inclusive clientes arquivados.</div></div>
+  `);
+  setTimeout(()=>{const i=$('gb-input');if(i)i.focus();},50);
+}
+function globalBuscaInput(valor){
+  clearTimeout(gbTimer);
+  const termo=(valor||'').trim();
+  const alvo=$('gb-resultados');
+  if(!alvo)return;
+  if(termo.length<2){
+    alvo.innerHTML='<div class="fhint" style="text-align:center;padding:14px 0">Digite ao menos 2 letras.</div>';
+    return;
+  }
+  alvo.innerHTML='<div class="fhint" style="text-align:center;padding:14px 0">Buscando...</div>';
+  gbTimer=setTimeout(()=>executarBuscaGlobal(termo),300);
+}
+async function executarBuscaGlobal(termo){
+  const alvo=$('gb-resultados');
+  if(!alvo)return;
+  const escQ=v=>String(v).replace(/"/g,'\\"');
+  const digits=termo.replace(/\D/g,'');
+  const conds=[
+    `nome_completo.ilike."%${escQ(termo)}%"`,
+    `telefone_principal.ilike."%${escQ(termo)}%"`,
+    `cpf.ilike."%${escQ(termo)}%"`,
+    `observacoes.ilike."%${escQ(termo)}%"`,
+    `trello_url.ilike."%${escQ(termo)}%"`
+  ];
+  if(digits.length>=3)conds.push(`telefone_chave.ilike."%${digits}%"`);
+  const{data,error}=await sb.from('crm_clientes')
+    .select('id,nome_completo,telefone_principal,quadro,arquivado_em')
+    .or(conds.join(','))
+    .order('nome_completo')
+    .limit(25);
+  if(!$('gb-resultados')||$('gb-input')&&$('gb-input').value.trim()!==termo)return;
+  if(error){alvo.innerHTML='<div class="fhint" style="text-align:center;padding:14px 0">Erro ao buscar: '+esc(error.message)+'</div>';return;}
+  if(!data||!data.length){alvo.innerHTML='<div class="fhint" style="text-align:center;padding:14px 0">Nada encontrado</div>';return;}
+  alvo.innerHTML=data.map(c=>`
+    <div class="gb-item" onclick="abrirCardCliente('${c.id}')">
+      <div class="gb-nome">${esc(c.nome_completo)}${c.arquivado_em?'<span class="gb-arq">Arquivado</span>':''}</div>
+      <div class="gb-meta">${QUADROS[c.quadro]?QUADROS[c.quadro].rotulo:(c.quadro||'—')}${c.telefone_principal?' · '+esc(c.telefone_principal):''}</div>
+    </div>`).join('');
+}
+async function reativarCliente(id){
+  if(!confirm('Reativar esta cliente? Ela volta a aparecer no quadro Financeiro.'))return;
+  const{error}=await sb.from('crm_clientes').update({arquivado_em:null}).eq('id',id);
+  if(error){toast('Erro ao reativar','er');return;}
+  toast('Cliente reativada','ok');
+  abrirCardCliente(id);
+}
+
 function mcChipsHtml(){
   if(!mcEtqSelAtual.length)return'<span class="fhint">Nenhuma etiqueta</span>';
   return mcEtqSelAtual.map(id=>{const t=ETQ.find(x=>x.id===id);return t?`<span class="chip" style="background:${escA(t.cor)}">${esc(t.nome)}</span>`:'';}).join('');

@@ -422,7 +422,10 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .etp-row input{width:16px;height:16px;flex-shrink:0;accent-color:var(--teal);cursor:pointer;}
 .etp-bar{flex:1;padding:9px 12px;border-radius:6px;font-size:12.5px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.18);transition:filter .1s;}
 .etp-row:hover .etp-bar{filter:brightness(1.06);}
+.etp-novo{margin-bottom:10px;}
+.etp-novo.h{display:none;}
 .etp-newbtn{width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text2);font-size:12px;font-weight:700;padding:9px;border-radius:9px;cursor:pointer;font-family:inherit;}
+.etp-newbtn.h{display:none;}
 .etp-newbtn:hover{border-color:var(--teal);color:var(--teal);}
 </style>
 </head>
@@ -933,9 +936,10 @@ async function pageQuadro(q){
   const pc=$('pc');marcarNav(q);
   if(!QUADROS[q]||!QPERM.includes(q)){pc.innerHTML='<div class="emp"><div class="empt">Você não tem acesso a este quadro</div></div>';return;}
   pc.innerHTML=`<div class="pgh"><div><div class="pgt">${QUADROS[q].rotulo}</div><div class="pgs">Carregando...</div></div></div>`;
+  if(q==='financeiro')await sb.rpc('arquivar_finalizados_antigos');
   const[{data:listas},{data:clientes,error}]=await Promise.all([
     sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem'),
-    sb.from('crm_clientes').select('id,nome_completo,lista_id,posicao,telefone_principal,data_nascimento_bebe,data_entrega,valor_beneficio_esperado,valor_honorarios,crm_clientes_etiquetas(etiqueta_id)').eq('quadro',q).order('posicao')
+    sb.from('crm_clientes').select('id,nome_completo,lista_id,posicao,telefone_principal,data_nascimento_bebe,data_entrega,data_desbloqueio_inss,valor_beneficio_esperado,valor_honorarios,crm_clientes_etiquetas(etiqueta_id)').eq('quadro',q).is('arquivado_em',null).order('posicao')
   ]);
   if(error){pc.innerHTML=`<div class="emp"><div class="empt">Erro ao carregar</div>${esc(error.message)}</div>`;return;}
   const L=listas||[],C=clientes||[];
@@ -1017,6 +1021,7 @@ function cardHtml(c){
       ${meta.length?`<div class="kcm">${meta.join(' · ')}</div>`:''}
       ${finHtml||(c.valor_honorarios?`<div class="kcm"><span class="kcv">${R(c.valor_honorarios)}</span></div>`:'')}
       ${entregaHtml(c.data_entrega)}
+      ${bloqueioHtml(c.data_desbloqueio_inss)}
       ${chips?`<div class="kce">${chips}</div>`:''}
     </div>`;
 }
@@ -1029,6 +1034,22 @@ function entregaHtml(d){
   else if(dias===0){cls='ent-soon';txt='entrega hoje';}
   else if(dias<=3){cls='ent-soon';txt=fD(d)+' · em '+dias+'d';}
   return`<div class="kcm"><span class="ent ${cls}">◷ ${txt}</span></div>`;
+}
+function bloqueioHtml(d){
+  if(!d)return'';
+  const dias=dVenc(d);
+  let cls='ent-ok',txt='desbloqueia '+fD(d);
+  if(dias<=0){cls='ent-late';txt=dias===0?'desbloqueado hoje':'desbloqueado há '+Math.abs(dias)+'d';}
+  else if(dias<=3){cls='ent-soon';txt='desbloqueia em '+dias+'d';}
+  return`<div class="kcm"><span class="ent ${cls}">🔒 ${txt}</span></div>`;
+}
+function bloqueioBadgeHtml(d){
+  if(!d)return'<span class="fhint">Sem bloqueio INSS registrado</span>';
+  const dias=dVenc(d);
+  let cls='ent-ok',txt='Bloqueado até '+fD(d);
+  if(dias<=0){cls='ent-late';txt=dias===0?'Desbloqueado hoje, '+fD(d):'Desbloqueado em '+fD(d)+' · há '+Math.abs(dias)+'d';}
+  else if(dias<=3){cls='ent-soon';txt='Desbloqueia em '+fD(d)+' · faltam '+dias+'d';}
+  return`<span class="ent ent-lg ${cls}">🔒 ${txt}</span>`;
 }
 function ligarDragDrop(){
   document.querySelectorAll('.kc').forEach(card=>{
@@ -1276,7 +1297,19 @@ function renderCardClienteModal(c,etqSel,listas){
         <div class="etp-phead">Etiquetas<button class="etp-xclose" onclick="mcTogEtqPicker()">×</button></div>
         <input class="etp-search" type="text" placeholder="Buscar etiquetas..." oninput="mcFiltrarEtq(this.value)"/>
         <div class="etp-list" id="mc-etq-list">${etqPicker}</div>
-        <button class="etp-newbtn" onclick="location.hash='#/etiquetas'">+ Gerenciar etiquetas</button>
+        <div class="etp-novo h" id="mc-etq-novo">
+          <input class="etp-search" type="text" id="mc-etq-novo-nome" placeholder="Nome da nova etiqueta" style="margin-bottom:8px"/>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <input type="color" class="inp-cor" id="mc-etq-novo-cor" value="#0A9396"/>
+            <span style="font-size:11.5px;color:var(--text3)">Cor da etiqueta</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btns" style="flex:1;padding:8px" onclick="mcFecharCriarEtq()">Cancelar</button>
+            <button class="btn btnp" style="flex:1;padding:8px" onclick="mcCriarEtqInline()">Criar</button>
+          </div>
+        </div>
+        <button class="etp-newbtn" id="mc-etq-newbtn" onclick="mcAbrirCriarEtq()">+ Criar etiqueta</button>
+        <button class="etp-newbtn" style="margin-top:6px;background:none;border:none;color:var(--text3);text-decoration:underline" onclick="location.hash='#/etiquetas'">Editar ou excluir etiquetas</button>
       </div>
     </div>
 
@@ -1303,6 +1336,8 @@ function renderCardClienteModal(c,etqSel,listas){
           <div class="fld"><label>Origem</label><select id="mc-origem">${optOrig}</select></div>
           <div class="fld"><label>DN do bebê</label><input type="date" id="mc-dn" value="${c.data_nascimento_bebe||''}"/></div>
           <div class="fld"><label>DS (saída do último emprego)</label><input type="date" id="mc-ds" value="${c.data_saida_emprego||''}"/></div>
+          <div class="fld"><label>Bloqueio INSS até</label><input type="date" id="mc-bloqueio" value="${c.data_desbloqueio_inss||''}" onchange="mcBloqueioChange()"/>
+            <div id="mc-bloqueio-top" style="margin-top:6px">${bloqueioBadgeHtml(c.data_desbloqueio_inss)}</div></div>
           <div class="fld"><label>Benefício (R$)</label><input type="text" id="mc-vb" data-money="" inputmode="decimal" value="${floatToMoney(c.valor_beneficio_esperado)}" onchange="mcRecalc()"/></div>
           <div class="fld"><label>Honorários (R$)</label><input type="text" id="mc-vh" data-money="" inputmode="decimal" value="${floatToMoney(c.valor_honorarios)}" onchange="mcRecalc(true)"/></div>
         </div>
@@ -1356,6 +1391,9 @@ function entregaBadgeHtml(d){
 function mcEntregaChange(){
   const el=$('mc-entrega-top');if(el)el.innerHTML=entregaBadgeHtml($('mc-entrega').value);
 }
+function mcBloqueioChange(){
+  const el=$('mc-bloqueio-top');if(el)el.innerHTML=bloqueioBadgeHtml($('mc-bloqueio').value);
+}
 function mcChipsHtml(){
   if(!mcEtqSelAtual.length)return'<span class="fhint">Nenhuma etiqueta</span>';
   return mcEtqSelAtual.map(id=>{const t=ETQ.find(x=>x.id===id);return t?`<span class="chip" style="background:${escA(t.cor)}">${esc(t.nome)}</span>`:'';}).join('');
@@ -1377,6 +1415,36 @@ function mcFiltrarEtq(termo){
   document.querySelectorAll('#mc-etq-list .etp-row').forEach(r=>{
     r.style.display=r.getAttribute('data-nome').includes(t)?'flex':'none';
   });
+}
+function mcAbrirCriarEtq(){
+  const nv=$('mc-etq-novo'),bt=$('mc-etq-newbtn');
+  if(nv)nv.classList.remove('h');
+  if(bt)bt.classList.add('h');
+  const inp=$('mc-etq-novo-nome');
+  if(inp){inp.value='';inp.focus();}
+  const cor=$('mc-etq-novo-cor');if(cor)cor.value='#0A9396';
+}
+function mcFecharCriarEtq(){
+  const nv=$('mc-etq-novo'),bt=$('mc-etq-newbtn');
+  if(nv)nv.classList.add('h');
+  if(bt)bt.classList.remove('h');
+}
+async function mcCriarEtqInline(){
+  const nome=$('mc-etq-novo-nome').value.trim(),cor=$('mc-etq-novo-cor').value;
+  if(!nome){toast('Digite o nome da etiqueta','er');return;}
+  const{data,error}=await sb.from('crm_etiquetas').insert({nome,cor}).select().single();
+  if(error){toast('Erro ao criar: '+error.message,'er');return;}
+  ETQ.push(data);
+  mcEtqSelAtual.push(data.id);
+  const lista=$('mc-etq-list');
+  if(lista){
+    const vazio=lista.querySelector('.fhint');if(vazio)vazio.remove();
+    lista.insertAdjacentHTML('beforeend',`<label class="etp-row" data-nome="${escA(nome.toLowerCase())}"><input type="checkbox" checked onchange="mcToggleEtq('${data.id}')"/><span class="etp-bar" style="background:${escA(cor)}">${esc(nome)}</span></label>`);
+  }
+  const chips=$('mc-etq-chips');
+  if(chips)chips.innerHTML=mcChipsHtml()+'<button class="etp-add etq-trigger" onclick="mcTogEtqPicker(this)">+ Etiqueta</button>';
+  mcFecharCriarEtq();
+  toast('Etiqueta criada e aplicada a esta cliente','ok');
 }
 function mcRecalc(veioHonorario){
   const vb=m2f($('mc-vb'));
@@ -1413,6 +1481,7 @@ async function salvarCardCliente(id){
     data_entrega:$('mc-entrega').value||null,
     data_nascimento_bebe:$('mc-dn').value||null,
     data_saida_emprego:$('mc-ds').value||null,
+    data_desbloqueio_inss:$('mc-bloqueio').value||null,
     valor_beneficio_esperado:m2f($('mc-vb'))||null,
     valor_honorarios:m2f($('mc-vh'))||null,
     observacoes:$('mc-obs').value.trim()||null,
@@ -1546,6 +1615,8 @@ async function pageCliente(id){
         <div class="fld"><label>Data de saída do emprego (DS)</label><input type="date" id="f-ds" value="${(c&&c.data_saida_emprego)||''}"/></div>
         <div class="fld"><label>Data de entrega</label><input type="date" id="f-entrega" value="${(c&&c.data_entrega)||''}"/>
           <div class="fhint">Aparece no card e fica em destaque quando estiver perto ou vencida.</div></div>
+        <div class="fld"><label>Bloqueio INSS até</label><input type="date" id="f-bloqueio" value="${(c&&c.data_desbloqueio_inss)||''}"/>
+          <div class="fhint">Aparece no card e muda de cor quando o desbloqueio chega.</div></div>
         <div class="fld"><label>Valor do benefício (R$)</label><input type="text" id="f-vb" data-money="" inputmode="decimal" value="${floatToMoney(c&&c.valor_beneficio_esperado)}" onchange="recalcHonorariosCliente()"/></div>
         <div class="fld"><label>Honorários (R$)</label><input type="text" id="f-vh" data-money="" inputmode="decimal" value="${floatToMoney(c&&c.valor_honorarios)}" onchange="renderCaixaCliente()"/>
           <div class="fhint">Calculado como 30% do benefício. Pode sobrescrever.</div></div>
@@ -1600,6 +1671,7 @@ async function salvarCliente(id){
     data_nascimento_bebe:$('f-dn').value||null,
     data_saida_emprego:$('f-ds').value||null,
     data_entrega:$('f-entrega').value||null,
+    data_desbloqueio_inss:$('f-bloqueio').value||null,
     valor_beneficio_esperado:m2f($('f-vb'))||null,
     valor_honorarios:m2f($('f-vh'))||null,
     observacoes:$('f-obs').value.trim()||null,

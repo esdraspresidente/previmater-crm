@@ -422,6 +422,36 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .chatsend textarea{width:100%;background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:12px 15px;font-size:15px;font-family:inherit;resize:vertical;min-height:58px;color:var(--text);}
 .chatsend textarea:focus{outline:none;border-color:var(--teal);}
 .chataviso{font-size:11.5px;color:var(--text3);line-height:1.45;margin-top:8px;}
+
+/* CAIXA DE ENTRADA GERAL */
+.inbwrap{display:grid;grid-template-columns:300px 1fr 280px;height:calc(100vh - 122px);background:var(--white);border:1.5px solid var(--border);border-radius:16px;overflow:hidden;}
+@media(max-width:980px){.inbwrap{grid-template-columns:260px 1fr;}.inb-panel{display:none;}}
+@media(max-width:700px){.inbwrap{grid-template-columns:1fr;height:auto;}.inb-list{max-height:340px;}.inb-panel{display:none;}}
+.inb-list{border-right:1.5px solid var(--border);display:flex;flex-direction:column;min-width:0;}
+.inb-search{padding:14px;border-bottom:1.5px solid var(--border);flex-shrink:0;}
+.inb-search input{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:9px 13px;font-size:13.5px;font-family:inherit;color:var(--text);}
+.inb-search input:focus{outline:none;border-color:var(--teal);}
+.inb-items{flex:1;overflow-y:auto;}
+.inb-item{display:flex;align-items:center;gap:11px;padding:13px 15px;cursor:pointer;border-bottom:1px solid var(--border2);transition:background .1s;}
+.inb-item:hover{background:var(--bg);}
+.inb-item.a{background:var(--teal-l);}
+.inb-item .av{width:38px;height:38px;font-size:14px;flex-shrink:0;}
+.inb-item-body{flex:1;min-width:0;}
+.inb-item-nome{font-size:13.5px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;}
+.inb-item-prev{font-size:12px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;}
+.inb-item-time{font-size:10.5px;color:var(--text3);flex-shrink:0;white-space:nowrap;}
+.inb-lead-tag{font-size:9px;font-weight:800;text-transform:uppercase;background:#F3F4F6;color:#6B7280;padding:2px 6px;border-radius:6px;}
+.inb-chat{display:flex;flex-direction:column;min-width:0;}
+.inb-chat-head{display:flex;align-items:center;gap:12px;padding:16px 22px;border-bottom:1.5px solid var(--border);flex-shrink:0;}
+.inb-chat-head .av{width:36px;height:36px;font-size:14px;}
+.inb-chat-nome{font-size:15.5px;font-weight:800;color:var(--text);}
+.inb-chat-body{flex:1;overflow-y:auto;padding:20px 22px;}
+.inb-chat-body .chatfeed{max-height:none;}
+.inb-chat-send{padding:16px 22px;border-top:1.5px solid var(--border);flex-shrink:0;}
+.inb-panel{padding:20px;overflow-y:auto;}
+.inb-panel-title{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;}
+.inb-panel-chips{display:flex;flex-wrap:wrap;gap:7px;}
+.inb-cta{display:block;text-align:center;margin-top:14px;font-size:12.5px;font-weight:700;color:var(--teal);cursor:pointer;text-decoration:none;}
 .mcquickwrap{position:relative;}
 .mcquick{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 22px;}
 .mvpop{position:fixed;background:var(--white);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shl);width:300px;max-height:65vh;overflow-y:auto;z-index:210;padding:16px;}
@@ -702,7 +732,9 @@ function mostrarApp(){
 }
 function temFinanceiro(){return QPERM.includes('financeiro');}
 function montarSidebar(){
-  let h='<div class="snl">Quadros</div>';
+  let h='<div class="snl">Mensagens</div>';
+  h+=`<button class="ni" id="nav-inbox" onclick="location.hash='#/inbox'"><div class="nic">💬</div>Caixa de Entrada</button>`;
+  h+='<div class="snl">Quadros</div>';
   QPERM.forEach(q=>{h+=`<button class="ni" id="nav-${q}" onclick="location.hash='#/quadro/${q}'"><div class="nic">${QUADROS[q].icone}</div>${QUADROS[q].rotulo}</button>`;});
   if(temFinanceiro()){
     h+='<div class="snl">Recebimentos</div>';
@@ -741,6 +773,7 @@ document.addEventListener('keydown',e=>{
 },true);
 function route(){
   if(!U)return;
+  if(typeof pararInboxPoll==='function')pararInboxPoll();
   const r=(location.hash.slice(1)||'/').split('?')[0];
   if(r==='/'){location.hash='#/quadro/'+(QPERM[0]||'comercial');return;}
   let m;
@@ -752,6 +785,7 @@ function route(){
   if(r==='/dashboard')return pageDash();
   if(r==='/recebimentos')return pageRec();
   if(r==='/recebimento/novo')return pageNovoRec();
+  if(r==='/inbox')return pageInbox();
   $('pc').innerHTML='<div class="emp"><div class="empt">Tela não encontrada</div></div>';
 }
 
@@ -2586,6 +2620,188 @@ async function criarInstancia(){
   const{error}=await sb.from('crm_instancias_whatsapp').insert({numero_telefone:num,canal,teto_diario_atual:teto,disparos_hoje:0,status:'ativo'});
   if(error){toast('Erro ao adicionar','er');return;}
   toast('Número adicionado','ok');pageCampanha();
+}
+
+// ============================================================
+// CAIXA DE ENTRADA GERAL — todas as conversas, sem filtro de card
+// ============================================================
+let IB_CONVS=[],ibSelId=null,ibListTimer=null,ibChatTimer=null,ibChatAssinatura='',ibFiltroTxt='';
+function pararInboxPoll(){
+  if(ibListTimer){clearInterval(ibListTimer);ibListTimer=null;}
+  pararInboxChatPoll();
+}
+async function pageInbox(){
+  const pc=$('pc');marcarNav('inbox');
+  ibSelId=null;ibChatAssinatura='';ibFiltroTxt='';
+  pc.innerHTML=`<div class="pgh"><div><div class="pgt">Caixa de Entrada</div><div class="pgs">Todas as conversas de WhatsApp, de qualquer cliente ou contato novo</div></div></div>
+    <div class="inbwrap">
+      <div class="inb-list">
+        <div class="inb-search"><input type="text" id="ib-busca" placeholder="Buscar por nome..." oninput="ibFiltrar(this.value)"/></div>
+        <div class="inb-items" id="ib-items"><div class="fhint" style="text-align:center;padding:20px 0">Carregando...</div></div>
+      </div>
+      <div class="inb-chat" id="ib-chat">
+        <div class="emp" style="margin:auto"><div class="empi">💬</div><div class="empt">Selecione uma conversa</div></div>
+      </div>
+      <div class="inb-panel" id="ib-panel"></div>
+    </div>`;
+  await ibCarregarLista();
+  pararInboxPoll();
+  ibListTimer=setInterval(()=>{if(location.hash.slice(1)!=='/inbox'){pararInboxPoll();return;}ibCarregarLista(true);},20000);
+}
+async function ibCarregarLista(silencioso){
+  const cont=$('ib-items');
+  if(!cont)return;
+  const{data,error}=await sb.from('crm_mensagens').select('*').order('criado_em',{ascending:false}).limit(500);
+  if(error){if(!silencioso)cont.innerHTML='<div class="fhint" style="text-align:center;padding:20px 0">Erro ao carregar: '+esc(error.message)+'</div>';return;}
+  const msgs=data||[];
+  const porChave={},ordem=[];
+  msgs.forEach(m=>{
+    const chave=m.cliente_id?('c:'+m.cliente_id):('l:'+(m.telefone_chave||m.telefone_bruto||'sem-numero'));
+    if(!porChave[chave]){porChave[chave]=m;ordem.push(chave);}
+  });
+  const idsClientes=[...new Set(msgs.filter(m=>m.cliente_id).map(m=>m.cliente_id))];
+  let clientesMap={};
+  if(idsClientes.length){
+    const{data:cl}=await sb.from('crm_clientes').select('id,nome_completo,canal_whatsapp,telefone_principal').in('id',idsClientes);
+    (cl||[]).forEach(c=>clientesMap[c.id]=c);
+  }
+  IB_CONVS=ordem.map(chave=>{
+    const ultima=porChave[chave];
+    const cliente=ultima.cliente_id?clientesMap[ultima.cliente_id]:null;
+    return{
+      chave,clienteId:ultima.cliente_id||null,
+      nome:cliente?cliente.nome_completo:(ultima.telefone_bruto||ultima.telefone_chave||'Contato desconhecido'),
+      canal:cliente?cliente.canal_whatsapp:ultima.canal,
+      telefoneChave:ultima.telefone_chave||null,
+      lead:!ultima.cliente_id,
+      ultimaMsg:ultima
+    };
+  });
+  ibRenderLista();
+  if(ibSelId){
+    const ainda=IB_CONVS.find(c=>c.chave===ibSelId);
+    if(ainda)ibCarregarChat(ainda,true);
+  }
+}
+function ibRenderLista(){
+  const cont=$('ib-items');
+  if(!cont)return;
+  const termo=(ibFiltroTxt||'').toLowerCase();
+  const lista=termo?IB_CONVS.filter(c=>(c.nome||'').toLowerCase().includes(termo)):IB_CONVS;
+  if(!lista.length){cont.innerHTML='<div class="fhint" style="text-align:center;padding:20px 0">Nenhuma conversa ainda.</div>';return;}
+  cont.innerHTML=lista.map(c=>{
+    const m=c.ultimaMsg;
+    let prev=m.texto?m.texto:(m.tipo&&m.tipo!=='texto'?'📎 '+(m.midia_nome||m.tipo):'');
+    if(m.direcao==='saida')prev=(m.autor_tipo==='bot'?'Samara: ':'Você: ')+prev;
+    return`<div class="inb-item ${c.chave===ibSelId?'a':''}" onclick="ibSelecionar('${escA(c.chave)}')">
+      <div class="av" style="background:${avC(c.nome)}">${avL(c.nome)}</div>
+      <div class="inb-item-body">
+        <div class="inb-item-nome">${esc(c.nome)}${c.lead?'<span class="inb-lead-tag">novo contato</span>':''}</div>
+        <div class="inb-item-prev">${esc(prev)}</div>
+      </div>
+      <div class="inb-item-time">${tempoRel(m.criado_em)}</div>
+    </div>`;
+  }).join('');
+}
+function ibFiltrar(v){ibFiltroTxt=v;ibRenderLista();}
+function ibSelecionar(chave){
+  const c=IB_CONVS.find(x=>x.chave===chave);
+  if(!c)return;
+  ibSelId=chave;ibChatAssinatura='';
+  ibRenderLista();
+  ibCarregarChat(c);
+  ibRenderPainel(c);
+  pararInboxChatPoll();
+  ibChatTimer=setInterval(()=>{
+    if(location.hash.slice(1)!=='/inbox'||!ibSelId){pararInboxChatPoll();return;}
+    const atual=IB_CONVS.find(x=>x.chave===ibSelId);
+    if(atual)ibCarregarChat(atual,true);
+  },15000);
+}
+function ibRenderPainel(c){
+  const p=$('ib-panel');
+  if(!p)return;
+  if(c.lead){
+    p.innerHTML=`<div class="inb-panel-title">Contato</div><div class="fhint">Este número ainda não é uma cliente cadastrada no CRM.</div>`;
+    return;
+  }
+  sb.from('crm_clientes').select('*,crm_clientes_etiquetas(etiqueta_id)').eq('id',c.clienteId).single().then(({data:cli})=>{
+    if(!cli||ibSelId!==c.chave)return;
+    const etqSel=(cli.crm_clientes_etiquetas||[]).map(e=>e.etiqueta_id);
+    const chips=etqSel.map(id=>{const t=ETQ.find(x=>x.id===id);return t?`<span class="chip" style="background:${escA(t.cor)}">${esc(t.nome)}</span>`:'';}).join('')||'<div class="fhint">Sem etiquetas</div>';
+    p.innerHTML=`<div class="inb-panel-title">Etiquetas</div><div class="inb-panel-chips">${chips}</div>
+      <a class="inb-cta" onclick="abrirCardCliente('${cli.id}')">Abrir cartão completo →</a>`;
+  });
+}
+async function ibCarregarChat(c,silencioso){
+  const box=$('ib-chat');
+  if(!box)return;
+  if(!silencioso){
+    box.innerHTML=`<div class="inb-chat-head"><div class="av" style="background:${avC(c.nome)}">${avL(c.nome)}</div>
+        <div class="inb-chat-nome">${esc(c.nome)}</div>${chatBadgeHtml(c.canal)}</div>
+      <div class="inb-chat-body"><div id="ib-chat-janela"></div><div class="chatfeed" id="ib-chat-feed"><div class="fhint" style="text-align:center;padding:20px 0">Carregando...</div></div></div>
+      <div class="inb-chat-send">
+        <textarea id="ib-chat-input" placeholder="Escreva uma mensagem..."></textarea>
+        <button class="btn btnp" style="width:100%;margin-top:9px" id="ib-chat-btn" onclick="ibEnviarMensagem()">Enviar</button>
+        <div class="chataviso" id="ib-chat-aviso"></div>
+      </div>`;
+  }
+  const filtro=c.clienteId?{coluna:'cliente_id',valor:c.clienteId}:{coluna:'telefone_chave',valor:c.telefoneChave};
+  if(!filtro.valor)return;
+  const{data,error}=await sb.from('crm_mensagens').select('*').eq(filtro.coluna,filtro.valor).order('criado_em',{ascending:true}).limit(300);
+  const feed=$('ib-chat-feed');
+  if(!feed)return;
+  if(error){feed.innerHTML='<div class="fhint" style="text-align:center;padding:20px 0">Erro ao carregar a conversa: '+esc(error.message)+'</div>';return;}
+  const msgs=data||[];
+  const assinatura=msgs.length+'|'+(msgs.length?(msgs[msgs.length-1].id||''):'');
+  const jan=$('ib-chat-janela');
+  if(jan)jan.innerHTML=chatJanelaHtml(msgs,c.canal);
+  const av=$('ib-chat-aviso');
+  if(av)av.innerHTML='O envio real ainda não está ligado. A mensagem fica registrada aqui na conversa e sai de verdade quando a API de envio do canal for conectada.';
+  if(silencioso&&assinatura===ibChatAssinatura)return;
+  ibChatAssinatura=assinatura;
+  if(!msgs.length){feed.innerHTML='<div class="fhint" style="text-align:center;padding:20px 0">Nenhuma mensagem ainda.</div>';return;}
+  let html='',diaAnt='';
+  msgs.forEach(m=>{
+    const dia=chatDiaMsg(m);
+    if(dia!==diaAnt){html+=`<div class="chatdia">${esc(dia)}</div>`;diaAnt=dia;}
+    const cls=m.direcao==='entrada'?'chatb-in':(m.autor_tipo==='bot'?'chatb-bot':'chatb-out');
+    const autor=m.direcao==='entrada'?'':(m.autor_tipo==='bot'?'Samara · ':(nomeUsuario(m.usuario_id)?nomeUsuario(m.usuario_id)+' · ':''));
+    const pend=m.status==='pendente_envio'?' · ⏳ não enviada':'';
+    html+=`<div class="chatb ${cls}">${chatCorpoMsg(m)}<span class="chatb-meta">${esc(autor)}${chatHoraMsg(m)}${pend}</span></div>`;
+  });
+  feed.innerHTML=html;
+  feed.scrollTop=feed.scrollHeight;
+}
+function pararInboxChatPoll(){if(ibChatTimer){clearInterval(ibChatTimer);ibChatTimer=null;}}
+async function ibEnviarMensagem(){
+  const c=IB_CONVS.find(x=>x.chave===ibSelId);
+  const inp=$('ib-chat-input');
+  if(!c||!inp)return;
+  const txt=(inp.value||'').trim();
+  if(!txt){toast('Escreva a mensagem primeiro','er');return;}
+  if(!c.canal){toast('Este contato não tem um canal de WhatsApp definido','er');return;}
+  const btn=$('ib-chat-btn');
+  if(btn){btn.disabled=true;btn.textContent='Registrando...';}
+  const{error}=await sb.from('crm_mensagens').insert({
+    cliente_id:c.clienteId,
+    telefone_chave:c.telefoneChave||null,
+    telefone_bruto:c.ultimaMsg?c.ultimaMsg.telefone_bruto:null,
+    canal:c.canal,
+    direcao:'saida',
+    autor_tipo:'humano',
+    usuario_id:U.id,
+    tipo:'texto',
+    texto:txt,
+    status:'pendente_envio',
+    enviada_em:new Date().toISOString()
+  });
+  if(btn){btn.disabled=false;btn.textContent='Enviar';}
+  if(error){toast('Erro ao registrar: '+error.message,'er');return;}
+  inp.value='';
+  ibChatAssinatura='';
+  ibCarregarChat(c);
+  toast('Mensagem registrada na conversa (envio real ainda não ligado)','in');
 }
 </script>
 </body>

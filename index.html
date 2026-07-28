@@ -1538,6 +1538,8 @@ async function mcTogSamara(clienteId,pausada){
   const{error}=await sb.from('crm_clientes').update({samara_pausada:pausada}).eq('id',clienteId);
   if(error){toast('Erro ao salvar: '+error.message,'er');return;}
   toast(pausada?'Samara pausada para esta cliente':'Samara reativada para esta cliente','ok');
+  registrarAtividade(clienteId,pausada?'pausou a Samara para esta cliente':'reativou a Samara para esta cliente');
+  if(mcAbaAtual==='coment')renderAtividadeFeed(clienteId);
 }
 function chatHoraMsg(m){
   const d=new Date(m.enviada_em||m.criado_em);
@@ -2645,6 +2647,9 @@ async function pageInbox(){
       <div class="inb-panel" id="ib-panel"></div>
     </div>`;
   await ibCarregarLista();
+  ibIniciarListaPoll();
+}
+function ibIniciarListaPoll(){
   pararInboxPoll();
   ibListTimer=setInterval(()=>{if(location.hash.slice(1)!=='/inbox'){pararInboxPoll();return;}ibCarregarLista(true);},20000);
 }
@@ -2722,7 +2727,8 @@ function ibRenderPainel(c){
   const p=$('ib-panel');
   if(!p)return;
   if(c.lead){
-    p.innerHTML=`<div class="inb-panel-title">Contato</div><div class="fhint">Este número ainda não é uma cliente cadastrada no CRM.</div>`;
+    p.innerHTML=`<div class="inb-panel-title">Contato</div><div class="fhint" style="margin-bottom:14px">Este número ainda não é uma cliente cadastrada no CRM.</div>
+      <button class="btn btnp" style="width:100%" onclick="ibAbrirCriarCliente('${escA(c.chave)}')">+ Criar cliente a partir deste contato</button>`;
     return;
   }
   sb.from('crm_clientes').select('*,crm_clientes_etiquetas(etiqueta_id)').eq('id',c.clienteId).single().then(({data:cli})=>{
@@ -2802,6 +2808,76 @@ async function ibEnviarMensagem(){
   ibChatAssinatura='';
   ibCarregarChat(c);
   toast('Mensagem registrada na conversa (envio real ainda não ligado)','in');
+}
+
+// ============================================================
+// CRIAR CLIENTE A PARTIR DE UM CONTATO NOVO (lead) NA CAIXA DE ENTRADA
+// Regra: um contato (telefone) nunca pode virar dois cartões.
+// ============================================================
+function ibAbrirCriarCliente(chave){
+  const c=IB_CONVS.find(x=>x.chave===chave);
+  if(!c)return;
+  const optQ=QPERM.map(q=>`<option value="${q}">${QUADROS[q].rotulo}</option>`).join('');
+  pararInboxPoll();
+  abrirModal(`
+    <button class="mbc" onclick="ibCancelarCriarCliente()">×</button>
+    <div class="mbt">Criar cliente a partir deste contato</div>
+    <div class="mbs">O histórico de mensagens já trocadas com este número entra automaticamente no card, na aba Chat.</div>
+    <div class="fld" style="margin-bottom:13px"><label>Nome completo</label><input type="text" id="ibc-nome" placeholder="Nome da cliente"/></div>
+    <div class="fg" style="margin-bottom:13px">
+      <div class="fld"><label>Quadro</label><select id="ibc-quadro" onchange="ibcTrocarQuadro()">${optQ}</select></div>
+      <div class="fld"><label>Lista</label><select id="ibc-lista"><option value="">Carregando...</option></select></div>
+    </div>
+    <div class="fld" style="margin-bottom:20px"><label>Telefone</label><input type="text" id="ibc-tel" value="${escA(c.ultimaMsg.telefone_bruto||c.telefoneChave||'')}"/></div>
+    <div class="brow" style="justify-content:flex-end;gap:9px">
+      <button class="btn btns" onclick="ibCancelarCriarCliente()">Cancelar</button>
+      <button class="btn btnp" id="ibc-btn-criar" onclick="ibConfirmarCriarCliente('${escA(chave)}')">Criar cliente</button>
+    </div>`);
+  ibcTrocarQuadro();
+}
+function ibCancelarCriarCliente(){
+  fecharModal();
+  if(location.hash.slice(1)==='/inbox')ibIniciarListaPoll();
+}
+async function ibcTrocarQuadro(){
+  const sel=$('ibc-lista'),q=$('ibc-quadro');
+  if(!sel||!q)return;
+  const{data}=await sb.from('crm_listas').select('*').eq('quadro',q.value).eq('arquivada',false).order('ordem');
+  sel.innerHTML=(data||[]).map(l=>`<option value="${l.id}">${esc(l.nome)}</option>`).join('')||'<option value="">Nenhuma lista neste quadro</option>';
+}
+async function ibConfirmarCriarCliente(chave){
+  const c=IB_CONVS.find(x=>x.chave===chave);
+  if(!c)return;
+  const nome=($('ibc-nome').value||'').trim();
+  const listaId=$('ibc-lista').value,quadro=$('ibc-quadro').value;
+  const tel=($('ibc-tel').value||'').trim();
+  if(!nome){toast('Digite o nome da cliente','er');return;}
+  if(!listaId){toast('Escolha uma lista','er');return;}
+  const btn=$('ibc-btn-criar');
+  if(btn){btn.disabled=true;btn.textContent='Verificando...';}
+  if(c.telefoneChave){
+    const{data:existente}=await sb.from('crm_clientes').select('id,nome_completo').eq('telefone_chave',c.telefoneChave).limit(1);
+    if(existente&&existente.length){
+      if(btn){btn.disabled=false;btn.textContent='Criar cliente';}
+      const ex=existente[0];
+      if(confirm('Este número já é de uma cliente cadastrada: '+ex.nome_completo+'. Não é possível ter dois cartões para o mesmo contato. Abrir o cartão dela agora?')){
+        fecharModal();abrirCardCliente(ex.id);
+      }else if(location.hash.slice(1)==='/inbox')ibIniciarListaPoll();
+      return;
+    }
+  }
+  if(btn)btn.textContent='Criando...';
+  const{data:novo,error}=await sb.from('crm_clientes').insert({nome_completo:nome,telefone_principal:tel||null,canal_whatsapp:c.canal||null,quadro,lista_id:listaId}).select('id').single();
+  if(error||!novo){if(btn){btn.disabled=false;btn.textContent='Criar cliente';}toast('Erro ao criar cliente: '+(error?error.message:''),'er');return;}
+  let migradas=0;
+  if(c.telefoneChave){
+    const{data:atualizadas}=await sb.from('crm_mensagens').update({cliente_id:novo.id}).eq('telefone_chave',c.telefoneChave).is('cliente_id',null).select('id');
+    migradas=(atualizadas||[]).length;
+  }
+  await registrarAtividade(novo.id,'card criado a partir de uma conversa de WhatsApp'+(migradas?' · '+migradas+' '+(migradas>1?'mensagens importadas':'mensagem importada')+' do histórico':''));
+  toast('Cliente criada a partir da conversa','ok');
+  fecharModal();
+  abrirCardCliente(novo.id);
 }
 </script>
 </body>

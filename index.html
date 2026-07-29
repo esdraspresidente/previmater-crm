@@ -2162,9 +2162,9 @@ function renderLista(){
     if(rfiltro==='inadimplentes'&&s!=='inadimplente')return;
     if(rfiltro==='cancelados'&&s!=='cancelado')return;
     const cid=pCli(p)||p.cliente_nome;
-    if(!mapa[cid])mapa[cid]={nm:p.cliente_nome,cid:pCli(p),ps:[],prox:null,tot:0};
+    if(!mapa[cid])mapa[cid]={nm:p.cliente_nome,cid:pCli(p),ps:[],prox:null,proxVal:0,tot:0};
     mapa[cid].ps.push(p);mapa[cid].tot+=parseFloat(p.valor_honorario||0);
-    if(s==='previsto'||s==='atrasado'){if(!mapa[cid].prox||p.data_vencimento<mapa[cid].prox)mapa[cid].prox=p.data_vencimento;}
+    if(s==='previsto'||s==='atrasado'){if(!mapa[cid].prox||p.data_vencimento<mapa[cid].prox){mapa[cid].prox=p.data_vencimento;mapa[cid].proxVal=parseFloat(p.valor_honorario||0);}}
   });
   let lista=Object.values(mapa).filter(c=>!busca||(c.nm||'').toLowerCase().includes(busca));
   if(ord==='proximo')lista.sort((a,b)=>{if(!a.prox&&!b.prox)return(a.nm||'').localeCompare(b.nm||'');if(!a.prox)return 1;if(!b.prox)return-1;return a.prox.localeCompare(b.prox);});
@@ -2194,7 +2194,7 @@ function renderLista(){
     return`<div class="ccard"><div class="cch" onclick="togCC('${key}')">
       <div class="av" style="background:${avC(c.nm)};width:38px;height:38px">${avL(c.nm)}</div>
       <div class="cci"><div class="ccn">${esc(c.nm)}</div><div class="ccm">${c.ps.length} parcela(s)${c.prox?` · <span style="color:var(--teal);font-weight:600">📅 ${fD(c.prox)}</span>`:''}${ind?` · Ind: ${esc(ind)}`:''}</div></div>
-      <div class="ccv">${R(c.tot)}</div><div class="chv" id="chv_${key}">▼</div></div>
+      <div class="ccv">${c.prox?R(c.proxVal):R(c.tot)}</div><div class="chv" id="chv_${key}">▼</div></div>
       <div class="ccb" id="${key}"><div class="ccl">${wa}${tr}${fc}</div>${ph}
       ${rid?`<div class="remr"><button class="brem" onclick="removeRec('${rid}')">🗑 Remover recebimento</button></div>`:''}</div></div>`;
   }).join('');

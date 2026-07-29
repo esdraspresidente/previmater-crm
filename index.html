@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="theme-color" content="#0A9396"/>
 <title>PreviMater — CRM</title>
 <link rel="manifest" href="manifest.json"/>
@@ -2987,6 +2988,11 @@ async function ibConfirmarCriarCliente(chave){
   toast('Cliente criada a partir da conversa','ok');
   fecharModal();
   abrirCardCliente(novo.id);
+}
+</script>
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
 </script>
 </body>

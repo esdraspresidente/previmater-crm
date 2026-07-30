@@ -1450,13 +1450,33 @@ function renderCardClienteModal(c,etqSel,listas){
 
     <div class="mccols2">
       <div>
+        <div class="mcsens" style="background:var(--teal-l);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
+          <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">🔐 Acesso INSS</div>
+          <div class="fg">
+            <div class="fld"><label>CPF</label><input type="text" id="mc-cpf" value="${escA(c.cpf)}" oninput="cpfMask(this)"/></div>
+            <div class="fld"><label>Senha INSS</label>
+              <div style="position:relative">
+                <input type="password" id="mc-senha-inss" value="${escA(c.senha_inss)}" style="padding-right:34px;width:100%;box-sizing:border-box"/>
+                <button type="button" onclick="mcTogSenha(this)" style="position:absolute;right:7px;top:0;bottom:0;background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px" title="Mostrar/ocultar">👁</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mcsens" style="background:var(--rose-l);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
+          <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">👥 Referências do contrato</div>
+          <div class="fg">
+            <div class="fld"><label>Referência 1 · nome</label><input type="text" id="mc-ref1-nome" value="${escA(c.referencia1_nome)}"/></div>
+            <div class="fld"><label>Referência 1 · telefone</label><input type="text" id="mc-ref1-tel" value="${escA(c.referencia1_telefone)}"/></div>
+            <div class="fld"><label>Referência 2 · nome</label><input type="text" id="mc-ref2-nome" value="${escA(c.referencia2_nome)}"/></div>
+            <div class="fld"><label>Referência 2 · telefone</label><input type="text" id="mc-ref2-tel" value="${escA(c.referencia2_telefone)}"/></div>
+          </div>
+        </div>
         <div class="fg" style="margin-bottom:13px">
           <div class="fld"><label>Quadro</label><select id="mc-quadro" onchange="mcTrocarQuadro()">${optQ}</select></div>
           <div class="fld"><label>Lista</label><select id="mc-lista">${optL}</select></div>
         </div>
         <div class="fg" style="margin-bottom:13px">
           <div class="fld"><label>Telefone</label><input type="text" id="mc-tel" value="${escA(c.telefone_principal)}"/></div>
-          <div class="fld"><label>CPF</label><input type="text" id="mc-cpf" value="${escA(c.cpf)}" oninput="cpfMask(this)"/></div>
           <div class="fld"><label>Canal WhatsApp</label><select id="mc-canal" onchange="mcCanalChange()">${optCanal}</select></div>
           <div class="fld"><label>Origem</label><select id="mc-origem">${optOrig}</select></div>
           <div class="fld"><label>DN do bebê</label><input type="date" id="mc-dn" value="${c.data_nascimento_bebe||''}"/></div>
@@ -1798,6 +1818,11 @@ function mcRecalcBox(vb,vh){
     <div class="cr2"><span>Honorários</span><span>${R(vh)}</span></div>
     <div class="cr2 tot"><span>Líquido da cliente</span><span>${R(vb-vh)}</span></div>`;
 }
+function mcTogSenha(btn){
+  const inp=$('mc-senha-inss');
+  if(inp.type==='password'){inp.type='text';btn.textContent='🙈';}
+  else{inp.type='password';btn.textContent='👁';}
+}
 async function mcTrocarQuadro(){
   const q=$('mc-quadro').value;
   const{data:L}=await sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem');
@@ -1811,6 +1836,11 @@ async function salvarCardCliente(id){
     nome_completo:nome,
     telefone_principal:$('mc-tel').value.trim()||null,
     cpf:$('mc-cpf').value.trim()||null,
+    senha_inss:$('mc-senha-inss').value.trim()||null,
+    referencia1_nome:$('mc-ref1-nome').value.trim()||null,
+    referencia1_telefone:$('mc-ref1-tel').value.trim()||null,
+    referencia2_nome:$('mc-ref2-nome').value.trim()||null,
+    referencia2_telefone:$('mc-ref2-tel').value.trim()||null,
     canal_whatsapp:$('mc-canal').value||null,
     origem:$('mc-origem').value||null,
     trello_url:$('mc-trello').value.trim()||null,

@@ -65,6 +65,8 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .sbi{width:38px;height:38px;border-radius:11px;overflow:hidden;flex-shrink:0;box-shadow:0 4px 12px rgba(10,147,150,.25);}
 .sblt{font-size:15px;font-weight:800;color:var(--text);letter-spacing:-.3px;line-height:1.1;}
 .sbls{font-size:10px;color:var(--text3);}
+.sbsearch{display:flex;align-items:center;gap:9px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:9px 13px;margin:2px 18px 14px;cursor:pointer;color:var(--text3);font-size:13px;font-family:inherit;}
+.sbsearch:hover{border-color:var(--teal);color:var(--teal);}
 .sbn{flex:1;padding:14px 10px;}
 .snl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:0 10px;margin:12px 0 4px;}
 .ni{width:100%;background:none;border:none;display:flex;align-items:center;gap:10px;padding:9px 12px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit;border-radius:10px;margin-bottom:2px;transition:all .12s;text-align:left;}
@@ -530,8 +532,8 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
       <div><div class="sblt">PreviMater</div><div class="sbls">CRM</div></div>
     </div>
     <button id="notifbtn" class="nbtn h" onclick="abrirNotificacoes()" title="Notificações">🔔<span id="notifbadge" class="nbadge"></span></button>
-    <button class="nbtn" onclick="abrirBuscaGlobal()" title="Buscar cliente">🔍</button>
     </div>
+    <div class="sbsearch" onclick="abrirBuscaGlobal()"><span>🔍</span><span>Buscar cliente...</span></div>
     <div class="sbn" id="sbnav"></div>
     <div class="sbf">
       <div class="sbu"><div class="sbav" id="sbav"></div><div><div class="sbnm" id="sbnm"></div><div class="sbem" id="sbem"></div></div></div>

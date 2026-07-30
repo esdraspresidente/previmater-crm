@@ -1388,6 +1388,7 @@ async function abrirCardCliente(id){
   abrirModal('<div class="emp">Carregando...</div>',true);
   const{data:c,error}=await sb.from('crm_clientes').select('*,crm_clientes_etiquetas(etiqueta_id)').eq('id',id).single();
   if(error||!c){abrirModal('<div class="emp"><div class="empt">Cliente não encontrado</div></div>',true);return;}
+  await loadFin();
   const etqSel=(c.crm_clientes_etiquetas||[]).map(e=>e.etiqueta_id);
   const{data:listas}=await sb.from('crm_listas').select('*').eq('quadro',c.quadro).eq('arquivada',false).order('ordem');
   renderCardClienteModal(c,etqSel,listas||[]);
@@ -1401,6 +1402,7 @@ function renderCardClienteModal(c,etqSel,listas){
   const optCanal=`<option value="">—</option>`+Object.keys(CANAIS).map(k=>`<option value="${k}" ${c.canal_whatsapp===k?'selected':''}>${CANAIS[k]}</option>`).join('');
   const optOrig=`<option value="">—</option>`+Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
   const etqPicker=ETQ.map(t=>`<label class="etp-row" data-nome="${escA((t.nome||'').toLowerCase())}"><input type="checkbox" ${etqSel.includes(t.id)?'checked':''} onchange="mcToggleEtq('${t.id}')"/><span class="etp-bar" style="background:${escA(t.cor)}">${esc(t.nome)}</span></label>`).join('')||'<div class="fhint" style="padding:6px 2px">Nenhuma etiqueta criada ainda.</div>';
+  const pagHtml=mcPagamentosHtml(c.id);
   abrirModalCard(`
     <div class="mchead-sticky" id="mchead-sticky">
       <div class="mchs-nome">${esc(c.nome_completo)}</div>
@@ -1412,6 +1414,8 @@ function renderCardClienteModal(c,etqSel,listas){
     </div>
     <div class="mcinner">
     <button class="mbc" onclick="fecharModal()">×</button>
+    <div class="mccols2">
+      <div>
     <input type="text" id="mc-nome" class="mctit" value="${escA(c.nome_completo)}"/>
     <div class="mbs">Cliente desde ${fD(c.criado_em?c.criado_em.slice(0,10):null)}</div>
     ${c.arquivado_em?`<div class="gb-arqbanner"><span>📦 Este cartão foi arquivado automaticamente (30 dias parado em Finalizado)</span><button class="btn btns" style="padding:5px 12px;font-size:11.5px;flex-shrink:0" onclick="reativarCliente('${c.id}')">Reativar</button></div>`:''}
@@ -1448,9 +1452,7 @@ function renderCardClienteModal(c,etqSel,listas){
     <div class="mvpop h" id="mvpop"></div>
     </div>
 
-    <div class="mccols2">
-      <div>
-        <div class="mcsens" style="background:var(--teal-l);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
+    <div class="mcsens" style="background:var(--teal-l);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
           <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">🔐 Acesso INSS</div>
           <div class="fg">
             <div class="fld"><label>CPF</label><input type="text" id="mc-cpf" value="${escA(c.cpf)}" oninput="cpfMask(this)"/></div>
@@ -1470,6 +1472,13 @@ function renderCardClienteModal(c,etqSel,listas){
             <div class="fld"><label>Referência 2 · nome</label><input type="text" id="mc-ref2-nome" value="${escA(c.referencia2_nome)}"/></div>
             <div class="fld"><label>Referência 2 · telefone</label><input type="text" id="mc-ref2-tel" value="${escA(c.referencia2_telefone)}"/></div>
           </div>
+        </div>
+        <div class="mcsens" style="background:var(--yellow-bg);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${pagHtml.temParc?'10px':'0'}">
+            <div style="font-size:12px;font-weight:700;color:var(--text2)">💰 Pagamentos</div>
+            <button class="btn btns" style="padding:4px 10px;font-size:11px" onclick="fecharModal();location.hash='#/quadro/financeiro'">Ver no Financeiro →</button>
+          </div>
+          ${pagHtml.html}
         </div>
         <div class="fg" style="margin-bottom:13px">
           <div class="fld"><label>Quadro</label><select id="mc-quadro" onchange="mcTrocarQuadro()">${optQ}</select></div>
@@ -1818,6 +1827,26 @@ function mcRecalcBox(vb,vh){
     <div class="cr2"><span>Honorários</span><span>${R(vh)}</span></div>
     <div class="cr2 tot"><span>Líquido da cliente</span><span>${R(vb-vh)}</span></div>`;
 }
+function mcPagamentosHtml(clienteId){
+  const parc=(PARC||[]).filter(p=>pCli(p)===clienteId&&p.status!=='cancelado').sort((a,b)=>(a.num_parcela||0)-(b.num_parcela||0));
+  if(!parc.length)return{temParc:false,html:'<div class="fhint" style="padding:2px">Nenhum recebimento cadastrado para este cliente.</div>'};
+  const recebidas=parc.filter(p=>p.status==='recebido');
+  const totalHon=parc.reduce((s,p)=>s+(p.valor_honorario||0),0);
+  const recHon=recebidas.reduce((s,p)=>s+(p.valor_honorario||0),0);
+  const proxima=parc.filter(p=>p.status!=='recebido').sort((a,b)=>(a.data_vencimento||'').localeCompare(b.data_vencimento||''))[0];
+  const resumo=`<div style="font-size:12.5px;color:var(--text2);margin-bottom:9px">${recebidas.length} de ${parc.length} parcelas recebidas · ${R(recHon)} de ${R(totalHon)}${proxima?' · Próxima: '+fD(proxima.data_vencimento):''}</div>`;
+  const badgeCor={recebido:['var(--green-bg)','var(--green)'],inadimplente:['var(--red-bg)','var(--red)'],previsto:['var(--gray-bg)','var(--gray)']};
+  const linhas=parc.map(p=>{
+    const[bg,fg]=badgeCor[p.status]||badgeCor.previsto;
+    const rotulo=p.status==='recebido'?'Recebido':p.status==='inadimplente'?'Inadimplente':'Previsto';
+    return`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid var(--border2);font-size:12.5px">
+      <span>Parcela ${p.num_parcela}/${p.total_parcelas} · ${fD(p.data_vencimento)}</span>
+      <span style="display:flex;align-items:center;gap:8px">${R(p.valor_honorario)}<span style="background:${bg};color:${fg};padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700">${rotulo}</span></span>
+    </div>`;
+  }).join('');
+  return{temParc:true,html:resumo+linhas};
+}
+
 function mcTogSenha(btn){
   const inp=$('mc-senha-inss');
   if(inp.type==='password'){inp.type='text';btn.textContent='🙈';}

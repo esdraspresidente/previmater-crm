@@ -1026,9 +1026,10 @@ async function pageQuadro(q){
   if(!QUADROS[q]||!QPERM.includes(q)){pc.innerHTML='<div class="emp"><div class="empt">Você não tem acesso a este quadro</div></div>';return;}
   pc.innerHTML=`<div class="pgh"><div><div class="pgt">${QUADROS[q].rotulo}</div><div class="pgs">Carregando...</div></div></div>`;
   if(q==='financeiro'){
+    _cacheListasFin=null;
     await sb.rpc('arquivar_finalizados_antigos');
     await loadFin(true);
-    await varrerInadimplencia();
+    await varrerAtrasos();
   }
   const[{data:listas},{data:clientes,error}]=await Promise.all([
     sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem'),
@@ -1042,14 +1043,15 @@ async function pageQuadro(q){
     const{data:parc}=await sb.from('pm_parcelas').select('crm_cliente_id,status,data_vencimento').in('crm_cliente_id',ids).neq('status','cancelado');
     const porCliente={};
     (parc||[]).forEach(p=>{
-      if(!porCliente[p.crm_cliente_id])porCliente[p.crm_cliente_id]={total:0,recebidas:0,proxima:null,atraso:0};
+      if(!porCliente[p.crm_cliente_id])porCliente[p.crm_cliente_id]={total:0,recebidas:0,proxima:null,atraso:0,inad:0};
       const r=porCliente[p.crm_cliente_id];
       r.total++;
       if(p.status==='recebido')r.recebidas++;
+      else if(p.status==='inadimplente')r.inad++;
       else{
         if(!r.proxima||p.data_vencimento<r.proxima)r.proxima=p.data_vencimento;
-        const d=diasAtrasoParcela(p);
-        if(d>r.atraso)r.atraso=d;
+        const da=diasAtrasoParcela(p);
+        if(da>r.atraso)r.atraso=da;
       }
     });
     C.forEach(c=>{c.finResumo=porCliente[c.id]||null;});
@@ -1111,7 +1113,8 @@ function cardHtml(c){
   if(c.finResumo){
     const f=c.finResumo;
     finHtml=`<div class="kcm"><span class="kcv">${f.recebidas}/${f.total} parcelas</span>${f.proxima?` · próxima ${fD(f.proxima)}`:''}</div>`;
-    if(f.atraso>0)finHtml+=`<div class="kcm"><span class="ent ent-late">⚑ atrasado há ${f.atraso}d</span></div>`;
+    if(f.inad>0)finHtml+=`<div class="kcm"><span class="ent ent-late">⚑ ${f.inad} parcela(s) inadimplente(s)</span></div>`;
+    else if(f.atraso>=DIAS_AVISO_ATRASO)finHtml+=`<div class="kcm"><span class="ent ent-late">⚑ atrasado há ${f.atraso}d</span></div>`;
   }
   return `<div class="kc" draggable="true" data-card="${c.id}" onclick="abrirCardCliente('${c.id}')">
       <button class="kcmv" title="Mover cartão" onclick="event.stopPropagation();modalMover('${c.id}')">⇄</button>
@@ -1429,7 +1432,7 @@ function renderCardClienteModal(c,etqSel,listas){
       <div>
     <input type="text" id="mc-nome" class="mctit" value="${escA(c.nome_completo)}"/>
     <div class="mbs">Cliente desde ${fD(c.criado_em?c.criado_em.slice(0,10):null)}</div>
-    ${c.arquivado_em?`<div class="gb-arqbanner"><span>📦 Este cartão foi arquivado automaticamente (60 dias parado em Finalizado)</span><button class="btn btns" style="padding:5px 12px;font-size:11.5px;flex-shrink:0" onclick="reativarCliente('${c.id}')">Reativar</button></div>`:''}
+    ${c.arquivado_em?`<div class="gb-arqbanner"><span>📦 Este cartão foi arquivado automaticamente (60 dias parado em Pago / encerrado)</span><button class="btn btns" style="padding:5px 12px;font-size:11.5px;flex-shrink:0" onclick="reativarCliente('${c.id}')">Reativar</button></div>`:''}
 
     <div class="mcetq" id="mc-etq-wrap">
       <div class="etp-sel" id="mc-etq-chips">${mcChipsHtml()}<button class="etp-add etq-trigger" onclick="mcTogEtqPicker(this)">+ Etiqueta</button></div>
@@ -2325,13 +2328,26 @@ async function confirmaRec(){
   recarregarFin();
 }
 async function marcaInad(pid){
-  if(!confirm('Marcar como INADIMPLENTE?\nSairá da lista de atrasados.'))return;
   const p=PARC.find(x=>String(x.id)===String(pid));
-  const{error}=await sb.from('pm_parcelas').update({status:'inadimplente'}).eq('id',pid);
-  if(error){toast('Erro.','er');return;}
-  fecharModal();toast('Marcada como inadimplente.','in');
+  if(!p)return;
+  const cid=pCli(p);
+  const emAberto=(PARC||[]).filter(x=>pCli(x)===cid&&x.status!=='recebido'&&x.status!=='cancelado'&&x.status!=='inadimplente');
+  const total=emAberto.reduce((s,x)=>s+parseFloat(x.valor_honorario||0),0);
+  const msg='Marcar '+(p.cliente_nome||'este cliente')+' como INADIMPLENTE?\n\n'
+    +emAberto.length+' parcela(s) em aberto - '+R(total)+'\n\n'
+    +'Todas saem da previsao de faturamento e o cartao vai para a lista Inadimplente.';
+  if(!confirm(msg))return;
+  const ids=emAberto.map(x=>x.id);
+  if(ids.length){
+    const{error}=await sb.from('pm_parcelas').update({status:'inadimplente'}).in('id',ids);
+    if(error){toast('Erro ao marcar.','er');return;}
+  }
+  fecharModal();toast(ids.length+' parcela(s) marcada(s) como inadimplente.','in');
   await loadFin(true);
-  if(p)await moverClienteFinanceiro(pCli(p),'Inadimplente',true);
+  if(cid){
+    await registrarAtividade(cid,'marcou como inadimplente - '+ids.length+' parcela(s) em aberto, '+R(total)+' removido(s) da previsao',undefined);
+    await sincronizarFinanceiroCliente(cid,true);
+  }
   recarregarFin();
 }
 async function cancelaP(pid){
@@ -2373,15 +2389,15 @@ async function salvaEP(){
   const btn=$('btn-salvep');btn.textContent='Salvando...';btn.disabled=true;
   const p=PARC.find(x=>String(x.id)===String(mparcId));
   const campos={data_vencimento:data,valor_honorario:hon,valor_cliente:vc};
-  let reabilitada=false;
-  if(p&&p.status==='inadimplente'&&data>=fISO(today())){campos.status='previsto';reabilitada=true;}
+  let reativada=false;
+  if(p&&p.status==='inadimplente'&&data>=fISO(today())){campos.status='previsto';reativada=true;}
   const{error}=await sb.from('pm_parcelas').update(campos).eq('id',mparcId);
   if(error){toast(error.message||'Erro ao salvar.','er');btn.disabled=false;btn.textContent='Salvar';return;}
-  fecharModal();toast(reabilitada?'Parcela reagendada e reativada!':'Parcela atualizada!','ok');
+  fecharModal();toast(reativada?'Parcela reagendada e reativada!':'Parcela atualizada!','ok');
   await loadFin(true);
   if(p&&pCli(p)){
+    if(reativada)await registrarAtividade(pCli(p),'reagendou a parcela '+p.num_parcela+'/'+p.total_parcelas+' para '+fD(data)+' - voltou para a previsao',undefined);
     await sincronizarFinanceiroCliente(pCli(p),true);
-    if(reabilitada)await registrarAtividade(pCli(p),`reagendou a parcela ${p.num_parcela}/${p.total_parcelas} para ${fD(data)} — saiu de inadimplência`,undefined);
   }
   recarregarFin();
 }
@@ -2401,71 +2417,91 @@ function refrescarRotaAtual(){
 function recarregarFin(){refrescarRotaAtual();}
 
 // ---------- MOVIMENTO AUTOMATICO NO QUADRO FINANCEIRO ----------
-async function moverClienteFinanceiro(crmClienteId,nomeLista,logar){
+const DIAS_AVISO_ATRASO=5;
+const LISTAS_FIN={
+  pagamento:['Em pagamento INSS','Em pagamento','Em pagamento cliente'],
+  encerrado:['Pago / encerrado','Pago/encerrado','Finalizado','Pago'],
+  inadimplente:['Inadimplente','Inadimplentes']
+};
+let _cacheListasFin=null;
+async function listasFinanceiro(){
+  if(_cacheListasFin)return _cacheListasFin;
+  const{data}=await sb.from('crm_listas').select('id,nome').eq('quadro','financeiro').eq('arquivada',false);
+  _cacheListasFin=data||[];
+  return _cacheListasFin;
+}
+const _norm=s=>String(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+async function acharListaFin(chave){
+  const listas=await listasFinanceiro();
+  for(const cand of (LISTAS_FIN[chave]||[])){
+    const achou=listas.find(l=>_norm(l.nome)===_norm(cand));
+    if(achou)return achou;
+  }
+  return null;
+}
+function diasAtrasoParcela(p){
+  if(!p||!p.data_vencimento)return 0;
+  if(p.status==='recebido'||p.status==='cancelado')return 0;
+  const d=-dVenc(p.data_vencimento);
+  return d>0?d:0;
+}
+async function moverClienteFinanceiro(crmClienteId,chaveLista,logar){
   if(!crmClienteId)return;
-  const{data:lista}=await sb.from('crm_listas').select('id').eq('quadro','financeiro').eq('nome',nomeLista).eq('arquivada',false).single();
-  if(!lista)return;
+  const lista=await acharListaFin(chaveLista);
+  if(!lista){toast('Lista do Financeiro nao encontrada: '+chaveLista,'er');return;}
   const{data:clienteAtual}=await sb.from('crm_clientes').select('lista_id').eq('id',crmClienteId).single();
   if(clienteAtual&&clienteAtual.lista_id===lista.id)return;
   const{count}=await sb.from('crm_clientes').select('id',{count:'exact',head:true}).eq('lista_id',lista.id);
   await sb.from('crm_clientes').update({
     quadro:'financeiro',lista_id:lista.id,posicao:(count||0),atualizado_em:new Date().toISOString()
   }).eq('id',crmClienteId);
-  if(logar)await registrarAtividade(crmClienteId,`moveu automaticamente o cartão para "${nomeLista}" (Financeiro)`,null);
+  if(logar)await registrarAtividade(crmClienteId,'moveu automaticamente o cartao para "'+lista.nome+'" (Financeiro)',null);
 }
-
-const DIAS_INAD=5;
-
-function diasAtrasoParcela(p){
-  if(!p.data_vencimento||p.status==='recebido'||p.status==='cancelado')return 0;
-  const d=-dVenc(p.data_vencimento);
-  return d>0?d:0;
-}
-
 async function sincronizarFinanceiroCliente(crmClienteId,logar){
   if(!crmClienteId)return;
   const{data:parcelas}=await sb.from('pm_parcelas')
-    .select('status,data_vencimento').eq('crm_cliente_id',crmClienteId).neq('status','cancelado');
+    .select('status').eq('crm_cliente_id',crmClienteId).neq('status','cancelado');
   if(!parcelas||!parcelas.length)return;
-  const inad=parcelas.some(p=>p.status==='inadimplente'||diasAtrasoParcela(p)>=DIAS_INAD);
-  if(inad){await moverClienteFinanceiro(crmClienteId,'Inadimplente',logar);return;}
+  if(parcelas.some(p=>p.status==='inadimplente')){
+    await moverClienteFinanceiro(crmClienteId,'inadimplente',logar);return;
+  }
   const todasRecebidas=parcelas.every(p=>p.status==='recebido');
-  await moverClienteFinanceiro(crmClienteId,todasRecebidas?'Finalizado':'Em pagamento',logar);
+  await moverClienteFinanceiro(crmClienteId,todasRecebidas?'encerrado':'pagamento',logar);
 }
 async function checarFinalizacaoCliente(crmClienteId){
   await sincronizarFinanceiroCliente(crmClienteId,true);
 }
-
-async function notificarInadimplencia(clienteId,nome,dias){
+async function notificarAtraso(clienteId,nome,dias){
   if(!U)return;
   await sb.from('crm_notificacoes').insert({
     usuario_id:U.id,cliente_id:clienteId,lida:false,
-    texto:`${nome||'Cliente'} entrou em Inadimplente · parcela vencida há ${dias} dia${dias===1?'':'s'}`
+    texto:(nome||'Cliente')+' - parcela vencida ha '+dias+' dia'+(dias===1?'':'s')
   });
 }
-
-async function varrerInadimplencia(){
+async function varrerAtrasos(){
   if(!U)return;
-  const candidatas=(PARC||[]).filter(p=>
-    (p.status==='previsto'||!p.status)&&diasAtrasoParcela(p)>=DIAS_INAD);
-  if(!candidatas.length)return;
+  const atrasadas=(PARC||[]).filter(p=>
+    (p.status==='previsto'||!p.status)&&diasAtrasoParcela(p)>=DIAS_AVISO_ATRASO);
+  if(!atrasadas.length)return;
   const porCliente={};
-  candidatas.forEach(p=>{
+  atrasadas.forEach(p=>{
     const cid=pCli(p);if(!cid)return;
     const d=diasAtrasoParcela(p);
     if(!porCliente[cid]||d>porCliente[cid].dias)porCliente[cid]={dias:d,nome:p.cliente_nome};
   });
-  await sb.from('pm_parcelas').update({status:'inadimplente'}).in('id',candidatas.map(p=>p.id));
-  for(const cid of Object.keys(porCliente)){
-    const{data:atual}=await sb.from('crm_clientes').select('lista_id').eq('id',cid).single();
-    const{data:listaInad}=await sb.from('crm_listas').select('id').eq('quadro','financeiro')
-      .eq('nome','Inadimplente').eq('arquivada',false).maybeSingle();
-    const jaEstava=atual&&listaInad&&atual.lista_id===listaInad.id;
-    await sincronizarFinanceiroCliente(cid,true);
-    if(!jaEstava)await notificarInadimplencia(cid,porCliente[cid].nome,porCliente[cid].dias);
+  const ids=Object.keys(porCliente);
+  if(!ids.length)return;
+  const{data:jaAvisados}=await sb.from('crm_notificacoes')
+    .select('cliente_id').eq('usuario_id',U.id).in('cliente_id',ids)
+    .gte('criado_em',new Date(Date.now()-7*864e5).toISOString());
+  const setAvisados=new Set((jaAvisados||[]).map(n=>n.cliente_id));
+  let novos=0;
+  for(const cid of ids){
+    if(setAvisados.has(cid))continue;
+    await notificarAtraso(cid,porCliente[cid].nome,porCliente[cid].dias);
+    novos++;
   }
-  await carregarNotificacoes();
-  await loadFin(true);
+  if(novos)await carregarNotificacoes();
 }
 
 // ============================================================
@@ -2684,7 +2720,7 @@ async function submitRec(){
 
   toast('Recebimento salvo!','ok');
   await loadFin(true);
-  await moverClienteFinanceiro(fCliId,'Em pagamento',true);
+  await moverClienteFinanceiro(fCliId,'pagamento',true);
   location.hash='#/recebimentos';
 }
 

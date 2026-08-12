@@ -1025,7 +1025,11 @@ async function pageQuadro(q){
   const pc=$('pc');marcarNav(q);
   if(!QUADROS[q]||!QPERM.includes(q)){pc.innerHTML='<div class="emp"><div class="empt">Você não tem acesso a este quadro</div></div>';return;}
   pc.innerHTML=`<div class="pgh"><div><div class="pgt">${QUADROS[q].rotulo}</div><div class="pgs">Carregando...</div></div></div>`;
-  if(q==='financeiro')await sb.rpc('arquivar_finalizados_antigos');
+  if(q==='financeiro'){
+    await sb.rpc('arquivar_finalizados_antigos');
+    await loadFin(true);
+    await varrerInadimplencia();
+  }
   const[{data:listas},{data:clientes,error}]=await Promise.all([
     sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem'),
     sb.from('crm_clientes').select('id,nome_completo,lista_id,posicao,telefone_principal,data_nascimento_bebe,data_entrega,data_desbloqueio_inss,valor_beneficio_esperado,valor_honorarios,crm_clientes_etiquetas(etiqueta_id)').eq('quadro',q).is('arquivado_em',null).order('posicao')
@@ -1038,11 +1042,15 @@ async function pageQuadro(q){
     const{data:parc}=await sb.from('pm_parcelas').select('crm_cliente_id,status,data_vencimento').in('crm_cliente_id',ids).neq('status','cancelado');
     const porCliente={};
     (parc||[]).forEach(p=>{
-      if(!porCliente[p.crm_cliente_id])porCliente[p.crm_cliente_id]={total:0,recebidas:0,proxima:null};
+      if(!porCliente[p.crm_cliente_id])porCliente[p.crm_cliente_id]={total:0,recebidas:0,proxima:null,atraso:0};
       const r=porCliente[p.crm_cliente_id];
       r.total++;
       if(p.status==='recebido')r.recebidas++;
-      else if(!r.proxima||p.data_vencimento<r.proxima)r.proxima=p.data_vencimento;
+      else{
+        if(!r.proxima||p.data_vencimento<r.proxima)r.proxima=p.data_vencimento;
+        const d=diasAtrasoParcela(p);
+        if(d>r.atraso)r.atraso=d;
+      }
     });
     C.forEach(c=>{c.finResumo=porCliente[c.id]||null;});
   }
@@ -1103,6 +1111,7 @@ function cardHtml(c){
   if(c.finResumo){
     const f=c.finResumo;
     finHtml=`<div class="kcm"><span class="kcv">${f.recebidas}/${f.total} parcelas</span>${f.proxima?` · próxima ${fD(f.proxima)}`:''}</div>`;
+    if(f.atraso>0)finHtml+=`<div class="kcm"><span class="ent ent-late">⚑ atrasado há ${f.atraso}d</span></div>`;
   }
   return `<div class="kc" draggable="true" data-card="${c.id}" onclick="abrirCardCliente('${c.id}')">
       <button class="kcmv" title="Mover cartão" onclick="event.stopPropagation();modalMover('${c.id}')">⇄</button>
@@ -1420,7 +1429,7 @@ function renderCardClienteModal(c,etqSel,listas){
       <div>
     <input type="text" id="mc-nome" class="mctit" value="${escA(c.nome_completo)}"/>
     <div class="mbs">Cliente desde ${fD(c.criado_em?c.criado_em.slice(0,10):null)}</div>
-    ${c.arquivado_em?`<div class="gb-arqbanner"><span>📦 Este cartão foi arquivado automaticamente (30 dias parado em Finalizado)</span><button class="btn btns" style="padding:5px 12px;font-size:11.5px;flex-shrink:0" onclick="reativarCliente('${c.id}')">Reativar</button></div>`:''}
+    ${c.arquivado_em?`<div class="gb-arqbanner"><span>📦 Este cartão foi arquivado automaticamente (60 dias parado em Finalizado)</span><button class="btn btns" style="padding:5px 12px;font-size:11.5px;flex-shrink:0" onclick="reativarCliente('${c.id}')">Reativar</button></div>`:''}
 
     <div class="mcetq" id="mc-etq-wrap">
       <div class="etp-sel" id="mc-etq-chips">${mcChipsHtml()}<button class="etp-add etq-trigger" onclick="mcTogEtqPicker(this)">+ Etiqueta</button></div>
@@ -2327,8 +2336,11 @@ async function marcaInad(pid){
 }
 async function cancelaP(pid){
   if(!confirm('Cancelar esta parcela?'))return;
+  const p=PARC.find(x=>String(x.id)===String(pid));
   await sb.from('pm_parcelas').update({status:'cancelado'}).eq('id',pid);
-  toast('Parcela cancelada.','in');await loadFin(true);recarregarFin();
+  toast('Parcela cancelada.','in');await loadFin(true);
+  if(p)await sincronizarFinanceiroCliente(pCli(p),true);
+  recarregarFin();
 }
 function abreMEP(pid){
   const p=PARC.find(x=>String(x.id)===String(pid));if(!p)return;
@@ -2359,10 +2371,19 @@ async function salvaEP(){
   const data=$('mepd').value,hon=m2f($('meph')),vc=m2f($('mepc'));
   if(!data){toast('Informe a data.','er');return;}
   const btn=$('btn-salvep');btn.textContent='Salvando...';btn.disabled=true;
-  const{error}=await sb.from('pm_parcelas').update({data_vencimento:data,valor_honorario:hon,valor_cliente:vc}).eq('id',mparcId);
+  const p=PARC.find(x=>String(x.id)===String(mparcId));
+  const campos={data_vencimento:data,valor_honorario:hon,valor_cliente:vc};
+  let reabilitada=false;
+  if(p&&p.status==='inadimplente'&&data>=fISO(today())){campos.status='previsto';reabilitada=true;}
+  const{error}=await sb.from('pm_parcelas').update(campos).eq('id',mparcId);
   if(error){toast(error.message||'Erro ao salvar.','er');btn.disabled=false;btn.textContent='Salvar';return;}
-  fecharModal();toast('Parcela atualizada!','ok');
-  await loadFin(true);recarregarFin();
+  fecharModal();toast(reabilitada?'Parcela reagendada e reativada!':'Parcela atualizada!','ok');
+  await loadFin(true);
+  if(p&&pCli(p)){
+    await sincronizarFinanceiroCliente(pCli(p),true);
+    if(reabilitada)await registrarAtividade(pCli(p),`reagendou a parcela ${p.num_parcela}/${p.total_parcelas} para ${fD(data)} — saiu de inadimplência`,undefined);
+  }
+  recarregarFin();
 }
 async function removeRec(rid){
   if(!confirm('Remover este recebimento e todas as parcelas?'))return;
@@ -2393,12 +2414,58 @@ async function moverClienteFinanceiro(crmClienteId,nomeLista,logar){
   if(logar)await registrarAtividade(crmClienteId,`moveu automaticamente o cartão para "${nomeLista}" (Financeiro)`,null);
 }
 
-async function checarFinalizacaoCliente(crmClienteId){
+const DIAS_INAD=5;
+
+function diasAtrasoParcela(p){
+  if(!p.data_vencimento||p.status==='recebido'||p.status==='cancelado')return 0;
+  const d=-dVenc(p.data_vencimento);
+  return d>0?d:0;
+}
+
+async function sincronizarFinanceiroCliente(crmClienteId,logar){
   if(!crmClienteId)return;
-  const{data:parcelas}=await sb.from('pm_parcelas').select('status').eq('crm_cliente_id',crmClienteId).neq('status','cancelado');
+  const{data:parcelas}=await sb.from('pm_parcelas')
+    .select('status,data_vencimento').eq('crm_cliente_id',crmClienteId).neq('status','cancelado');
   if(!parcelas||!parcelas.length)return;
+  const inad=parcelas.some(p=>p.status==='inadimplente'||diasAtrasoParcela(p)>=DIAS_INAD);
+  if(inad){await moverClienteFinanceiro(crmClienteId,'Inadimplente',logar);return;}
   const todasRecebidas=parcelas.every(p=>p.status==='recebido');
-  if(todasRecebidas)await moverClienteFinanceiro(crmClienteId,'Finalizado',true);
+  await moverClienteFinanceiro(crmClienteId,todasRecebidas?'Finalizado':'Em pagamento',logar);
+}
+async function checarFinalizacaoCliente(crmClienteId){
+  await sincronizarFinanceiroCliente(crmClienteId,true);
+}
+
+async function notificarInadimplencia(clienteId,nome,dias){
+  if(!U)return;
+  await sb.from('crm_notificacoes').insert({
+    usuario_id:U.id,cliente_id:clienteId,lida:false,
+    texto:`${nome||'Cliente'} entrou em Inadimplente · parcela vencida há ${dias} dia${dias===1?'':'s'}`
+  });
+}
+
+async function varrerInadimplencia(){
+  if(!U)return;
+  const candidatas=(PARC||[]).filter(p=>
+    (p.status==='previsto'||!p.status)&&diasAtrasoParcela(p)>=DIAS_INAD);
+  if(!candidatas.length)return;
+  const porCliente={};
+  candidatas.forEach(p=>{
+    const cid=pCli(p);if(!cid)return;
+    const d=diasAtrasoParcela(p);
+    if(!porCliente[cid]||d>porCliente[cid].dias)porCliente[cid]={dias:d,nome:p.cliente_nome};
+  });
+  await sb.from('pm_parcelas').update({status:'inadimplente'}).in('id',candidatas.map(p=>p.id));
+  for(const cid of Object.keys(porCliente)){
+    const{data:atual}=await sb.from('crm_clientes').select('lista_id').eq('id',cid).single();
+    const{data:listaInad}=await sb.from('crm_listas').select('id').eq('quadro','financeiro')
+      .eq('nome','Inadimplente').eq('arquivada',false).maybeSingle();
+    const jaEstava=atual&&listaInad&&atual.lista_id===listaInad.id;
+    await sincronizarFinanceiroCliente(cid,true);
+    if(!jaEstava)await notificarInadimplencia(cid,porCliente[cid].nome,porCliente[cid].dias);
+  }
+  await carregarNotificacoes();
+  await loadFin(true);
 }
 
 // ============================================================

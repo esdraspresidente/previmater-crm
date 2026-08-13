@@ -501,6 +501,15 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .gb-nome{font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:7px;}
 .gb-meta{font-size:11.5px;color:var(--text3);}
 .gb-arq{background:#8A8F8F;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:8px;text-transform:uppercase;letter-spacing:.04em;}
+.klc-arq{cursor:pointer;border:none;background:#EDE7DD;color:#7A6A52;font-family:inherit}
+.klc-arq:hover{background:#E0D6C6;color:#5A4C38}
+.pgs-arq{color:#7A6A52}
+.va-row{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--border)}
+.va-row:last-child{border-bottom:none}
+.va-info{flex:1;min-width:0;cursor:pointer}
+.va-nm{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.va-sb{font-size:11.5px;color:var(--text3);margin-top:2px}
+.va-info:hover .va-nm{color:var(--primary)}
 .gb-arqbanner{display:flex;align-items:center;gap:12px;justify-content:space-between;background:#F3F0E8;border:1px solid #E3D9BE;color:#7A6A32;font-size:12px;font-weight:600;padding:9px 13px;border-radius:9px;margin-bottom:14px;}
 .etp-newbtn{width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text2);font-size:12px;font-weight:700;padding:9px;border-radius:9px;cursor:pointer;font-family:inherit;}
 .etp-newbtn.h{display:none;}
@@ -768,7 +777,7 @@ function temFinanceiro(){return QPERM.includes('financeiro');}
 function montarSidebar(){
   let h='<div class="snl">Mensagens</div>';
   h+=`<button class="ni" id="nav-inbox" onclick="location.hash='#/inbox'"><div class="nic">💬</div>Caixa de Entrada</button>`;
-  h+=`<button class="ni" id="nav-clientes" onclick="location.hash='#/clientes'"><div class="nic">◎</div>Clientes</button>`;
+  h+=`<button class="ni" id="nav-clientes" onclick="location.hash='#/clientes'"><div class="nic">◎</div>Contatos</button>`;
   h+='<div class="snl">Quadros</div>';
   QPERM.forEach(q=>{h+=`<button class="ni" id="nav-${q}" onclick="location.hash='#/quadro/${q}'"><div class="nic">${QUADROS[q].icone}</div>${QUADROS[q].rotulo}</button>`;});
   if(temFinanceiro()){
@@ -1067,6 +1076,14 @@ async function pageQuadro(q){
   if(error){pc.innerHTML=`<div class="emp"><div class="empt">Erro ao carregar</div>${esc(error.message)}</div>`;return;}
   const L=listas||[],C=clientes||[];
 
+  // quantos cards arquivados existem em cada lista deste quadro
+  const ARQ={};let ARQTOTAL=0;
+  {
+    const{data:arqs}=await sb.from('crm_clientes')
+      .select('lista_id').eq('quadro',q).not('arquivado_em','is',null);
+    (arqs||[]).forEach(a=>{if(a.lista_id){ARQ[a.lista_id]=(ARQ[a.lista_id]||0)+1;ARQTOTAL++;}});
+  }
+
   if(q==='financeiro'&&C.length){
     const ids=C.map(c=>c.id);
     const{data:parc}=await sb.from('pm_parcelas').select('crm_cliente_id,status,data_vencimento').in('crm_cliente_id',ids).neq('status','cancelado');
@@ -1097,11 +1114,11 @@ async function pageQuadro(q){
   const porLista={};L.forEach(l=>porLista[l.id]=[]);
   const orfaos=[];
   C.forEach(c=>{if(porLista[c.lista_id])porLista[c.lista_id].push(c);else orfaos.push(c);});
-  let kb=L.map(l=>listaHtml(l,porLista[l.id])).join('');
-  if(orfaos.length)kb+=listaHtml({id:'__sem__',nome:'Sem lista',cor:'#5A7070'},orfaos,true);
+  let kb=L.map(l=>listaHtml(l,porLista[l.id],false,ARQ[l.id]||0)).join('');
+  if(orfaos.length)kb+=listaHtml({id:'__sem__',nome:'Sem lista',cor:'#5A7070'},orfaos,true,0);
   kb+=`<button class="knl" onclick="modalNovaLista('${q}')">+ nova lista</button>`;
   pc.innerHTML=`<div class="pgh">
-      <div><div class="pgt">${QUADROS[q].rotulo}</div><div class="pgs">${C.length} ${C.length===1?'cliente':'clientes'} neste quadro</div></div>
+      <div><div class="pgt">${QUADROS[q].rotulo}</div><div class="pgs">${C.length.toLocaleString('pt-BR')} ${C.length===1?'ativo':'ativos'}${ARQTOTAL?` · <span class="pgs-arq">${ARQTOTAL.toLocaleString('pt-BR')} arquivado${ARQTOTAL===1?'':'s'}</span>`:''} neste quadro</div></div>
       <button class="bnew" onclick="location.hash='#/cliente/novo'">+ Novo cliente</button>
     </div><div class="kb" id="kb">${kb}</div>`;
   ligarDragDrop();
@@ -1113,7 +1130,7 @@ function toggleColapsarLista(id){
   const el=document.querySelector(`.kl[data-lista="${id}"]`);
   if(el)el.classList.toggle('collapsed',!atual);
 }
-function listaHtml(l,cards,semAcoes){
+function listaHtml(l,cards,semAcoes,arqCount){
   const cs=cards.length?cards.map(cardHtml).join(''):'<div class="kempty">Vazia</div>';
   const colapsada=!semAcoes&&listaColapsada(l.id);
   return `<div class="kl ${colapsada?'collapsed':''}" data-lista="${l.id}">
@@ -1121,6 +1138,7 @@ function listaHtml(l,cards,semAcoes){
         <div class="kln">${esc(l.nome)}</div>
         <div style="display:flex;align-items:center;gap:4px">
           <span class="klc">${cards.length}</span>
+          ${arqCount?`<button class="klc klc-arq" onclick="event.stopPropagation();verArquivadosDaLista('${l.id}')" title="Ver cards arquivados nesta lista">📦 ${arqCount}</button>`:''}
           ${semAcoes?'':`<button class="klm" onclick="event.stopPropagation();toggleColapsarLista('${l.id}')" title="Minimizar/expandir lista">⬌</button>`}
           ${semAcoes?'':`<button class="klm" onclick="modalEditarLista('${l.id}')" title="Editar lista">⋯</button>`}
         </div>
@@ -1983,6 +2001,9 @@ async function modalEditarLista(id){
       <div class="fld"><label>Cor</label><input type="color" class="inp-cor" id="el-cor" value="${escA(l.cor)}"/></div>
       <div class="fld"><label>Posição no quadro</label><input type="number" id="el-ordem" value="${l.ordem}" min="0"/></div>
     </div>
+    <div style="margin-bottom:16px">
+      <button class="btn btns" style="width:100%" onclick="verArquivadosDaLista('${l.id}')">📦 Ver cards arquivados nesta lista</button>
+    </div>
     <div class="brow" style="justify-content:space-between">
       <button class="btnd" onclick="arquivarLista('${l.id}','${l.quadro}')">Arquivar lista</button>
       <div style="display:flex;gap:9px"><button class="btn btns" onclick="fecharModal()">Cancelar</button>
@@ -1996,6 +2017,70 @@ async function salvarLista(id,q){
   if(error){toast('Erro ao salvar','er');return;}
   fecharModal();toast('Lista atualizada','ok');pageQuadro(q);
 }
+// ------------------------------------------------------------
+// Cards arquivados de uma lista — abre pelo ⋯ da lista
+// ------------------------------------------------------------
+let VA_LISTA=null,VA_PAGINA=0,VA_ITENS=[],VA_TOTAL=0,VA_FIM=false;
+const VA_PAGE=50;
+
+async function verArquivadosDaLista(listaId){
+  VA_LISTA=listaId;VA_PAGINA=0;VA_ITENS=[];VA_FIM=false;VA_TOTAL=0;
+  const{data:l}=await sb.from('crm_listas').select('nome,quadro').eq('id',listaId).single();
+  abrirModal(`<div class="mbt">Cards arquivados</div>
+    <div class="mbs">${l?esc(l.nome):''}${l&&QUADROS[l.quadro]?' · '+QUADROS[l.quadro].rotulo:''}</div>
+    <div id="va-lista" style="max-height:56vh;overflow-y:auto;margin-top:10px">
+      <div class="fhint" style="text-align:center;padding:20px 0">Carregando...</div>
+    </div>
+    <div id="va-mais" style="text-align:center;margin-top:12px"></div>`);
+  await vaCarregar();
+}
+
+async function vaCarregar(){
+  const de=VA_PAGINA*VA_PAGE;
+  const{data,error,count}=await sb.from('crm_clientes')
+    .select('id,nome_completo,telefone_principal,arquivado_em,criado_em',{count:'exact'})
+    .eq('lista_id',VA_LISTA).not('arquivado_em','is',null)
+    .order('criado_em',{ascending:false}).range(de,de+VA_PAGE-1);
+  const box=$('va-lista');if(!box)return;
+  if(error){box.innerHTML=`<div class="fhint" style="text-align:center;padding:18px 0">Erro: ${esc(error.message)}</div>`;return;}
+  if(count!==null&&count!==undefined)VA_TOTAL=count;
+  const lote=data||[];
+  VA_ITENS=VA_ITENS.concat(lote);
+  if(lote.length<VA_PAGE)VA_FIM=true;
+  vaRender();
+}
+
+function vaRender(){
+  const box=$('va-lista');if(!box)return;
+  if(!VA_ITENS.length){
+    box.innerHTML='<div class="fhint" style="text-align:center;padding:22px 0">Nenhum card arquivado nesta lista.</div>';
+    const m0=$('va-mais');if(m0)m0.innerHTML='';return;
+  }
+  let h=`<div class="fhint" style="margin-bottom:9px">${VA_TOTAL.toLocaleString('pt-BR')} ${VA_TOTAL===1?'card arquivado':'cards arquivados'}</div>`;
+  VA_ITENS.forEach(c=>{
+    const d=c.criado_em?new Date(c.criado_em).toLocaleDateString('pt-BR'):'';
+    h+=`<div class="va-row">
+      <div class="va-info" onclick="fecharModal();abrirCardCliente('${c.id}')">
+        <div class="va-nm">${esc(c.nome_completo||'Sem nome')}</div>
+        <div class="va-sb">${esc(c.telefone_principal||'')}${d?' · '+d:''}</div>
+      </div>
+      <button class="btn btns" style="padding:4px 10px;font-size:11px;flex-shrink:0" onclick="vaReativar('${c.id}')">Reativar</button>
+    </div>`;
+  });
+  box.innerHTML=h;
+  const mais=$('va-mais');
+  if(mais)mais.innerHTML=VA_FIM?'':`<button class="btn btns" onclick="VA_PAGINA++;vaCarregar()">Carregar mais</button>`;
+}
+
+async function vaReativar(id){
+  const{error}=await sb.from('crm_clientes').update({arquivado_em:null}).eq('id',id);
+  if(error){toast('Erro ao reativar','er');return;}
+  toast('Card reativado','ok');
+  VA_ITENS=VA_ITENS.filter(x=>x.id!==id);
+  VA_TOTAL=Math.max(0,VA_TOTAL-1);
+  vaRender();
+}
+
 async function arquivarLista(id,q){
   if(!confirm('Arquivar esta lista? Os clientes continuam cadastrados, mas ficarão sem lista.'))return;
   const{error}=await sb.from('crm_listas').update({arquivada:true}).eq('id',id);
@@ -2948,13 +3033,14 @@ async function pageClientes(){
   CL_ITENS=[];CL_PAGINA=0;CL_FIM=false;CL_BUSCA='';CL_FILTRO='todos';
   const chips=[
     {k:'todos',r:'Todos'},
+    {k:'ativos',r:'Ativos'},
     {k:'sem_card',r:'Sem card'},
     ...QPERM.map(q=>({k:'q:'+q,r:QUADROS[q].rotulo})),
     {k:'arquivados',r:'Arquivados'}
   ];
   pc.innerHTML=`<div class="pgh">
-      <div><div class="pgt">Clientes</div><div class="pgs" id="cl-sub">Carregando...</div></div>
-      <button class="bnew" onclick="location.hash='#/cliente/novo'">+ Novo cliente</button>
+      <div><div class="pgt">Contatos</div><div class="pgs" id="cl-sub">Carregando...</div></div>
+      <button class="bnew" onclick="location.hash='#/cliente/novo'">+ Novo contato</button>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       <input type="text" id="cl-busca" placeholder="Nome, telefone ou CPF..." oninput="clBuscar(this.value)" style="flex:1;min-width:200px"/>
@@ -2991,8 +3077,9 @@ async function clCarregar(reset){
 
   if(CL_FILTRO==='sem_card')q=q.is('quadro',null).is('arquivado_em',null);
   else if(CL_FILTRO==='arquivados')q=q.not('arquivado_em','is',null);
+  else if(CL_FILTRO==='ativos')q=q.is('arquivado_em',null);
   else if(CL_FILTRO.startsWith('q:'))q=q.eq('quadro',CL_FILTRO.slice(2)).is('arquivado_em',null);
-  else q=q.is('arquivado_em',null);
+  // 'todos' = todos mesmo, inclusive arquivados
 
   if(CL_BUSCA){
     const t=CL_BUSCA.replace(/[%,()]/g,'');

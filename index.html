@@ -505,6 +505,30 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .etp-newbtn{width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text2);font-size:12px;font-weight:700;padding:9px;border-radius:9px;cursor:pointer;font-family:inherit;}
 .etp-newbtn.h{display:none;}
 .etp-newbtn:hover{border-color:var(--teal);color:var(--teal);}
+
+/* CLIENTES */
+.cl-chip.on{border-color:var(--teal);color:var(--teal);background:var(--teal-l);}
+.cl-tbl{background:var(--white);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;}
+.cl-hd,.cl-row{display:grid;grid-template-columns:minmax(0,1.6fr) 130px minmax(0,1.3fr) 92px;gap:10px;align-items:center;}
+.cl-hd{padding:10px 15px;background:var(--border2);font-size:11px;font-weight:700;color:var(--text2);}
+.cl-row{padding:11px 15px;border-top:1.5px solid var(--border2);cursor:pointer;transition:background .12s;}
+.cl-row:hover{background:var(--teal-l);}
+.cl-off{opacity:.58;}
+.cl-nm{display:flex;align-items:center;gap:9px;min-width:0;}
+.cl-av{width:31px;height:31px;border-radius:50%;background:var(--teal-l);color:var(--teal);display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;flex-shrink:0;}
+.cl-n1{font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cl-n2{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cl-fone{font-size:12.5px;color:var(--text2);white-space:nowrap;}
+.cl-dt{font-size:11px;color:var(--text3);text-align:right;white-space:nowrap;}
+.cl-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:7px;white-space:nowrap;}
+.cl-ok{background:var(--teal-l);color:var(--teal);}
+.cl-sem{background:var(--border2);color:var(--text2);}
+.cl-arq{background:var(--border2);color:var(--text3);}
+@media(max-width:760px){
+  .cl-hd{display:none;}
+  .cl-row{grid-template-columns:1fr auto;grid-template-areas:"nm dt" "fone sit";row-gap:6px;}
+  .cl-nm{grid-area:nm;} .cl-dt{grid-area:dt;} .cl-fone{grid-area:fone;} .cl-row>div:nth-child(3){grid-area:sit;text-align:right;}
+}
 </style>
 </head>
 <body>
@@ -744,6 +768,7 @@ function temFinanceiro(){return QPERM.includes('financeiro');}
 function montarSidebar(){
   let h='<div class="snl">Mensagens</div>';
   h+=`<button class="ni" id="nav-inbox" onclick="location.hash='#/inbox'"><div class="nic">💬</div>Caixa de Entrada</button>`;
+  h+=`<button class="ni" id="nav-clientes" onclick="location.hash='#/clientes'"><div class="nic">◎</div>Clientes</button>`;
   h+='<div class="snl">Quadros</div>';
   QPERM.forEach(q=>{h+=`<button class="ni" id="nav-${q}" onclick="location.hash='#/quadro/${q}'"><div class="nic">${QUADROS[q].icone}</div>${QUADROS[q].rotulo}</button>`;});
   if(temFinanceiro()){
@@ -798,6 +823,7 @@ function route(){
   if(r==='/recebimentos')return pageRec();
   if(r==='/recebimento/novo')return pageNovoRec();
   if(r==='/inbox')return pageInbox();
+  if(r==='/clientes')return pageClientes();
   $('pc').innerHTML='<div class="emp"><div class="empt">Tela não encontrada</div></div>';
 }
 
@@ -839,9 +865,12 @@ async function clicarNotificacao(id,clienteId){
 // ============================================================
 // ATIVIDADE (comentarios + historico automatico)
 // ============================================================
-async function registrarAtividade(clienteId,descricao,usuarioId){
+async function registrarAtividade(clienteId,descricao,usuarioId,extra){
   if(!clienteId)return;
-  await sb.from('crm_atividades').insert({cliente_id:clienteId,usuario_id:usuarioId===undefined?U.id:usuarioId,descricao});
+  const reg={cliente_id:clienteId,usuario_id:usuarioId===undefined?U.id:usuarioId,descricao};
+  if(extra&&typeof extra==='object')Object.assign(reg,extra);
+  if(!reg.tipo)reg.tipo=(descricao||'').startsWith('anexou')?'anexo':((descricao||'').startsWith('criou')?'criacao':'outro');
+  await sb.from('crm_atividades').insert(reg);
 }
 async function carregarAtividade(clienteId){
   const[{data:coms},{data:ativs}]=await Promise.all([
@@ -1200,7 +1229,8 @@ async function registrarMovimentoLista(clienteId,origListaId,destListaId){
     sb.from('crm_listas').select('nome').eq('id',origListaId).single(),
     sb.from('crm_listas').select('nome').eq('id',destListaId).single()
   ]);
-  registrarAtividade(clienteId,`moveu o cartão de "${lo?lo.nome:'?'}" para "${ld?ld.nome:'?'}"`);
+  registrarAtividade(clienteId,`moveu o cartão de "${lo?lo.nome:'?'}" para "${ld?ld.nome:'?'}"`,undefined,
+    {tipo:'movimento',lista_origem:lo?lo.nome:null,lista_destino:ld?ld.nome:null});
   await checarAutomacaoMovimento(clienteId,destListaId);
 }
 async function checarAutomacaoMovimento(clienteId,destListaId){
@@ -1506,6 +1536,8 @@ function renderCardClienteModal(c,etqSel,listas){
           <div class="fld"><label>DS (saída do último emprego)</label><input type="date" id="mc-ds" value="${c.data_saida_emprego||''}"/></div>
           <div class="fld"><label>Bloqueio INSS até</label><input type="date" id="mc-bloqueio" value="${c.data_desbloqueio_inss||''}" onchange="mcBloqueioChange()"/>
             <div id="mc-bloqueio-top" style="margin-top:6px">${bloqueioBadgeHtml(c.data_desbloqueio_inss)}</div></div>
+          <div class="fld"><label>Documento pedido pelo INSS</label><input type="text" id="mc-docpend" placeholder="ex: certidão de nascimento" value="${escA(c.documento_pendente)}"/>
+            <div class="fhint">Usado pela Samara nas cobranças de exigência.</div></div>
           <div class="fld"><label>Benefício (R$)</label><input type="text" id="mc-vb" data-money="" inputmode="decimal" value="${floatToMoney(c.valor_beneficio_esperado)}" onchange="mcRecalc()"/></div>
           <div class="fld"><label>Honorários (R$)</label><input type="text" id="mc-vh" data-money="" inputmode="decimal" value="${floatToMoney(c.valor_honorarios)}" onchange="mcRecalc(true)"/></div>
         </div>
@@ -1893,6 +1925,7 @@ async function salvarCardCliente(id){
     data_nascimento_bebe:$('mc-dn').value||null,
     data_saida_emprego:$('mc-ds').value||null,
     data_desbloqueio_inss:$('mc-bloqueio').value||null,
+    documento_pendente:$('mc-docpend').value.trim()||null,
     valor_beneficio_esperado:m2f($('mc-vb'))||null,
     valor_honorarios:m2f($('mc-vh'))||null,
     observacoes:$('mc-obs').value.trim()||null,
@@ -2028,6 +2061,8 @@ async function pageCliente(id){
           <div class="fhint">Aparece no card e fica em destaque quando estiver perto ou vencida.</div></div>
         <div class="fld"><label>Bloqueio INSS até</label><input type="date" id="f-bloqueio" value="${(c&&c.data_desbloqueio_inss)||''}"/>
           <div class="fhint">Aparece no card e muda de cor quando o desbloqueio chega.</div></div>
+        <div class="fld"><label>Documento pedido pelo INSS</label><input type="text" id="f-docpend" placeholder="ex: certidão de nascimento" value="${escA(c&&c.documento_pendente)}"/>
+          <div class="fhint">Usado pela Samara nas cobranças de exigência.</div></div>
         <div class="fld"><label>Valor do benefício (R$)</label><input type="text" id="f-vb" data-money="" inputmode="decimal" value="${floatToMoney(c&&c.valor_beneficio_esperado)}" onchange="recalcHonorariosCliente()"/></div>
         <div class="fld"><label>Honorários (R$)</label><input type="text" id="f-vh" data-money="" inputmode="decimal" value="${floatToMoney(c&&c.valor_honorarios)}" onchange="renderCaixaCliente()"/>
           <div class="fhint">Calculado como 30% do benefício. Pode sobrescrever.</div></div>
@@ -2083,6 +2118,7 @@ async function salvarCliente(id){
     data_saida_emprego:$('f-ds').value||null,
     data_entrega:$('f-entrega').value||null,
     data_desbloqueio_inss:$('f-bloqueio').value||null,
+    documento_pendente:$('f-docpend').value.trim()||null,
     valor_beneficio_esperado:m2f($('f-vb'))||null,
     valor_honorarios:m2f($('f-vh'))||null,
     observacoes:$('f-obs').value.trim()||null,
@@ -2896,6 +2932,172 @@ async function criarInstancia(){
   const{error}=await sb.from('crm_instancias_whatsapp').insert({numero_telefone:num,canal,teto_diario_atual:teto,disparos_hoje:0,status:'ativo'});
   if(error){toast('Erro ao adicionar','er');return;}
   toast('Número adicionado','ok');pageCampanha();
+}
+
+
+// ============================================================
+// CLIENTES — lista única de todos os contatos e cards
+// LEI: um contato, um card. Contato e card são a mesma linha.
+// ============================================================
+let CL_LISTAS={};
+let CL_ITENS=[],CL_PAGINA=0,CL_FILTRO='todos',CL_BUSCA='',CL_BUSCATIMER=null,CL_FIM=false,CL_TOTAL=0,CL_CARREGANDO=false;
+const CL_PAGE=50;
+
+async function pageClientes(){
+  const pc=$('pc');marcarNav('clientes');
+  CL_ITENS=[];CL_PAGINA=0;CL_FIM=false;CL_BUSCA='';CL_FILTRO='todos';
+  const chips=[
+    {k:'todos',r:'Todos'},
+    {k:'sem_card',r:'Sem card'},
+    ...QPERM.map(q=>({k:'q:'+q,r:QUADROS[q].rotulo})),
+    {k:'arquivados',r:'Arquivados'}
+  ];
+  pc.innerHTML=`<div class="pgh">
+      <div><div class="pgt">Clientes</div><div class="pgs" id="cl-sub">Carregando...</div></div>
+      <button class="bnew" onclick="location.hash='#/cliente/novo'">+ Novo cliente</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <input type="text" id="cl-busca" placeholder="Nome, telefone ou CPF..." oninput="clBuscar(this.value)" style="flex:1;min-width:200px"/>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px" id="cl-chips">
+      ${chips.map(c=>`<button class="btn btns cl-chip${c.k==='todos'?' on':''}" data-f="${c.k}" onclick="clFiltrar('${c.k}')" style="font-size:11px;padding:5px 11px">${esc(c.r)}</button>`).join('')}
+    </div>
+    <div id="cl-lista"><div class="fhint" style="text-align:center;padding:26px 0">Carregando...</div></div>
+    <div id="cl-mais" style="text-align:center;margin:14px 0"></div>`;
+  const{data:ls}=await sb.from('crm_listas').select('id,nome');
+  CL_LISTAS={};(ls||[]).forEach(l=>CL_LISTAS[l.id]=l.nome);
+  await clCarregar(true);
+}
+
+function clFiltrar(k){
+  CL_FILTRO=k;
+  document.querySelectorAll('.cl-chip').forEach(b=>b.classList.toggle('on',b.getAttribute('data-f')===k));
+  CL_ITENS=[];CL_PAGINA=0;CL_FIM=false;
+  clCarregar(true);
+}
+
+function clBuscar(v){
+  CL_BUSCA=(v||'').trim();
+  if(CL_BUSCATIMER)clearTimeout(CL_BUSCATIMER);
+  CL_BUSCATIMER=setTimeout(()=>{CL_ITENS=[];CL_PAGINA=0;CL_FIM=false;clCarregar(true);},350);
+}
+
+async function clCarregar(reset){
+  if(CL_CARREGANDO)return;
+  CL_CARREGANDO=true;
+  if(reset)$('cl-lista').innerHTML='<div class="fhint" style="text-align:center;padding:26px 0">Carregando...</div>';
+  let q=sb.from('crm_clientes')
+    .select('id,nome_completo,telefone_principal,cpf,quadro,lista_id,origem,arquivado_em,criado_em',{count:'exact'});
+
+  if(CL_FILTRO==='sem_card')q=q.is('quadro',null).is('arquivado_em',null);
+  else if(CL_FILTRO==='arquivados')q=q.not('arquivado_em','is',null);
+  else if(CL_FILTRO.startsWith('q:'))q=q.eq('quadro',CL_FILTRO.slice(2)).is('arquivado_em',null);
+  else q=q.is('arquivado_em',null);
+
+  if(CL_BUSCA){
+    const t=CL_BUSCA.replace(/[%,()]/g,'');
+    const digitos=t.replace(/\D/g,'');
+    const conds=[`nome_completo.ilike.%${t}%`];
+    if(digitos.length>=3){conds.push(`telefone_chave.ilike.%${digitos}%`);conds.push(`cpf.ilike.%${digitos}%`);}
+    q=q.or(conds.join(','));
+  }
+
+  const de=CL_PAGINA*CL_PAGE;
+  const{data,error,count}=await q.order('criado_em',{ascending:false}).range(de,de+CL_PAGE-1);
+  CL_CARREGANDO=false;
+  if(error){$('cl-lista').innerHTML=`<div class="emp"><div class="empt">Erro ao carregar</div><div class="emps">${esc(error.message)}</div></div>`;return;}
+  if(count!==null&&count!==undefined)CL_TOTAL=count;
+  const lote=data||[];
+  CL_ITENS=CL_ITENS.concat(lote);
+  if(lote.length<CL_PAGE)CL_FIM=true;
+  clRender();
+}
+
+function clRender(){
+  const box=$('cl-lista');if(!box)return;
+  const sub=$('cl-sub');
+  if(sub)sub.textContent=CL_TOTAL.toLocaleString('pt-BR')+(CL_TOTAL===1?' contato':' contatos')+' — mais recentes primeiro';
+  if(!CL_ITENS.length){
+    box.innerHTML='<div class="emp"><div class="empi">◎</div><div class="empt">Nenhum contato encontrado</div><div class="emps">Ajuste a busca ou o filtro.</div></div>';
+    $('cl-mais').innerHTML='';return;
+  }
+  const listaNome=CL_LISTAS||{};
+  let h='<div class="cl-tbl">';
+  h+='<div class="cl-hd"><span>Cliente</span><span>WhatsApp</span><span>Situação</span><span style="text-align:right">Entrada</span></div>';
+  CL_ITENS.forEach(c=>{
+    const arq=!!c.arquivado_em;
+    const nome=c.nome_completo||'Sem nome';
+    const ini=(c.nome_completo||'').trim().split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase()||'—';
+    let sit='',sub2='';
+    if(arq){sit='<span class="cl-tag cl-arq">Arquivado</span>';sub2=c.quadro&&QUADROS[c.quadro]?QUADROS[c.quadro].rotulo:'';}
+    else if(!c.quadro){sit='<span class="cl-tag cl-sem">Sem card</span>';}
+    else{
+      const ln=listaNome[c.lista_id]||'—';
+      sit=`<span class="cl-tag cl-ok">${esc(ln)}</span>`;
+      sub2=QUADROS[c.quadro]?QUADROS[c.quadro].rotulo:c.quadro;
+    }
+    const org=c.origem&&ORIGENS[c.origem]?ORIGENS[c.origem]:(c.origem||'');
+    h+=`<div class="cl-row${arq?' cl-off':''}" onclick="clAbrir('${c.id}')">
+      <div class="cl-nm"><div class="cl-av">${esc(ini)}</div>
+        <div style="min-width:0"><div class="cl-n1">${esc(nome)}</div>${org?`<div class="cl-n2">${esc(org)}</div>`:''}</div></div>
+      <div class="cl-fone">${esc(c.telefone_principal||'—')}</div>
+      <div style="min-width:0">${sit}${sub2?`<div class="cl-n2" style="margin-top:3px">${esc(sub2)}</div>`:''}</div>
+      <div class="cl-dt">${clData(c.criado_em)}</div>
+    </div>`;
+  });
+  h+='</div>';
+  box.innerHTML=h;
+  $('cl-mais').innerHTML=CL_FIM?`<span class="fhint">Mostrando ${CL_ITENS.length.toLocaleString('pt-BR')} de ${CL_TOTAL.toLocaleString('pt-BR')}</span>`
+    :`<button class="btn btns" onclick="clMais()">Carregar mais</button>`;
+}
+
+function clData(iso){
+  if(!iso)return '—';
+  const d=new Date(iso),hoje=new Date();
+  const mesmoDia=d.toDateString()===hoje.toDateString();
+  if(mesmoDia)return 'hoje '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const ontem=new Date(hoje.getTime()-86400000);
+  if(d.toDateString()===ontem.toDateString())return 'ontem';
+  if(d.getFullYear()===hoje.getFullYear())return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  return d.toLocaleDateString('pt-BR',{month:'2-digit',year:'numeric'});
+}
+
+function clMais(){CL_PAGINA++;clCarregar(false);}
+
+async function clAbrir(id){
+  const{data:c}=await sb.from('crm_clientes').select('id,nome_completo,quadro,arquivado_em').eq('id',id).single();
+  if(!c){toast('Contato não encontrado','er');return;}
+  if(c.quadro&&!c.arquivado_em){abrirCardCliente(id);return;}
+  const rotulo=c.arquivado_em?'Este contato está arquivado.':'Este contato ainda não tem card em nenhum quadro.';
+  const optQ=QPERM.map(q=>`<option value="${q}">${QUADROS[q].rotulo}</option>`).join('');
+  abrirModal(`<div class="mbt">${esc(c.nome_completo||'Sem nome')}</div>
+    <div class="mbs">${rotulo} Escolha onde ele deve entrar.</div>
+    <div class="fld" style="margin-bottom:10px"><label>Quadro</label><select id="cl-q" onchange="clListasDoQuadro()">${optQ}</select></div>
+    <div class="fld" style="margin-bottom:16px"><label>Lista</label><select id="cl-l"><option value="">Carregando...</option></select></div>
+    <div class="mba"><button class="btn btns" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btnp" onclick="clCriarCard('${id}')">${c.arquivado_em?'Desarquivar aqui':'Criar card'}</button></div>`);
+  clListasDoQuadro();
+}
+
+async function clListasDoQuadro(){
+  const q=$('cl-q').value;
+  const{data}=await sb.from('crm_listas').select('id,nome').eq('quadro',q).eq('arquivada',false).order('ordem');
+  const sel=$('cl-l');if(!sel)return;
+  sel.innerHTML=(data||[]).map(l=>`<option value="${l.id}">${esc(l.nome)}</option>`).join('')||'<option value="">Nenhuma lista</option>';
+}
+
+async function clCriarCard(id){
+  const quadro=$('cl-q').value,lista=$('cl-l').value;
+  if(!lista){toast('Escolha uma lista','er');return;}
+  const{count}=await sb.from('crm_clientes').select('id',{count:'exact',head:true}).eq('lista_id',lista);
+  const{error}=await sb.from('crm_clientes').update({
+    quadro:quadro,lista_id:lista,posicao:(count||0),arquivado_em:null,
+    lista_desde:new Date().toISOString(),atualizado_em:new Date().toISOString()
+  }).eq('id',id);
+  if(error){toast('Erro ao criar card','er');return;}
+  await registrarAtividade(id,'entrou na lista');
+  fecharModal();toast('Card criado','ok');
+  abrirCardCliente(id);
 }
 
 // ============================================================

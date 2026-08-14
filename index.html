@@ -457,6 +457,25 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .inb-cta{display:block;text-align:center;margin-top:14px;font-size:12.5px;font-weight:700;color:var(--teal);cursor:pointer;text-decoration:none;}
 
 /* AUTOMAÇÕES POR LISTA */
+.filatabs{display:flex;gap:22px;border-bottom:1.5px solid var(--border);margin:18px 0 16px;}
+.filatab{background:none;border:none;font-family:inherit;font-size:14px;font-weight:700;color:var(--text3);cursor:pointer;padding:0 0 11px;border-bottom:2.5px solid transparent;margin-bottom:-1.5px;display:flex;align-items:center;gap:7px;}
+.filatab.on{color:var(--text);border-bottom-color:var(--teal);}
+.filatab-n{font-size:11px;font-weight:700;background:var(--bg);color:var(--text3);padding:1px 8px;border-radius:8px;}
+.filatab-n.alerta{background:var(--yellow-bg);color:var(--yellow);}
+.filacard{border:1.5px solid var(--border);border-radius:14px;background:var(--white);padding:15px 17px;margin-bottom:11px;}
+.filahead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px;}
+.filanome{font-size:15px;font-weight:700;color:var(--text);}
+.filameta{font-size:12px;color:var(--text3);margin-top:2px;}
+.filapill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:7px;white-space:nowrap;flex-shrink:0;}
+.filapill.green{background:var(--green-bg);color:var(--green);}
+.filapill.yellow{background:var(--yellow-bg);color:var(--yellow);}
+.filapill.red{background:var(--red-bg);color:var(--red);}
+.filabox{background:var(--bg);border-radius:10px;padding:10px 12px;margin-top:9px;}
+.filaboxl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;}
+.filamsg{border-left:2.5px solid var(--teal-m);padding-left:12px;}
+.filabalao{margin:0 0 6px;font-size:14px;line-height:1.55;color:var(--text);}
+.filabalao:last-child{margin-bottom:0;}
+.filaacoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px;}
 .autoitem{display:flex;align-items:center;gap:16px;padding:14px 17px;border:1.5px solid var(--border);border-radius:12px;margin-bottom:9px;background:var(--white);flex-wrap:wrap;}
 .autoitem-nome{font-weight:700;font-size:14px;color:var(--text);min-width:190px;}
 .autoitem-info{flex:1;font-size:13px;color:var(--text2);min-width:160px;}
@@ -789,6 +808,7 @@ function montarSidebar(){
   h+='<div class="snl">Configurações</div>';
   h+=`<button class="ni" id="nav-etiquetas" onclick="location.hash='#/etiquetas'"><div class="nic">◇</div>Etiquetas</button>`;
   h+=`<button class="ni" id="nav-automacoes" onclick="location.hash='#/automacoes'"><div class="nic">⚡</div>Automações</button>`;
+  if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-fila" onclick="location.hash='#/fila'"><div class="nic">☰</div>Fila de automações</button>`;
   if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-campanha" onclick="location.hash='#/campanha'"><div class="nic">◐</div>Campanha</button>`;
   $('sbnav').innerHTML=h;
 }
@@ -827,6 +847,7 @@ function route(){
   if(m=r.match(/^\/cliente\/(.+)$/))return pageCliente(m[1]);
   if(r==='/etiquetas')return pageEtiquetas();
   if(r==='/automacoes')return pageAutomacoes();
+  if(r==='/fila')return pageFila();
   if(r==='/campanha')return pageCampanha();
   if(r==='/dashboard')return pageDash();
   if(r==='/recebimentos')return pageRec();
@@ -2963,6 +2984,223 @@ async function excluirAutomacao(id){
   if(error){toast('Erro ao excluir','er');return;}
   toast('Automação excluída','in');
   fecharModal();pageAutomacoes();
+}
+
+
+// ============================================================
+// FILA DE AUTOMACOES
+// ============================================================
+let FILA_ABA='aprovar';
+let FILA_CACHE=[];
+
+function filaVoltarPara(status){
+  if(status==='aguardando_aprovacao')return'aprovar';
+  if(status==='erro')return'erro';
+  return'agendadas';
+}
+
+async function pageFila(){
+  const pc=$('pc');marcarNav('fila');
+  if(U.nivel!=='proprietario'){pc.innerHTML='<div class="emp"><div class="empt">Tela restrita a proprietários</div></div>';return;}
+  pc.innerHTML='<div class="emp">Carregando...</div>';
+
+  const{data,error}=await sb.from('crm_automacoes')
+    .select('id,cliente_id,tipo_automacao,data_hora_agendada,status,texto_montado,flags,erro,tentativas,ordem,criado_em,crm_clientes(nome_completo,telefone_principal,lista_id,samara_dados)')
+    .in('status',['aguardando_aprovacao','agendado','pausado','erro'])
+    .order('data_hora_agendada',{ascending:true})
+    .limit(300);
+
+  if(error){pc.innerHTML='<div class="emp"><div class="empt">Erro ao carregar</div><div class="emps">'+esc(error.message)+'</div></div>';return;}
+  FILA_CACHE=data||[];
+  renderFila();
+}
+
+function renderFila(){
+  const pc=$('pc');
+  const aprovar=FILA_CACHE.filter(a=>a.status==='aguardando_aprovacao');
+  const agendadas=FILA_CACHE.filter(a=>a.status==='agendado'||a.status==='pausado');
+  const comErro=FILA_CACHE.filter(a=>a.status==='erro');
+
+  const aba=(id,rot,n,destaque)=>`<button class="filatab ${FILA_ABA===id?'on':''}" onclick="FILA_ABA='${id}';renderFila()">${rot}${n?`<span class="filatab-n ${destaque?'alerta':''}">${n}</span>`:''}</button>`;
+
+  let h='<div class="pgh"><div><div class="pgt">Fila de automações</div><div class="pgs">Tudo que a Samara programou para enviar</div></div>';
+  h+=`<button class="btn btns" onclick="pageFila()">↻ Atualizar</button></div>`;
+  h+='<div class="filatabs">'+
+     aba('aprovar','Aprovar',aprovar.length,true)+
+     aba('agendadas','Agendadas',agendadas.length,false)+
+     aba('erro','Com erro',comErro.length,comErro.length>0)+
+     '</div>';
+
+  const lista=FILA_ABA==='aprovar'?aprovar:(FILA_ABA==='erro'?comErro:agendadas);
+
+  if(lista.length===0){
+    const vazio={aprovar:'Nada esperando aprovação',agendadas:'Nenhum envio agendado',erro:'Nenhuma falha de envio'}[FILA_ABA];
+    h+=`<div class="emp"><div class="empt">${vazio}</div></div>`;
+  }else{
+    h+=lista.map(cardFila).join('');
+  }
+  pc.innerHTML=h;
+}
+
+function motivoDaTrava(a){
+  const f=a.flags||'';
+  if(f.includes('[DESCARTAR_LEAD]'))return{txt:'Descartar lead',cor:'red'};
+  if(f.includes('[ESCALAR_ESDRAS]'))return{txt:'Escalar Esdras',cor:'yellow'};
+  return{txt:'Afirma direito',cor:'green'};
+}
+
+function cardFila(a){
+  const c=a.crm_clientes||{};
+  const nome=c.nome_completo||'(sem nome)';
+  const quando=a.data_hora_agendada?tempoRel(a.data_hora_agendada):'';
+  const origem=a.tipo_automacao==='samara'?'Samara':(a.tipo_automacao==='abertura'?'Abertura':'Sequência');
+
+  let etiqueta='';
+  if(a.status==='aguardando_aprovacao'){
+    const m=motivoDaTrava(a);
+    etiqueta=`<span class="filapill ${m.cor}">${m.txt}</span>`;
+  }else if(a.status==='pausado'){
+    etiqueta='<span class="filapill yellow">Pausada</span>';
+  }else if(a.status==='erro'){
+    etiqueta='<span class="filapill red">Falhou</span>';
+  }
+
+  const baloes=(a.texto_montado||'').split(' / ').map(b=>b.trim()).filter(Boolean);
+  const corpo=baloes.length?baloes.map(b=>`<p class="filabalao">${esc(b)}</p>`).join(''):'<p class="filabalao fhint">(sem texto)</p>';
+
+  let extra='';
+  if(a.status==='erro'&&a.erro){
+    extra=`<div class="filabox"><div class="filaboxl">O que deu errado</div><div style="font-size:13px;color:var(--red)">${esc(a.erro)}</div>${a.tentativas?`<div class="fhint" style="margin-top:4px">${a.tentativas} tentativa(s)</div>`:''}</div>`;
+  }else if(a.status==='aguardando_aprovacao'){
+    const d=c.samara_dados||{};
+    const chaves=Object.keys(d);
+    if(chaves.length){
+      extra=`<div class="filabox"><div class="filaboxl">O que a Samara já coletou</div>`+
+        chaves.map(k=>`<div style="font-size:13px">${esc(k)}: <b>${esc(String(d[k]))}</b></div>`).join('')+`</div>`;
+    }
+  }
+
+  let acoes='';
+  if(a.status==='aguardando_aprovacao'){
+    acoes=`<button class="btn btnp" style="padding:8px 15px;font-size:12px" onclick="filaAprovar('${a.id}')">✓ Aprovar e enviar</button>
+      <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaEditar('${a.id}')">✎ Editar</button>
+      <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaCancelar('${a.id}')">✕ Cancelar</button>`;
+  }else if(a.status==='agendado'){
+    acoes=`<button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaPausar('${a.id}')">⏸ Pausar</button>
+      <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaReagendar('${a.id}')">🕐 Reagendar</button>
+      <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaEditar('${a.id}')">✎ Editar</button>
+      <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaCancelar('${a.id}')">✕ Cancelar</button>`;
+  }else if(a.status==='pausado'){
+    acoes=`<button class="btn btnp" style="padding:8px 15px;font-size:12px" onclick="filaRetomar('${a.id}')">▶ Retomar</button>
+      <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaCancelar('${a.id}')">✕ Cancelar</button>`;
+  }else{
+    acoes=`<button class="btn btnp" style="padding:8px 15px;font-size:12px" onclick="filaRetomar('${a.id}')">↻ Tentar de novo</button>
+      <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaCancelar('${a.id}')">✕ Cancelar</button>`;
+  }
+
+  const verCard=a.cliente_id?`<button class="btn btns" style="padding:8px 15px;font-size:12px;margin-left:auto" onclick="location.hash='#/cliente/${a.cliente_id}'">Abrir cartão →</button>`:'';
+
+  return`<div class="filacard">
+    <div class="filahead">
+      <div style="min-width:0">
+        <div class="filanome">${esc(nome)}</div>
+        <div class="filameta">${origem} · ${esc(quando)}</div>
+      </div>
+      ${etiqueta}
+    </div>
+    ${extra}
+    <div class="filaboxl" style="margin:10px 0 5px">Mensagem</div>
+    <div class="filamsg">${corpo}</div>
+    <div class="filaacoes">${acoes}${verCard}</div>
+  </div>`;
+}
+
+async function filaAtualizar(id,campos,msg){
+  const{error}=await sb.from('crm_automacoes').update(campos).eq('id',id);
+  if(error){toast('Erro: '+error.message,'er');return false;}
+  toast(msg,'ok');
+  await pageFila();
+  return true;
+}
+
+async function filaAprovar(id){
+  await filaAtualizar(id,{
+    status:'agendado',aprovado:true,
+    aprovado_por:U.id,aprovado_em:new Date().toISOString(),
+    data_hora_agendada:new Date().toISOString()
+  },'Aprovada — vai sair no próximo disparo');
+}
+
+async function filaPausar(id){
+  await filaAtualizar(id,{status:'pausado'},'Pausada');
+}
+
+async function filaRetomar(id){
+  await filaAtualizar(id,{status:'agendado',erro:null,tentativas:0},'De volta para a fila');
+}
+
+function filaCancelar(id){
+  abrirModal(`
+    <div class="mbt">Cancelar envio</div>
+    <div class="mbs">Essa mensagem não será enviada. O motivo fica registrado.</div>
+    <div class="fld ff" style="margin-bottom:16px"><label>Por que está cancelando?</label>
+      <textarea id="fila-motivo" placeholder="Ex: cliente já respondeu por telefone"></textarea></div>
+    <div class="brow" style="justify-content:flex-end;gap:9px">
+      <button class="btn btns" onclick="fecharModal()">Voltar</button>
+      <button class="btnd" onclick="filaConfirmarCancelar('${id}')">Cancelar envio</button>
+    </div>`);
+}
+
+async function filaConfirmarCancelar(id){
+  const motivo=$('fila-motivo').value.trim();
+  if(!motivo){toast('O motivo é obrigatório','er');return;}
+  fecharModal();
+  await filaAtualizar(id,{status:'cancelado',motivo_cancelamento:motivo},'Envio cancelado');
+}
+
+function filaEditar(id){
+  const a=FILA_CACHE.find(x=>x.id===id);
+  if(!a)return;
+  abrirModal(`
+    <div class="mbt">Editar mensagem</div>
+    <div class="mbs">Cada trecho separado por <b> / </b> vira um balão no WhatsApp.</div>
+    <div class="fld ff" style="margin-bottom:8px"><label>Texto</label>
+      <textarea id="fila-texto" style="min-height:150px">${esc(a.texto_montado||'')}</textarea></div>
+    <div class="fhint" style="margin-bottom:16px">Nada com <b>{chave}</b> sem valor sai — o motor trava o envio.</div>
+    <div class="brow" style="justify-content:flex-end;gap:9px">
+      <button class="btn btns" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btnp" onclick="filaSalvarTexto('${id}')">Salvar</button>
+    </div>`);
+}
+
+async function filaSalvarTexto(id){
+  const t=$('fila-texto').value.trim();
+  if(!t){toast('A mensagem não pode ficar vazia','er');return;}
+  fecharModal();
+  await filaAtualizar(id,{texto_montado:t},'Mensagem alterada');
+}
+
+function filaReagendar(id){
+  const a=FILA_CACHE.find(x=>x.id===id);
+  if(!a)return;
+  const d=new Date(a.data_hora_agendada);
+  const local=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  abrirModal(`
+    <div class="mbt">Reagendar envio</div>
+    <div class="mbs">Escolha a nova data e hora.</div>
+    <div class="fld" style="margin-bottom:16px"><label>Sai em</label>
+      <input type="datetime-local" id="fila-quando" value="${local}"/></div>
+    <div class="brow" style="justify-content:flex-end;gap:9px">
+      <button class="btn btns" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btnp" onclick="filaSalvarQuando('${id}')">Salvar</button>
+    </div>`);
+}
+
+async function filaSalvarQuando(id){
+  const v=$('fila-quando').value;
+  if(!v){toast('Escolha a data e a hora','er');return;}
+  fecharModal();
+  await filaAtualizar(id,{data_hora_agendada:new Date(v).toISOString()},'Reagendada');
 }
 
 // ============================================================

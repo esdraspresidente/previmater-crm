@@ -1079,9 +1079,17 @@ async function pageQuadro(q){
   // quantos cards arquivados existem em cada lista deste quadro
   const ARQ={};let ARQTOTAL=0;
   {
-    const{data:arqs}=await sb.from('crm_clientes')
-      .select('lista_id').eq('quadro',q).not('arquivado_em','is',null);
-    (arqs||[]).forEach(a=>{if(a.lista_id){ARQ[a.lista_id]=(ARQ[a.lista_id]||0)+1;ARQTOTAL++;}});
+    // count exato por lista: o select comum para em 1000 linhas e mentiria o total
+    const{count:tot}=await sb.from('crm_clientes')
+      .select('id',{count:'exact',head:true}).eq('quadro',q).not('arquivado_em','is',null);
+    ARQTOTAL=tot||0;
+    if(ARQTOTAL){
+      const contagens=await Promise.all(L.map(l=>
+        sb.from('crm_clientes').select('id',{count:'exact',head:true})
+          .eq('lista_id',l.id).not('arquivado_em','is',null)
+      ));
+      L.forEach((l,i)=>{const n=contagens[i]?contagens[i].count||0:0;if(n)ARQ[l.id]=n;});
+    }
   }
 
   if(q==='financeiro'&&C.length){

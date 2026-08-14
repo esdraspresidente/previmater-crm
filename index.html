@@ -2992,10 +2992,13 @@ async function excluirAutomacao(id){
 // ============================================================
 let FILA_ABA='aprovar';
 let FILA_CACHE=[];
+let FILA_SEL=new Set();          // vencidas marcadas para reenvio em lote
+let FILA_FREIOS={motor_ligado:'sim',samara_ligada:'sim'};
 
 function filaVoltarPara(status){
   if(status==='aguardando_aprovacao')return'aprovar';
   if(status==='erro')return'erro';
+  if(status==='vencida')return'vencidas';
   return'agendadas';
 }
 
@@ -3004,15 +3007,34 @@ async function pageFila(){
   if(U.nivel!=='proprietario'){pc.innerHTML='<div class="emp"><div class="empt">Tela restrita a proprietários</div></div>';return;}
   pc.innerHTML='<div class="emp">Carregando...</div>';
 
-  const{data,error}=await sb.from('crm_automacoes')
-    .select('id,cliente_id,tipo_automacao,data_hora_agendada,status,texto_montado,flags,erro,tentativas,ordem,criado_em,crm_clientes(nome_completo,telefone_principal,lista_id,samara_dados)')
-    .in('status',['aguardando_aprovacao','agendado','pausado','erro'])
-    .order('data_hora_agendada',{ascending:true})
-    .limit(300);
+  const[{data,error},{data:vars}]=await Promise.all([
+    sb.from('crm_automacoes')
+      .select('id,cliente_id,tipo_automacao,data_hora_agendada,status,texto_montado,flags,erro,tentativas,ordem,criado_em,motivo_cancelamento,crm_clientes(nome_completo,telefone_principal,lista_id,samara_dados)')
+      .in('status',['aguardando_aprovacao','agendado','pausado','erro','vencida'])
+      .order('data_hora_agendada',{ascending:true})
+      .limit(300),
+    sb.from('crm_variaveis').select('chave,valor_texto').in('chave',['motor_ligado','samara_ligada'])
+  ]);
 
   if(error){pc.innerHTML='<div class="emp"><div class="empt">Erro ao carregar</div><div class="emps">'+esc(error.message)+'</div></div>';return;}
   FILA_CACHE=data||[];
+  FILA_FREIOS={motor_ligado:'sim',samara_ligada:'sim'};
+  (vars||[]).forEach(v=>{FILA_FREIOS[v.chave]=(v.valor_texto||'sim').toLowerCase();});
+  FILA_SEL.clear();
   renderFila();
+}
+
+function freioBotao(chave,titulo,ligadoTxt,paradoTxt,explica){
+  const on=FILA_FREIOS[chave]!=='nao';
+  return`<div style="flex:1;min-width:200px;border:1px solid var(--bd);border-radius:10px;padding:11px 13px;background:${on?'transparent':'rgba(220,60,60,.08)'}">
+    <div style="display:flex;align-items:center;gap:8px;justify-content:space-between">
+      <div style="font-weight:700;font-size:13px">${titulo}</div>
+      <span class="filapill ${on?'green':'red'}">${on?ligadoTxt:paradoTxt}</span>
+    </div>
+    <div class="fhint" style="margin:5px 0 9px">${explica}</div>
+    <button class="${on?'btnd':'btn btnp'}" style="padding:7px 13px;font-size:12px;width:100%"
+      onclick="filaAlternarFreio('${chave}')">${on?'Parar agora':'Religar'}</button>
+  </div>`;
 }
 
 function renderFila(){
@@ -3020,26 +3042,106 @@ function renderFila(){
   const aprovar=FILA_CACHE.filter(a=>a.status==='aguardando_aprovacao');
   const agendadas=FILA_CACHE.filter(a=>a.status==='agendado'||a.status==='pausado');
   const comErro=FILA_CACHE.filter(a=>a.status==='erro');
+  const vencidas=FILA_CACHE.filter(a=>a.status==='vencida');
 
   const aba=(id,rot,n,destaque)=>`<button class="filatab ${FILA_ABA===id?'on':''}" onclick="FILA_ABA='${id}';renderFila()">${rot}${n?`<span class="filatab-n ${destaque?'alerta':''}">${n}</span>`:''}</button>`;
 
   let h='<div class="pgh"><div><div class="pgt">Fila de automações</div><div class="pgs">Tudo que a Samara programou para enviar</div></div>';
   h+=`<button class="btn btns" onclick="pageFila()">↻ Atualizar</button></div>`;
+
+  h+=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">`+
+     freioBotao('samara_ligada','Samara (IA)','Respondendo','Parada',
+       'Para de responder. As sequências de texto fixo continuam saindo.')+
+     freioBotao('motor_ligado','Motor de envio','Enviando','Parado',
+       'Para tudo. Nenhuma mensagem sai — nem da Samara, nem sequência.')+
+     `</div>`;
+
   h+='<div class="filatabs">'+
      aba('aprovar','Aprovar',aprovar.length,true)+
      aba('agendadas','Agendadas',agendadas.length,false)+
+     aba('vencidas','Vencidas',vencidas.length,vencidas.length>0)+
      aba('erro','Com erro',comErro.length,comErro.length>0)+
      '</div>';
 
-  const lista=FILA_ABA==='aprovar'?aprovar:(FILA_ABA==='erro'?comErro:agendadas);
+  const lista=FILA_ABA==='aprovar'?aprovar:(FILA_ABA==='erro'?comErro:(FILA_ABA==='vencidas'?vencidas:agendadas));
+
+  if(FILA_ABA==='vencidas'&&vencidas.length){
+    const n=FILA_SEL.size;
+    const min=Math.max(0,Math.round((n-1)*2));
+    h+=`<div class="filabox" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div style="flex:1;min-width:190px">
+        <div class="filaboxl">Reenvio em lote</div>
+        <div class="fhint">Elas voltam para a fila e saem no ritmo normal, com ~2 min entre clientes.${n?` As ${n} selecionadas levam cerca de ${min} min para escoar.`:''}</div>
+      </div>
+      <button class="btn btns" style="padding:8px 14px;font-size:12px" onclick="filaSelTodas()">${n===vencidas.length?'Desmarcar todas':'Selecionar todas'}</button>
+      <button class="btn btnp" style="padding:8px 14px;font-size:12px" ${n?'':'disabled'} onclick="filaEnviarSelecionadas()">Enviar selecionadas (${n})</button>
+    </div>`;
+  }
 
   if(lista.length===0){
-    const vazio={aprovar:'Nada esperando aprovação',agendadas:'Nenhum envio agendado',erro:'Nenhuma falha de envio'}[FILA_ABA];
+    const vazio={aprovar:'Nada esperando aprovação',agendadas:'Nenhum envio agendado',vencidas:'Nada vencido',erro:'Nenhuma falha de envio'}[FILA_ABA];
     h+=`<div class="emp"><div class="empt">${vazio}</div></div>`;
   }else{
     h+=lista.map(cardFila).join('');
   }
   pc.innerHTML=h;
+}
+
+async function filaAlternarFreio(chave){
+  const novo=FILA_FREIOS[chave]==='nao'?'sim':'nao';
+  const{error}=await sb.from('crm_variaveis').update({valor_texto:novo}).eq('chave',chave);
+  if(error){toast('Erro: '+error.message,'er');return;}
+  FILA_FREIOS[chave]=novo;
+  toast(novo==='nao'?'Parado. Vale a partir do próximo minuto.':'Religado. Volta no próximo minuto.',novo==='nao'?'er':'ok');
+  renderFila();
+}
+
+function filaMarcar(id,marcado){
+  if(marcado)FILA_SEL.add(id);else FILA_SEL.delete(id);
+  renderFila();
+}
+
+function filaSelTodas(){
+  const v=FILA_CACHE.filter(a=>a.status==='vencida');
+  if(FILA_SEL.size===v.length)FILA_SEL.clear();
+  else v.forEach(a=>FILA_SEL.add(a.id));
+  renderFila();
+}
+
+async function filaEnviarAgora(id){
+  await filaAtualizar(id,{
+    status:'agendado',aprovado:true,erro:null,tentativas:0,
+    motivo_cancelamento:null,
+    data_hora_agendada:new Date().toISOString()
+  },'De volta para a fila');
+}
+
+function filaEnviarSelecionadas(){
+  const n=FILA_SEL.size;
+  if(!n)return;
+  const min=Math.max(0,Math.round((n-1)*2));
+  abrirModal(`
+    <div class="mbt">Reenviar ${n} mensagem(ns)</div>
+    <div class="mbs">Elas voltam para a fila agendadas para agora. O motor envia no ritmo de sempre, com cerca de 2 minutos entre clientes diferentes — a última sai daqui a aproximadamente <b>${min} minutos</b>.</div>
+    <div class="fhint" style="margin-bottom:16px">Isso existe para o número não ser derrubado pelo WhatsApp. Nada sai de uma vez só.</div>
+    <div class="brow" style="justify-content:flex-end;gap:9px">
+      <button class="btn btns" onclick="fecharModal()">Voltar</button>
+      <button class="btn btnp" onclick="filaConfirmarLote()">Reenviar ${n}</button>
+    </div>`);
+}
+
+async function filaConfirmarLote(){
+  const ids=[...FILA_SEL];
+  fecharModal();
+  const{error}=await sb.from('crm_automacoes').update({
+    status:'agendado',aprovado:true,erro:null,tentativas:0,
+    motivo_cancelamento:null,
+    data_hora_agendada:new Date().toISOString()
+  }).in('id',ids);
+  if(error){toast('Erro: '+error.message,'er');return;}
+  toast(ids.length+' de volta para a fila','ok');
+  FILA_SEL.clear();
+  await pageFila();
 }
 
 function motivoDaTrava(a){
@@ -3063,13 +3165,17 @@ function cardFila(a){
     etiqueta='<span class="filapill yellow">Pausada</span>';
   }else if(a.status==='erro'){
     etiqueta='<span class="filapill red">Falhou</span>';
+  }else if(a.status==='vencida'){
+    etiqueta='<span class="filapill yellow">Venceu</span>';
   }
 
   const baloes=(a.texto_montado||'').split(' / ').map(b=>b.trim()).filter(Boolean);
   const corpo=baloes.length?baloes.map(b=>`<p class="filabalao">${esc(b)}</p>`).join(''):'<p class="filabalao fhint">(sem texto)</p>';
 
   let extra='';
-  if(a.status==='erro'&&a.erro){
+  if(a.status==='vencida'){
+    extra=`<div class="filabox"><div class="filaboxl">Por que não saiu sozinha</div><div style="font-size:13px">${esc(a.motivo_cancelamento||'Passou do prazo de validade.')}</div><div class="fhint" style="margin-top:4px">Nada foi perdido. Você decide se ainda faz sentido enviar.</div></div>`;
+  }else if(a.status==='erro'&&a.erro){
     extra=`<div class="filabox"><div class="filaboxl">O que deu errado</div><div style="font-size:13px;color:var(--red)">${esc(a.erro)}</div>${a.tentativas?`<div class="fhint" style="margin-top:4px">${a.tentativas} tentativa(s)</div>`:''}</div>`;
   }else if(a.status==='aguardando_aprovacao'){
     const d=c.samara_dados||{};
@@ -3093,6 +3199,11 @@ function cardFila(a){
   }else if(a.status==='pausado'){
     acoes=`<button class="btn btnp" style="padding:8px 15px;font-size:12px" onclick="filaRetomar('${a.id}')">▶ Retomar</button>
       <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaCancelar('${a.id}')">✕ Cancelar</button>`;
+  }else if(a.status==='vencida'){
+    acoes=`<button class="btn btnp" style="padding:8px 15px;font-size:12px" onclick="filaEnviarAgora('${a.id}')">➤ Enviar agora</button>
+      <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaReagendar('${a.id}')">🕐 Reagendar</button>
+      <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaEditar('${a.id}')">✎ Editar</button>
+      <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaCancelar('${a.id}')">✕ Descartar</button>`;
   }else{
     acoes=`<button class="btn btnp" style="padding:8px 15px;font-size:12px" onclick="filaRetomar('${a.id}')">↻ Tentar de novo</button>
       <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaCancelar('${a.id}')">✕ Cancelar</button>`;
@@ -3100,8 +3211,13 @@ function cardFila(a){
 
   const verCard=a.cliente_id?`<button class="btn btns" style="padding:8px 15px;font-size:12px;margin-left:auto" onclick="location.hash='#/cliente/${a.cliente_id}'">Abrir cartão →</button>`:'';
 
+  const marcador=a.status==='vencida'
+    ? `<input type="checkbox" style="width:18px;height:18px;flex:none;margin-right:9px;accent-color:var(--pri)" ${FILA_SEL.has(a.id)?'checked':''} onchange="filaMarcar('${a.id}',this.checked)"/>`
+    : '';
+
   return`<div class="filacard">
     <div class="filahead">
+      ${marcador}
       <div style="min-width:0">
         <div class="filanome">${esc(nome)}</div>
         <div class="filameta">${origem} · ${esc(quando)}</div>

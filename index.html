@@ -3672,7 +3672,10 @@ function ibRenderPainel(c){
   if(!p)return;
   if(c.lead){
     p.innerHTML=`<div class="inb-panel-title">Contato</div><div class="fhint" style="margin-bottom:14px">Este número ainda não é uma cliente cadastrada no CRM.</div>
-      <button class="btn btnp" style="width:100%" onclick="ibAbrirCriarCliente('${escA(c.chave)}')">+ Criar cliente a partir deste contato</button>`;
+      <button class="btn btnp" style="width:100%" onclick="ibAbrirCriarCliente('${escA(c.chave)}')">+ Criar cliente a partir deste contato</button>
+      <div class="inb-panel-title" style="margin-top:22px">Zona de risco</div>
+      <div class="fhint" style="margin-bottom:10px">Apaga a conversa inteira deste número. Não dá para desfazer.</div>
+      <button class="btnd" style="width:100%" onclick="ibExcluirTudo('${escA(c.chave)}')">Excluir conversa</button>`;
     return;
   }
   sb.from('crm_clientes').select('*,crm_clientes_etiquetas(etiqueta_id)').eq('id',c.clienteId).single().then(({data:cli})=>{
@@ -3680,8 +3683,68 @@ function ibRenderPainel(c){
     const etqSel=(cli.crm_clientes_etiquetas||[]).map(e=>e.etiqueta_id);
     const chips=etqSel.map(id=>{const t=ETQ.find(x=>x.id===id);return t?`<span class="chip" style="background:${escA(t.cor)}">${esc(t.nome)}</span>`:'';}).join('')||'<div class="fhint">Sem etiquetas</div>';
     p.innerHTML=`<div class="inb-panel-title">Etiquetas</div><div class="inb-panel-chips">${chips}</div>
-      <a class="inb-cta" onclick="abrirCardCliente('${cli.id}')">Abrir cartão completo →</a>`;
+      <a class="inb-cta" onclick="abrirCardCliente('${cli.id}')">Abrir cartão completo →</a>
+      <div class="inb-panel-title" style="margin-top:22px">Zona de risco</div>
+      <div class="fhint" style="margin-bottom:10px">Apaga a cliente, o cartão, a conversa e tudo que estiver agendado para ela. Não dá para desfazer.</div>
+      <button class="btnd" style="width:100%" onclick="ibExcluirTudo('${escA(c.chave)}')">Excluir cliente e conversa</button>`;
   });
+}
+
+/**
+ * Exclusao completa, para testes.
+ *
+ * O banco NAO apaga em cascata: apagar so a linha de crm_clientes deixa
+ * mensagem, automacao e atividade orfas — foi assim que apareceu aquela
+ * automacao rodando para um contato que nao existia mais.
+ * Por isso aqui a ordem e: filhos primeiro, cliente por ultimo.
+ *
+ * Serve tambem para contato que ainda nao virou cliente: nesse caso so
+ * existem mensagens, e o resto e ignorado.
+ */
+async function ibExcluirTudo(chave){
+  const c=IB_CONVS.find(x=>x.chave===chave);
+  if(!c)return;
+  const nome=c.nome||'este contato';
+
+  if(!confirm(`Excluir ${nome}?\n\nVai apagar a conversa inteira`+(c.clienteId?', o cartão e tudo que estiver agendado':'')+`.\n\nIsso NÃO pode ser desfeito.`))return;
+  if((prompt('Para confirmar, digite APAGAR')||'').trim().toUpperCase()!=='APAGAR'){
+    toast('Cancelado','er');return;
+  }
+
+  const erros=[];
+  const tentar=async(rotulo,promessa)=>{
+    const{error}=await promessa;
+    if(error)erros.push(rotulo+': '+error.message);
+  };
+
+  // 1. Mensagens. Podem estar ligadas pelo cliente ou so pelo telefone.
+  if(c.clienteId)await tentar('mensagens',sb.from('crm_mensagens').delete().eq('cliente_id',c.clienteId));
+  if(c.telefoneChave)await tentar('mensagens do numero',sb.from('crm_mensagens').delete().eq('telefone_chave',c.telefoneChave));
+
+  // 2. Tudo que pendura no cliente.
+  if(c.clienteId){
+    await tentar('automações',sb.from('crm_automacoes').delete().eq('cliente_id',c.clienteId));
+    await tentar('etiquetas',sb.from('crm_clientes_etiquetas').delete().eq('cliente_id',c.clienteId));
+    await tentar('atividades',sb.from('crm_atividades').delete().eq('cliente_id',c.clienteId));
+    await tentar('comentários',sb.from('crm_comentarios').delete().eq('cliente_id',c.clienteId));
+    await tentar('anexos',sb.from('crm_anexos').delete().eq('cliente_id',c.clienteId));
+    await tentar('notificações',sb.from('crm_notificacoes').delete().eq('cliente_id',c.clienteId));
+    // 3. E so entao a cliente.
+    await tentar('cliente',sb.from('crm_clientes').delete().eq('id',c.clienteId));
+  }
+
+  if(erros.length){
+    console.error('[excluir] falhas:',erros);
+    toast('Apagado com pendências — veja o console','er');
+  }else{
+    toast('Excluído','ok');
+  }
+
+  ibSelId=null;
+  const p=$('ib-panel');if(p)p.innerHTML='<div class="fhint">Selecione uma conversa.</div>';
+  const box=$('ib-chat');if(box)box.innerHTML='<div class="fhint" style="text-align:center;padding:40px 0">Selecione uma conversa.</div>';
+  finCarregado=false;
+  if(typeof ibCarregarLista==='function')ibCarregarLista();
 }
 async function ibCarregarChat(c,silencioso){
   const box=$('ib-chat');

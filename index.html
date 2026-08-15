@@ -623,6 +623,11 @@ const SUPABASE_URL='https://ggyngtqknonwnohbzkyj.supabase.co';
 const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdneW5ndHFrbm9ud25vaGJ6a3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5ODA4NzcsImV4cCI6MjA5NDU1Njg3N30.0zYn_V9gBtRNWivAHfps6u68akb0mTc7Ix8ZD38OD0I';
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 
+// Lista que serve de gatilho: card que chega aqui COM link do contrato
+// preenchido faz o motor religar a Samara e mandar o contrato.
+// Se um dia essa lista for recriada, o id muda aqui E no motor.
+const LISTA_CONTRATO_ENVIADO='c87d7210-b262-40a6-88fa-51d8faf12b1a';
+
 const PCT_HONORARIOS=0.30;
 const ANEXO_BUCKET='crm-anexos';
 const QUADROS={
@@ -1556,7 +1561,11 @@ function renderCardClienteModal(c,etqSel,listas){
           </div>
         </div>
         <div class="mcsens" style="background:var(--rose-l);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
-          <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">👥 Referências do contrato</div>
+          <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">📄 Contrato</div>
+          <div class="fld ff" style="margin-bottom:11px"><label>Link do contrato (Autentica Online)</label>
+            <input type="url" id="mc-link-contrato" placeholder="https://..." value="${escA(c.link_contrato)}"/>
+            <div class="fhint">Cole o link e mova o card para <b>Contrato enviado</b>. A Samara volta a falar com a cliente e manda o contrato sozinha.</div>
+          </div>
           <div class="fg">
             <div class="fld"><label>Referência 1 · nome</label><input type="text" id="mc-ref1-nome" value="${escA(c.referencia1_nome)}"/></div>
             <div class="fld"><label>Referência 1 · telefone</label><input type="text" id="mc-ref1-tel" value="${escA(c.referencia1_telefone)}"/></div>
@@ -1954,11 +1963,21 @@ async function salvarCardCliente(id){
   const nome=$('mc-nome').value.trim();
   if(!nome){toast('Preencha o nome','er');return;}
   const quadro=$('mc-quadro').value,listaId=$('mc-lista').value||null;
+  const linkContrato=$('mc-link-contrato')?$('mc-link-contrato').value.trim():'';
+
+  // A lista "Contrato enviado" e o gatilho: o motor so manda o contrato
+  // para a cliente quando o card chega la COM link. Sem link, o card
+  // fica parado e ninguem avisa — entao o aviso e aqui.
+  if(listaId===LISTA_CONTRATO_ENVIADO&&!linkContrato){
+    if(!confirm('Este card esta indo para "Contrato enviado" sem o link do contrato.\n\nA Samara nao vai mandar nada ate o link ser preenchido — o card fica parado.\n\nMover assim mesmo?'))return;
+  }
+
   const payload={
     nome_completo:nome,
     telefone_principal:$('mc-tel').value.trim()||null,
     cpf:$('mc-cpf').value.trim()||null,
     senha_inss:$('mc-senha-inss').value.trim()||null,
+    link_contrato:linkContrato||null,
     referencia1_nome:$('mc-ref1-nome').value.trim()||null,
     referencia1_telefone:$('mc-ref1-tel').value.trim()||null,
     referencia2_nome:$('mc-ref2-nome').value.trim()||null,

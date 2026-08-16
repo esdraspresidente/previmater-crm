@@ -3205,7 +3205,7 @@ function cardFila(a){
   const c=a.crm_clientes||{};
   const nome=c.nome_completo||'(sem nome)';
   const quando=a.data_hora_agendada?tempoRel(a.data_hora_agendada):'';
-  const origem=a.tipo_automacao==='samara'?'Samara':(a.tipo_automacao==='abertura'?'Abertura':'Sequência');
+  const origem=a.tipo_automacao==='samara'?'Samara':(a.tipo_automacao==='abertura'?'Abertura':(a.tipo_automacao==='aviso_esdras'?'Aviso para você':'Sequência'));
 
   let etiqueta='';
   if(a.status==='aguardando_aprovacao'){
@@ -3236,8 +3236,16 @@ function cardFila(a){
     }
   }
 
+  // Aviso nao e mensagem para cliente nenhuma: e trabalho esperando por
+  // voce. "Aprovar e enviar" num aviso e mentira — nada e enviado, o
+  // clique so da ciencia e tira o item da fila. Editar e cancelar
+  // tambem nao fazem sentido aqui.
+  const ehAviso=a.tipo_automacao==='aviso_esdras';
+
   let acoes='';
-  if(a.status==='aguardando_aprovacao'){
+  if(a.status==='aguardando_aprovacao'&&ehAviso){
+    acoes=`<button class="btn btnp" style="padding:8px 15px;font-size:12px" onclick="filaAprovar('${a.id}')">✓ Ciente, é comigo</button>`;
+  }else if(a.status==='aguardando_aprovacao'){
     acoes=`<button class="btn btnp" style="padding:8px 15px;font-size:12px" onclick="filaAprovar('${a.id}')">✓ Aprovar e enviar</button>
       <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaEditar('${a.id}')">✎ Editar</button>
       <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaCancelar('${a.id}')">✕ Cancelar</button>`;

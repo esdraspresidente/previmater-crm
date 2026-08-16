@@ -564,6 +564,40 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
   /* No celular nao existe hover: o botao fica sempre visivel. */
   .cl-del{opacity:1;}
 }
+
+/* ---- TELA DE LOGS ---------------------------------------------- */
+.lgcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:11px;margin-bottom:16px;}
+.lgcard{background:var(--white);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;box-shadow:var(--sh);}
+.lgcardn{font-size:25px;font-weight:800;letter-spacing:-1px;line-height:1;}
+.lgcardl{font-size:10.5px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.7px;margin-top:6px;}
+.lgfiltros{background:var(--white);border:1px solid var(--border);border-radius:var(--rl);padding:12px 14px;margin-bottom:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;box-shadow:var(--sh);}
+.lgchip{border:1.5px solid var(--border);background:var(--bg);border-radius:999px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;font-family:inherit;}
+.lgchip.a{background:var(--teal);border-color:var(--teal);color:#fff;}
+.lgsep{width:1px;height:22px;background:var(--border);margin:0 2px;}
+.lgsel,.lgbusca,.lgdata{font-family:inherit;font-size:13px;border:1.5px solid var(--border);border-radius:9px;padding:7px 11px;background:#F3FAFA;color:var(--text);}
+.lgbusca{min-width:180px;flex:1;}
+.lgauto{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;}
+.lglista{background:var(--white);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;box-shadow:var(--sh);}
+.lglinha{display:flex;align-items:flex-start;gap:11px;padding:11px 15px;border-bottom:1px solid var(--border2);cursor:pointer;}
+.lglinha:last-of-type{border-bottom:none;}
+.lglinha:hover{background:#F7FCFC;}
+.lghora{font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums;white-space:nowrap;padding-top:2px;min-width:54px;font-weight:600;}
+.lgniv{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;padding:3px 8px;border-radius:6px;white-space:nowrap;margin-top:1px;}
+.lgniv.erro{background:var(--red-bg);color:var(--red);}
+.lgniv.aviso{background:var(--yellow-bg);color:var(--yellow);}
+.lgniv.info{background:var(--gray-bg);color:var(--gray);}
+.lgcorpo{flex:1;min-width:0;}
+.lgmsg{font-size:13px;font-weight:600;line-height:1.45;word-break:break-word;}
+.lgmeta{font-size:11px;color:var(--text3);margin-top:4px;display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+.lgmod{background:var(--teal-l);color:var(--teal);font-weight:700;padding:2px 7px;border-radius:5px;}
+.lgorig{background:var(--purple-bg);color:var(--purple);font-weight:700;padding:2px 7px;border-radius:5px;}
+.lgcli{color:var(--teal);font-weight:700;cursor:pointer;}
+.lgcli:hover{text-decoration:underline;}
+.lgseta{color:var(--text3);font-size:11px;padding-top:3px;}
+.lgdet{background:#0D2B2B;color:#94D2BD;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;line-height:1.6;padding:13px 16px;white-space:pre-wrap;word-break:break-word;border-bottom:1px solid var(--border2);}
+.lgrod{text-align:center;padding:13px;color:var(--text3);font-size:12px;}
+.lgmais{color:var(--teal);font-weight:700;cursor:pointer;}
+@media(max-width:640px){.lghora{min-width:44px;font-size:11px;}.lgbusca{min-width:100%;}}
 </style>
 </head>
 <body>
@@ -822,6 +856,7 @@ function montarSidebar(){
   h+=`<button class="ni" id="nav-automacoes" onclick="location.hash='#/automacoes'"><div class="nic">⚡</div>Automações</button>`;
   if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-fila" onclick="location.hash='#/fila'"><div class="nic">☰</div>Fila de automações</button>`;
   if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-campanha" onclick="location.hash='#/campanha'"><div class="nic">◐</div>Campanha</button>`;
+  if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-logs" onclick="location.hash='#/logs'"><div class="nic">▤</div>Logs</button>`;
   $('sbnav').innerHTML=h;
 }
 function marcarNav(id){
@@ -866,7 +901,238 @@ function route(){
   if(r==='/recebimento/novo')return pageNovoRec();
   if(r==='/inbox')return pageInbox();
   if(r==='/clientes')return pageClientes();
+  if(r==='/logs')return pageLogs();
   $('pc').innerHTML='<div class="emp"><div class="empt">Tela não encontrada</div></div>';
+}
+
+
+// ============================================================
+// LOGS DO SISTEMA
+//
+// Ate a versao 25 do motor todo erro morria no console da Edge
+// Function. Esta tela existe para que a pergunta "por que isso nao
+// saiu?" tenha resposta em um clique, e nao em uma noite.
+//
+// Motor, webhook e CRM na MESMA lista, de proposito: erro de webhook
+// costuma ser causa de erro de motor tres minutos depois.
+// ============================================================
+
+let LOGS_CACHE=[];
+let LOGS_ABERTO=null;
+let LOGS_PAGINA=0;
+let LOGS_TIMER=null;
+let LOGS_NOMES={};
+const LOGS_POR_PAGINA=60;
+
+let LOGS_F={nivel:'tudo',origem:'',modulo:'',busca:'',periodo:'24h',de:'',ate:'',auto:true};
+
+// Periodo: a retencao e de 14 dias (limpeza automatica as 4h), entao
+// nao existe opcao maior que isso. "Personalizado" abre duas datas.
+const LOGS_PERIODOS={
+  '1h':{rotulo:'Última hora',horas:1},
+  'hoje':{rotulo:'Hoje',horas:null},
+  '24h':{rotulo:'Últimas 24h',horas:24},
+  '7d':{rotulo:'7 dias',horas:24*7},
+  '14d':{rotulo:'Tudo (14 dias)',horas:24*14},
+  'custom':{rotulo:'Personalizado…',horas:null}
+};
+
+function logsDesdeAte(){
+  const f=LOGS_F;
+  if(f.periodo==='custom'){
+    const de=f.de?new Date(f.de+'T00:00:00'):null;
+    const ate=f.ate?new Date(f.ate+'T23:59:59'):null;
+    return{de,ate};
+  }
+  if(f.periodo==='hoje'){
+    const d=new Date();d.setHours(0,0,0,0);
+    return{de:d,ate:null};
+  }
+  const h=LOGS_PERIODOS[f.periodo]?LOGS_PERIODOS[f.periodo].horas:24;
+  return{de:new Date(Date.now()-h*3600000),ate:null};
+}
+
+async function pageLogs(){
+  const pc=$('pc');marcarNav('logs');
+  if(U.nivel!=='proprietario'){pc.innerHTML='<div class="emp"><div class="empt">Tela restrita a proprietários</div></div>';return;}
+  pc.innerHTML='<div class="emp">Carregando...</div>';
+  LOGS_PAGINA=0;LOGS_ABERTO=null;
+  await logsCarregar(true);
+  logsLigarAuto();
+}
+
+function logsLigarAuto(){
+  clearInterval(LOGS_TIMER);
+  if(!LOGS_F.auto)return;
+  // 20s: rapido o bastante para acompanhar um teste ao vivo, devagar o
+  // bastante para nao brigar com a leitura.
+  LOGS_TIMER=setInterval(()=>{
+    if(location.hash!=='#/logs'){clearInterval(LOGS_TIMER);return;}
+    logsCarregar(false);
+  },20000);
+}
+
+async function logsCarregar(mostrarCarregando){
+  const f=LOGS_F;
+  const{de,ate}=logsDesdeAte();
+
+  let q=sb.from('crm_logs')
+    .select('id,criado_em,nivel,modulo,mensagem,detalhe,cliente_id,origem')
+    .order('criado_em',{ascending:false})
+    .limit(LOGS_POR_PAGINA*(LOGS_PAGINA+1));
+
+  if(de)q=q.gte('criado_em',de.toISOString());
+  if(ate)q=q.lte('criado_em',ate.toISOString());
+  if(f.nivel!=='tudo')q=q.eq('nivel',f.nivel);
+  if(f.origem)q=q.eq('origem',f.origem);
+  if(f.modulo)q=q.eq('modulo',f.modulo);
+  if(f.busca.trim())q=q.or('mensagem.ilike.%'+f.busca.trim()+'%,detalhe.ilike.%'+f.busca.trim()+'%');
+
+  const{data,error}=await q;
+  if(error){
+    $('pc').innerHTML='<div class="emp"><div class="empt">Erro ao carregar os logs</div><div class="emps">'+esc(error.message)+'</div></div>';
+    return;
+  }
+  LOGS_CACHE=data||[];
+
+  // O log guarda so o uuid. O nome vem de crm_clientes na hora de
+  // exibir — e a diferenca entre "8f2c…a91d" e "Josuelson".
+  const ids=[...new Set(LOGS_CACHE.map(l=>l.cliente_id).filter(x=>x&&!LOGS_NOMES[x]))];
+  if(ids.length){
+    const{data:cli}=await sb.from('crm_clientes').select('id,nome_completo').in('id',ids.slice(0,200));
+    (cli||[]).forEach(c=>{LOGS_NOMES[c.id]=c.nome_completo||'sem nome';});
+  }
+  renderLogs();
+}
+
+function logsContar(nivel){
+  const desde=Date.now()-24*3600000;
+  return LOGS_CACHE.filter(l=>l.nivel===nivel&&new Date(l.criado_em).getTime()>=desde).length;
+}
+
+function renderLogs(){
+  const f=LOGS_F;
+  const ultimoErro=LOGS_CACHE.find(l=>l.nivel==='erro');
+  const modulos=[...new Set(LOGS_CACHE.map(l=>l.modulo))].sort();
+
+  let h='<div class="ph"><div><div class="pht">Logs do sistema</div>'+
+    '<div class="phs">Motor, webhook e CRM na mesma linha do tempo · guarda 14 dias · limpeza automática às 4h</div></div>'+
+    '<div style="display:flex;gap:8px">'+
+    '<button class="btn btns" style="padding:9px 15px;font-size:13px" onclick="logsCopiar()">Copiar visível</button>'+
+    '<button class="btn btnp" style="padding:9px 15px;font-size:13px" onclick="logsCarregar(true)">↻ Atualizar</button>'+
+    '</div></div>';
+
+  h+='<div class="lgcards">'+
+    '<div class="lgcard"><div class="lgcardn" style="color:var(--red)">'+logsContar('erro')+'</div><div class="lgcardl">Erros · 24h</div></div>'+
+    '<div class="lgcard"><div class="lgcardn" style="color:var(--yellow)">'+logsContar('aviso')+'</div><div class="lgcardl">Avisos · 24h</div></div>'+
+    '<div class="lgcard"><div class="lgcardn" style="color:var(--gray)">'+LOGS_CACHE.length+'</div><div class="lgcardl">No período</div></div>'+
+    '<div class="lgcard"><div class="lgcardn" style="color:var(--green);font-size:19px">'+(ultimoErro?logsHora(ultimoErro.criado_em):'—')+'</div><div class="lgcardl">Último erro</div></div>'+
+    '</div>';
+
+  // ---- filtros
+  h+='<div class="lgfiltros">';
+  ['tudo','erro','aviso','info'].forEach(n=>{
+    const rot={tudo:'Tudo',erro:'Erros',aviso:'Avisos',info:'Info'}[n];
+    h+='<button class="lgchip'+(f.nivel===n?' a':'')+'" onclick="logsFiltrar(\'nivel\',\''+n+'\')">'+rot+'</button>';
+  });
+  h+='<div class="lgsep"></div>';
+
+  h+='<select class="lgsel" onchange="logsFiltrar(\'periodo\',this.value)">';
+  Object.keys(LOGS_PERIODOS).forEach(k=>{
+    h+='<option value="'+k+'"'+(f.periodo===k?' selected':'')+'>'+LOGS_PERIODOS[k].rotulo+'</option>';
+  });
+  h+='</select>';
+
+  if(f.periodo==='custom'){
+    h+='<input type="date" class="lgdata" value="'+escA(f.de)+'" onchange="logsFiltrar(\'de\',this.value)"/>'+
+       '<span style="color:var(--text3);font-size:12px">até</span>'+
+       '<input type="date" class="lgdata" value="'+escA(f.ate)+'" onchange="logsFiltrar(\'ate\',this.value)"/>';
+  }
+
+  h+='<div class="lgsep"></div>';
+  h+='<select class="lgsel" onchange="logsFiltrar(\'origem\',this.value)">'+
+     '<option value="">Toda origem</option>'+
+     ['motor','webhook','crm'].map(o=>'<option value="'+o+'"'+(f.origem===o?' selected':'')+'>'+o+'</option>').join('')+
+     '</select>';
+  h+='<select class="lgsel" onchange="logsFiltrar(\'modulo\',this.value)">'+
+     '<option value="">Todo módulo</option>'+
+     modulos.map(m=>'<option value="'+escA(m)+'"'+(f.modulo===m?' selected':'')+'>'+esc(m)+'</option>').join('')+
+     '</select>';
+  h+='<input type="text" class="lgbusca" id="lgbusca" placeholder="Buscar no texto…" value="'+escA(f.busca)+'" onkeydown="if(event.key===\'Enter\')logsFiltrar(\'busca\',this.value)"/>';
+  h+='<label class="lgauto"><input type="checkbox" '+(f.auto?'checked':'')+' onchange="logsFiltrar(\'auto\',this.checked)"/> Atualizar sozinho</label>';
+  h+='</div>';
+
+  // ---- lista
+  if(LOGS_CACHE.length===0){
+    h+='<div class="lglista"><div class="emp"><div class="empt">Nada registrado neste período</div>'+
+       '<div class="emps">Se o motor está rodando e nada aparece, confira se ele já foi publicado na versão 26.</div></div></div>';
+  }else{
+    h+='<div class="lglista">';
+    LOGS_CACHE.forEach(l=>{
+      const nome=l.cliente_id?(LOGS_NOMES[l.cliente_id]||'ver card'):null;
+      const aberto=LOGS_ABERTO===l.id;
+      const temDet=!!(l.detalhe&&String(l.detalhe).trim());
+      h+='<div class="lglinha" onclick="logsAbrir(\''+l.id+'\')">'+
+         '<div class="lghora">'+logsHora(l.criado_em)+'</div>'+
+         '<div class="lgniv '+esc(l.nivel)+'">'+esc(l.nivel)+'</div>'+
+         '<div class="lgcorpo"><div class="lgmsg">'+esc(l.mensagem)+'</div>'+
+         '<div class="lgmeta"><span class="lgmod">'+esc(l.modulo)+'</span>'+
+         '<span class="lgorig">'+esc(l.origem)+'</span>'+
+         (nome?'<span class="lgcli" onclick="event.stopPropagation();abrirCardCliente(\''+l.cliente_id+'\')">'+esc(nome)+'</span>':'')+
+         (temDet&&!aberto?'<span>· clique para ver o detalhe</span>':'')+
+         '</div></div>'+
+         '<div class="lgseta">'+(temDet?(aberto?'▾':'▸'):'')+'</div>'+
+         '</div>';
+      if(aberto&&temDet)h+='<div class="lgdet">'+esc(l.detalhe)+'</div>';
+    });
+    const cheio=LOGS_CACHE.length>=LOGS_POR_PAGINA*(LOGS_PAGINA+1);
+    h+='<div class="lgrod">mostrando '+LOGS_CACHE.length+' registro'+(LOGS_CACHE.length===1?'':'s')+
+       (cheio?' · <span class="lgmais" onclick="logsMais()">carregar mais</span>':'')+'</div>';
+    h+='</div>';
+  }
+
+  $('pc').innerHTML=h;
+}
+
+function logsHora(iso){
+  const d=new Date(iso);
+  const hoje=new Date();
+  const p=n=>String(n).padStart(2,'0');
+  const hm=p(d.getHours())+':'+p(d.getMinutes());
+  const mesmoDia=d.toDateString()===hoje.toDateString();
+  return mesmoDia?hm:(p(d.getDate())+'/'+p(d.getMonth()+1)+' '+hm);
+}
+
+function logsFiltrar(campo,valor){
+  LOGS_F[campo]=valor;
+  LOGS_PAGINA=0;
+  if(campo==='auto'){logsLigarAuto();renderLogs();return;}
+  // Trocar para personalizado sem datas ainda nao deve consultar nada.
+  if(campo==='periodo'&&valor==='custom'&&!LOGS_F.de){renderLogs();return;}
+  logsCarregar(false);
+}
+
+function logsMais(){LOGS_PAGINA++;logsCarregar(false);}
+
+function logsAbrir(id){
+  LOGS_ABERTO=(LOGS_ABERTO===id)?null:id;
+  renderLogs();
+}
+
+/**
+ * Copia o que esta na tela como texto puro.
+ *
+ * Existe para voce me mandar erro por texto em vez de print: print de
+ * log foi como a apikey do WhatsGW vazou.
+ */
+function logsCopiar(){
+  const txt=LOGS_CACHE.map(l=>{
+    const base='['+logsHora(l.criado_em)+'] '+l.nivel.toUpperCase()+' '+l.origem+'/'+l.modulo+' — '+l.mensagem;
+    return l.detalhe?base+'\n    '+String(l.detalhe).replace(/\n/g,'\n    '):base;
+  }).join('\n');
+  navigator.clipboard.writeText(txt)
+    .then(()=>toast(LOGS_CACHE.length+' linhas copiadas','ok'))
+    .catch(()=>toast('Não consegui copiar','erro'));
 }
 
 // ============================================================

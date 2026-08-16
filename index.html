@@ -922,6 +922,7 @@ let LOGS_ABERTO=null;
 let LOGS_PAGINA=0;
 let LOGS_TIMER=null;
 let LOGS_NOMES={};
+let LOGS_PULSO=null;   // ultimo sinal de vida do motor, independente dos filtros
 const LOGS_POR_PAGINA=60;
 
 let LOGS_F={nivel:'tudo',origem:'',modulo:'',busca:'',periodo:'24h',de:'',ate:'',auto:true};
@@ -995,6 +996,16 @@ async function logsCarregar(mostrarCarregando){
   }
   LOGS_CACHE=data||[];
 
+  // O pulso e consultado FORA dos filtros de proposito: a pergunta
+  // "o motor esta rodando?" nao pode depender de qual periodo ou nivel
+  // voce escolheu olhar.
+  const{data:pulso}=await sb.from('crm_logs')
+    .select('criado_em,mensagem')
+    .eq('modulo','pulso')
+    .order('criado_em',{ascending:false})
+    .limit(1);
+  LOGS_PULSO=(pulso&&pulso.length)?pulso[0]:null;
+
   // O log guarda so o uuid. O nome vem de crm_clientes na hora de
   // exibir — e a diferenca entre "8f2c…a91d" e "Josuelson".
   const ids=[...new Set(LOGS_CACHE.map(l=>l.cliente_id).filter(x=>x&&!LOGS_NOMES[x]))];
@@ -1016,7 +1027,7 @@ function renderLogs(){
   const modulos=[...new Set(LOGS_CACHE.map(l=>l.modulo))].sort();
 
   let h='<div class="ph"><div><div class="pht">Logs do sistema</div>'+
-    '<div class="phs">Motor, webhook e CRM na mesma linha do tempo · guarda 14 dias · limpeza automática às 4h</div></div>'+
+    '<div class="phs">'+logsSinal()+'</div></div>'+
     '<div style="display:flex;gap:8px">'+
     '<button class="btn btns" style="padding:9px 15px;font-size:13px" onclick="logsCopiar()">Copiar visível</button>'+
     '<button class="btn btnp" style="padding:9px 15px;font-size:13px" onclick="logsCarregar(true)">↻ Atualizar</button>'+
@@ -1064,8 +1075,13 @@ function renderLogs(){
 
   // ---- lista
   if(LOGS_CACHE.length===0){
-    h+='<div class="lglista"><div class="emp"><div class="empt">Nada registrado neste período</div>'+
-       '<div class="emps">Se o motor está rodando e nada aparece, confira se ele já foi publicado na versão 26.</div></div></div>';
+    // Vazio NAO quer dizer parado. Com o trafego desligado, uma rodada
+    // sem fila e sem cliente esperando nao produz log nenhum — e isso e
+    // o funcionamento normal. Quem responde "esta rodando?" e o pulso.
+    h+='<div class="lglista"><div class="emp"><div class="empt">Nada aconteceu neste período</div>'+
+       '<div class="emps">Silêncio aqui é normal quando não há fila nem cliente esperando. '+
+       (LOGS_PULSO?'O motor está dando sinal de vida — veja acima.':'Não há sinal de vida do motor na última hora: vale conferir se ele está publicado e se o cron está rodando.')+
+       '</div></div></div>';
   }else{
     h+='<div class="lglista">';
     LOGS_CACHE.forEach(l=>{
@@ -1092,6 +1108,24 @@ function renderLogs(){
   }
 
   $('pc').innerHTML=h;
+}
+
+/**
+ * A linha de estado do topo. Responde, sem clique nenhum, as duas
+ * perguntas que a tela existia para responder e nao respondia:
+ * o motor esta vivo, e qual versao esta publicada.
+ */
+function logsSinal(){
+  const base='Motor, webhook e CRM na mesma linha do tempo · guarda 14 dias';
+  if(!LOGS_PULSO)return base+' · <b style="color:var(--red)">sem sinal do motor</b>';
+  const min=Math.round((Date.now()-new Date(LOGS_PULSO.criado_em).getTime())/60000);
+  const versao=(String(LOGS_PULSO.mensagem).match(/versao\s*([0-9]+)/i)||[])[1];
+  // O pulso sai de hora em hora, entao mais de 70 minutos calado ja e
+  // sinal de que alguma coisa parou.
+  const vivo=min<=70;
+  const quando=min<1?'agora':(min<60?('há '+min+' min'):('há '+Math.round(min/60)+'h'));
+  return base+' · <b style="color:'+(vivo?'var(--green)':'var(--red)')+'">motor '+(vivo?'vivo':'calado')+' '+quando+
+    (versao?' · versão '+versao:'')+'</b>';
 }
 
 function logsHora(iso){

@@ -472,6 +472,28 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .filapill.red{background:var(--red-bg);color:var(--red);}
 .filabox{background:var(--bg);border-radius:10px;padding:10px 12px;margin-top:9px;}
 .filaboxl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;}
+/* Sinal do menu: bolinha e nada mais. Sem número de propósito — número
+   que fica aceso o dia todo por causa de lembrete agendado para semana
+   que vem vira paisagem, e aí ninguém olha mais. Ela só acende quando
+   existe algo que depende de uma decisão sua. */
+.nidot{width:8px;height:8px;border-radius:50%;background:var(--red);margin-left:auto;flex-shrink:0;box-shadow:0 0 0 3px var(--red-bg);}
+/* Cabeçalho de seção que abre e fecha. Mesmo visual do .snl, mais a
+   seta e a área clicável. */
+.snlb{width:100%;background:none;border:none;font-family:inherit;display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:0 10px;margin:12px 0 4px;cursor:pointer;text-align:left;}
+.snlb:hover{color:var(--text2);}
+.snlc{font-size:9px;transition:transform .15s;display:inline-block;}
+.snlb.fechado .snlc{transform:rotate(-90deg);}
+/* Filtros e agrupamento por dia da fila */
+.filafiltros{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+.filafiltros select,.filafiltros input{font-family:inherit;font-size:12px;font-weight:600;color:var(--text2);background:var(--white);border:1.5px solid var(--border);border-radius:9px;padding:7px 10px;}
+.filafiltros input{min-width:170px;}
+.filadia{display:flex;align-items:center;gap:9px;margin:16px 0 9px;}
+.filadia:first-child{margin-top:0;}
+.filadiat{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;}
+.filadiat.hoje{color:var(--teal);}
+.filadiat.atrasado{color:var(--red);}
+.filadian{font-size:11px;font-weight:700;background:var(--bg);color:var(--text3);padding:1px 8px;border-radius:8px;}
+.filadiln{flex:1;height:1.5px;background:var(--border);}
 .filamsg{border-left:2.5px solid var(--teal-m);padding-left:12px;}
 .filabalao{margin:0 0 6px;font-size:14px;line-height:1.55;color:var(--text);}
 .filabalao:last-child{margin-bottom:0;}
@@ -836,7 +858,7 @@ function mostrarApp(){
   $('notifbtn').classList.remove('h');$('notifbtnm').classList.remove('h');
   carregarNotificacoes();
   clearInterval(notifPollTimer);
-  notifPollTimer=setInterval(carregarNotificacoes,60000);
+  notifPollTimer=setInterval(()=>{carregarNotificacoes();atualizarSinalFila();},60000);
 }
 function temFinanceiro(){return QPERM.includes('financeiro');}
 function montarSidebar(){
@@ -846,18 +868,57 @@ function montarSidebar(){
   h+='<div class="snl">Quadros</div>';
   QPERM.forEach(q=>{h+=`<button class="ni" id="nav-${q}" onclick="location.hash='#/quadro/${q}'"><div class="nic">${QUADROS[q].icone}</div>${QUADROS[q].rotulo}</button>`;});
   if(temFinanceiro()){
-    h+='<div class="snl">Recebimentos</div>';
-    h+=`<button class="ni" id="nav-dashboard" onclick="location.hash='#/dashboard'"><div class="nic">⊞</div>Dashboard</button>`;
-    h+=`<button class="ni" id="nav-recebimentos" onclick="location.hash='#/recebimentos'"><div class="nic">≡</div>Recebimentos</button>`;
-    h+=`<button class="ni" id="nav-novorec" onclick="location.hash='#/recebimento/novo'"><div class="nic">＋</div>Novo recebimento</button>`;
+    /* Recebimentos abre e fecha. São três itens que só interessam na
+       hora de mexer em dinheiro, e ficavam ocupando um terço do menu o
+       dia inteiro. O estado é lembrado no mesmo padrão das listas do
+       quadro (kl_col_*), então fechar uma vez fecha para sempre. */
+    const fechado=navSecaoFechada('receb');
+    h+=`<button class="snlb ${fechado?'fechado':''}" onclick="navAlternarSecao('receb')">
+          <span class="snlc">▾</span>Recebimentos</button>`;
+    if(!fechado){
+      h+=`<button class="ni" id="nav-dashboard" onclick="location.hash='#/dashboard'"><div class="nic">⊞</div>Dashboard</button>`;
+      h+=`<button class="ni" id="nav-recebimentos" onclick="location.hash='#/recebimentos'"><div class="nic">≡</div>Recebimentos</button>`;
+      h+=`<button class="ni" id="nav-novorec" onclick="location.hash='#/recebimento/novo'"><div class="nic">＋</div>Novo recebimento</button>`;
+    }
   }
   h+='<div class="snl">Configurações</div>';
   h+=`<button class="ni" id="nav-etiquetas" onclick="location.hash='#/etiquetas'"><div class="nic">◇</div>Etiquetas</button>`;
   h+=`<button class="ni" id="nav-automacoes" onclick="location.hash='#/automacoes'"><div class="nic">⚡</div>Automações</button>`;
-  if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-fila" onclick="location.hash='#/fila'"><div class="nic">☰</div>Fila de automações</button>`;
+  if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-fila" onclick="location.hash='#/fila'"><div class="nic">☰</div>Fila de automações<span class="nidot h" id="nav-fila-dot"></span></button>`;
   if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-campanha" onclick="location.hash='#/campanha'"><div class="nic">◐</div>Campanha</button>`;
   if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-logs" onclick="location.hash='#/logs'"><div class="nic">▤</div>Logs</button>`;
   $('sbnav').innerHTML=h;
+  atualizarSinalFila();
+}
+
+/* Seções do menu que abrem e fecham. Mesmo armazenamento das listas do
+   quadro, para não inventar um segundo jeito de guardar a mesma coisa. */
+function navSecaoFechada(id){try{return localStorage.getItem('kl_nav_'+id)==='1';}catch(_){return false;}}
+function navAlternarSecao(id){
+  const fechado=navSecaoFechada(id);
+  try{if(fechado)localStorage.removeItem('kl_nav_'+id);else localStorage.setItem('kl_nav_'+id,'1');}catch(_){}
+  montarSidebar();
+  const h=location.hash.replace('#/','').split('/')[0];
+  if(h)marcarNav(h==='recebimento'?'novorec':h);
+}
+
+/* A BOLINHA DA FILA.
+   Acende quando existe alguma coisa que depende de uma decisão sua:
+   mensagem esperando aprovação, aviso seu, envio que falhou ou que
+   venceu. NÃO conta o que está apenas agendado — isso é o motor
+   trabalhando, não trabalho seu.
+   Pergunta com head:true e count exato: o banco devolve o número sem
+   trazer nenhuma linha, então pode rodar de minuto em minuto sem peso. */
+async function atualizarSinalFila(){
+  const dot=$('nav-fila-dot');
+  if(!dot||!U||U.nivel!=='proprietario')return;
+  try{
+    const{count,error}=await sb.from('crm_automacoes')
+      .select('id',{count:'exact',head:true})
+      .in('status',['aguardando_aprovacao','erro','vencida']);
+    if(error)return;
+    dot.classList.toggle('h',!(count>0));
+  }catch(_){}
 }
 function marcarNav(id){
   document.querySelectorAll('.ni').forEach(b=>b.classList.remove('a'));
@@ -3447,6 +3508,10 @@ let FILA_ABA='aprovar';
 let FILA_CACHE=[];
 let FILA_SEL=new Set();          // vencidas marcadas para reenvio em lote
 let FILA_FREIOS={motor_ligado:'sim',samara_ligada:'sim'};
+/* Filtros da fila. Ficam fora do render para sobreviver à troca de aba:
+   quem filtrou por "Hoje" não quer perder o filtro ao ir ver as com
+   erro e voltar. */
+let FILA_F={periodo:'todos',origem:'todas',busca:''};
 
 function filaVoltarPara(status){
   if(status==='aguardando_aprovacao')return'aprovar';
@@ -3531,13 +3596,123 @@ function renderFila(){
     </div>`;
   }
 
+  h+=filtrosFilaHtml(lista);
+  const filtrada=filtrarFila(lista);
+
   if(lista.length===0){
     const vazio={aprovar:'Nada esperando aprovação',agendadas:'Nenhum envio agendado',vencidas:'Nada vencido',erro:'Nenhuma falha de envio'}[FILA_ABA];
     h+=`<div class="emp"><div class="empt">${vazio}</div></div>`;
+  }else if(filtrada.length===0){
+    h+=`<div class="emp"><div class="empt">Nada com esses filtros</div>
+        <div class="emps">Existem ${lista.length} nesta aba — só não batem com o que você filtrou.</div></div>`;
   }else{
-    h+=lista.map(cardFila).join('');
+    h+=agruparPorDia(filtrada);
   }
   pc.innerHTML=h;
+}
+
+/* A barra de filtros. Os três recortes que a operação pede: QUANDO sai,
+   DE ONDE veio e DE QUEM é. */
+function filtrosFilaHtml(lista){
+  const op=(v,r,sel)=>`<option value="${v}" ${sel===v?'selected':''}>${r}</option>`;
+  return`<div class="filafiltros">
+    <select onchange="FILA_F.periodo=this.value;renderFila()">
+      ${op('todos','Todos os dias',FILA_F.periodo)}
+      ${op('atrasadas','Atrasadas',FILA_F.periodo)}
+      ${op('hoje','Hoje',FILA_F.periodo)}
+      ${op('amanha','Amanhã',FILA_F.periodo)}
+      ${op('7dias','Próximos 7 dias',FILA_F.periodo)}
+    </select>
+    <select onchange="FILA_F.origem=this.value;renderFila()">
+      ${op('todas','Toda origem',FILA_F.origem)}
+      ${op('samara','Samara',FILA_F.origem)}
+      ${op('sequencia','Sequência',FILA_F.origem)}
+      ${op('aviso_esdras','Aviso para você',FILA_F.origem)}
+      ${op('abertura','Abertura',FILA_F.origem)}
+    </select>
+    <input type="text" placeholder="Buscar cliente..." value="${escA(FILA_F.busca)}"
+      oninput="FILA_F.busca=this.value;clearTimeout(window._fbt);window._fbt=setTimeout(renderFila,250)"/>
+    ${(FILA_F.periodo!=='todos'||FILA_F.origem!=='todas'||FILA_F.busca)
+      ?`<button class="btn btns" style="padding:7px 12px;font-size:12px" onclick="FILA_F={periodo:'todos',origem:'todas',busca:''};renderFila()">Limpar</button>`
+      :''}
+    <div class="fhint" style="margin-left:auto">${lista.length} nesta aba</div>
+  </div>`;
+}
+
+/* Meia-noite local de uma data — a fronteira do dia. Tudo aqui é
+   comparado em dia de calendário, não em 24 horas corridas: "amanhã" é
+   o dia amanhã, não daqui a um dia. */
+function inicioDoDia(d){const x=new Date(d);x.setHours(0,0,0,0);return x;}
+
+function filtrarFila(lista){
+  const hoje=inicioDoDia(new Date()).getTime();
+  const dia=86400000;
+  const busca=(FILA_F.busca||'').trim().toLowerCase();
+
+  return lista.filter(a=>{
+    if(FILA_F.origem!=='todas'&&(a.tipo_automacao||'')!==FILA_F.origem)return false;
+
+    if(busca){
+      const c=a.crm_clientes||{};
+      const alvo=((c.nome_completo||'')+' '+(c.telefone_principal||'')).toLowerCase();
+      if(!alvo.includes(busca))return false;
+    }
+
+    if(FILA_F.periodo!=='todos'){
+      if(!a.data_hora_agendada)return false;
+      const d=inicioDoDia(new Date(a.data_hora_agendada)).getTime();
+      if(FILA_F.periodo==='atrasadas'&&!(new Date(a.data_hora_agendada)<new Date()))return false;
+      if(FILA_F.periodo==='hoje'&&d!==hoje)return false;
+      if(FILA_F.periodo==='amanha'&&d!==hoje+dia)return false;
+      if(FILA_F.periodo==='7dias'&&(d<hoje||d>hoje+7*dia))return false;
+    }
+    return true;
+  });
+}
+
+/* O rótulo do dia. Hoje e Amanhã por nome, o resto por data com o dia
+   da semana — "ter, 18/08" diz mais que "18/08" quando se está
+   decidindo o que vai sair antes do fim de semana. */
+function rotuloDoDia(ts){
+  const hoje=inicioDoDia(new Date()).getTime();
+  const d=inicioDoDia(new Date(ts)).getTime();
+  const dia=86400000;
+  if(d===hoje)return{txt:'Hoje',cls:'hoje'};
+  if(d===hoje+dia)return{txt:'Amanhã',cls:''};
+  if(d===hoje-dia)return{txt:'Ontem',cls:'atrasado'};
+  const f=new Date(ts).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'});
+  return{txt:f.replace('.',''),cls:d<hoje?'atrasado':''};
+}
+
+function agruparPorDia(lista){
+  const grupos=new Map();       // Map preserva a ordem de inserção
+  const semData=[];
+
+  lista.forEach(a=>{
+    if(!a.data_hora_agendada){semData.push(a);return;}
+    const chave=inicioDoDia(new Date(a.data_hora_agendada)).getTime();
+    if(!grupos.has(chave))grupos.set(chave,[]);
+    grupos.get(chave).push(a);
+  });
+
+  let h='';
+  [...grupos.keys()].sort((a,b)=>a-b).forEach(k=>{
+    const r=rotuloDoDia(k);
+    const itens=grupos.get(k);
+    h+=`<div class="filadia">
+          <div class="filadiat ${r.cls}">${r.txt}</div>
+          <div class="filadian">${itens.length}</div>
+          <div class="filadiln"></div>
+        </div>`;
+    h+=itens.map(cardFila).join('');
+  });
+
+  if(semData.length){
+    h+=`<div class="filadia"><div class="filadiat">Sem data</div>
+        <div class="filadian">${semData.length}</div><div class="filadiln"></div></div>`;
+    h+=semData.map(cardFila).join('');
+  }
+  return h;
 }
 
 async function filaAlternarFreio(chave){
@@ -3555,7 +3730,10 @@ function filaMarcar(id,marcado){
 }
 
 function filaSelTodas(){
-  const v=FILA_CACHE.filter(a=>a.status==='vencida');
+  /* Respeita o filtro: "selecionar todas" tem que significar as que
+     estão na tela. Marcar em silêncio o que está escondido é reenviar
+     mensagem sem ver para quem. */
+  const v=filtrarFila(FILA_CACHE.filter(a=>a.status==='vencida'));
   if(FILA_SEL.size===v.length)FILA_SEL.clear();
   else v.forEach(a=>FILA_SEL.add(a.id));
   renderFila();

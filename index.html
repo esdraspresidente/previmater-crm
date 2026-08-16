@@ -1026,8 +1026,8 @@ function renderLogs(){
   const ultimoErro=LOGS_CACHE.find(l=>l.nivel==='erro');
   const modulos=[...new Set(LOGS_CACHE.map(l=>l.modulo))].sort();
 
-  let h='<div class="ph"><div><div class="pht">Logs do sistema</div>'+
-    '<div class="phs">'+logsSinal()+'</div></div>'+
+  let h='<div class="pgh"><div><div class="pgt">Logs do sistema</div>'+
+    '<div class="pgs">'+logsSinal()+'</div></div>'+
     '<div style="display:flex;gap:8px">'+
     '<button class="btn btns" style="padding:9px 15px;font-size:13px" onclick="logsCopiar()">Copiar visível</button>'+
     '<button class="btn btnp" style="padding:9px 15px;font-size:13px" onclick="logsCarregar(true)">↻ Atualizar</button>'+
@@ -1820,6 +1820,52 @@ async function abrirCardCliente(id){
   const{data:listas}=await sb.from('crm_listas').select('*').eq('quadro',c.quadro).eq('arquivada',false).order('ordem');
   renderCardClienteModal(c,etqSel,listas||[]);
 }
+/* O que a Samara apurou na triagem mora em crm_clientes.samara_dados,
+   um JSON. Ate aqui isso so aparecia na Fila de Automacoes — o card, que
+   e onde voce olha para decidir, nao mostrava nada. O efeito era achar
+   que a DPP nao tinha sido coletada quando ela estava gravada o tempo
+   todo.
+
+   A ordem dos campos e a ordem das perguntas da triagem, entao da para
+   ler de cima para baixo e ver onde a conversa parou. */
+const TRIAGEM_ROTULOS=[
+  ['contribuiu','Contribuiu ao INSS'],
+  ['gravida','Grávida'],
+  ['dn','Nascimento do bebê'],
+  ['dpp','DPP (prevista)'],
+  ['ds','Saída do emprego'],
+  ['ds_registrada','Era registrado'],
+  ['seguro_desemprego','Seguro-desemprego'],
+  ['desemprego_involuntario','Emprega Brasil / SINE'],
+  ['data_desemprego_involuntario','Cadastro em'],
+  ['empregada_no_parto','Empregada no parto'],
+  ['licenca_empregador','Licença pelo empregador'],
+  ['pedido_negado','Pedido já negado'],
+  ['adocao','Adoção']
+];
+function mcTriagemHtml(dados){
+  const d=dados||{};
+  const conhecidas=TRIAGEM_ROTULOS.filter(([k])=>{
+    const v=d[k];return v!==null&&v!==undefined&&String(v).trim()!=='';
+  });
+  // Chave que a Samara gravou e nao esta na lista acima: mostra assim
+  // mesmo, com o nome cru. Melhor feio que escondido.
+  const sobrando=Object.keys(d).filter(k=>!TRIAGEM_ROTULOS.some(([r])=>r===k)&&String(d[k]??'').trim()!=='');
+  if(!conhecidas.length&&!sobrando.length){
+    return `<div class="mcsens" style="background:var(--bg2,#f6f7f8);border:1.5px dashed var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px">🔎 Triagem</div>
+      <div class="fhint">A Samara ainda não coletou nada desta cliente.</div>
+    </div>`;
+  }
+  const linha=(rot,val)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:13px">
+      <span style="color:var(--text3)">${esc(rot)}</span><b>${esc(String(val))}</b></div>`;
+  return `<div class="mcsens" style="background:var(--bg2,#f6f7f8);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
+    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">🔎 Triagem — o que a Samara coletou</div>
+    ${conhecidas.map(([k,rot])=>linha(rot,d[k])).join('')}
+    ${sobrando.map(k=>linha(k,d[k])).join('')}
+    <div class="fhint" style="margin-top:7px">Coletado na conversa. Para corrigir, fale com a cliente ou ajuste em <code>samara_dados</code>.</div>
+  </div>`;
+}
 function renderCardClienteModal(c,etqSel,listas){
   mcOriginal={nome_completo:c.nome_completo,quadro:c.quadro,lista_id:c.lista_id};
   mcClienteId=c.id;mcMencoes=[];mcEtqSelAtual=etqSel.slice();
@@ -1878,6 +1924,8 @@ function renderCardClienteModal(c,etqSel,listas){
     </div>
     <div class="mvpop h" id="mvpop"></div>
     </div>
+
+    ${mcTriagemHtml(c.samara_dados)}
 
     <div class="mcsens" style="background:var(--teal-l);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
           <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">🔐 Acesso INSS</div>
@@ -2061,14 +2109,41 @@ function chatDiaMsg(m){
   if(ig(d,o))return'Ontem';
   return d.toLocaleDateString('pt-BR');
 }
+/* O base64 da midia chega dentro de crm_mensagens.texto e destroi a
+   leitura da conversa: um audio de 10 segundos vira uma parede de 40 mil
+   caracteres e empurra o resto do papo para fora da tela.
+
+   Aqui so escondemos. A correcao de origem (nao gravar o base64 no
+   texto) e outra briga — esta funcao continua valendo depois dela,
+   porque as 31 mensagens que ja estao no banco nao se consertam
+   sozinhas.
+
+   Como reconhecer: base64 nao tem espaco e so usa o alfabeto dele.
+   Qualquer frase de gente tem espaco nos primeiros caracteres, e URL
+   tem dois-pontos — que nao esta no alfabeto. */
+function pareceBase64(t){
+  const s=String(t||'').trim();
+  if(s.length<200)return false;
+  if(/\s/.test(s.slice(0,200)))return false;
+  return /^[A-Za-z0-9+/=_-]+$/.test(s.slice(0,400));
+}
+function rotuloMidia(m){
+  const ic={imagem:'🖼',audio:'🎤',video:'🎬',documento:'📄',figurinha:'🩹',localizacao:'📍'};
+  const nome={imagem:'imagem',audio:'áudio',video:'vídeo',documento:'documento',figurinha:'figurinha',localizacao:'localização'};
+  const t=m&&m.tipo&&m.tipo!=='texto'?m.tipo:null;
+  if(t)return (ic[t]||'📎')+' '+(m.midia_nome||nome[t]||t);
+  return '📎 mídia';
+}
 function chatCorpoMsg(m){
   let html='';
-  if(m.tipo&&m.tipo!=='texto'){
-    const ic={imagem:'🖼',audio:'🎙',video:'🎬',documento:'📄',figurinha:'🩹',localizacao:'📍'}[m.tipo]||'📎';
-    html+=`<span class="chatb-mid">${ic} ${esc(m.midia_nome||m.tipo)}</span>`;
+  const ehMidia=m.tipo&&m.tipo!=='texto';
+  if(ehMidia){
+    html+=`<span class="chatb-mid">${esc(rotuloMidia(m))}</span>`;
   }
-  if(m.texto)html+=esc(m.texto).replace(/\n/g,'<br>');
-  else if(!m.tipo||m.tipo==='texto')html+='<span style="opacity:.6">(mensagem sem texto)</span>';
+  const cru=m.texto||'';
+  if(cru&&!pareceBase64(cru))html+=esc(cru).replace(/\n/g,'<br>');
+  else if(cru&&pareceBase64(cru)&&!ehMidia)html+=`<span class="chatb-mid">${esc(rotuloMidia(m))}</span>`;
+  else if(!cru&&!ehMidia)html+='<span style="opacity:.6">(mensagem sem texto)</span>';
   return html;
 }
 function chatJanelaHtml(msgs,canal){
@@ -3980,7 +4055,7 @@ function ibRenderLista(){
   if(!lista.length){cont.innerHTML='<div class="fhint" style="text-align:center;padding:20px 0">Nenhuma conversa ainda.</div>';return;}
   cont.innerHTML=lista.map(c=>{
     const m=c.ultimaMsg;
-    let prev=m.texto?m.texto:(m.tipo&&m.tipo!=='texto'?'📎 '+(m.midia_nome||m.tipo):'');
+    let prev=(m.texto&&!pareceBase64(m.texto))?m.texto:((m.tipo&&m.tipo!=='texto')||pareceBase64(m.texto)?rotuloMidia(m):'');
     if(m.direcao==='saida')prev=(m.autor_tipo==='bot'?'Samara: ':'Você: ')+prev;
     return`<div class="inb-item ${c.chave===ibSelId?'a':''}" onclick="ibSelecionar('${escA(c.chave)}')">
       <div class="av" style="background:${avC(c.nome)}">${avL(c.nome)}</div>

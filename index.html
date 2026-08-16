@@ -1933,7 +1933,8 @@ function renderCardClienteModal(c,etqSel,listas){
             <div class="fld"><label>CPF</label><input type="text" id="mc-cpf" value="${escA(c.cpf)}" oninput="cpfMask(this)"/></div>
             <div class="fld"><label>Senha INSS</label>
               <div style="position:relative">
-                <input type="password" id="mc-senha-inss" value="${escA(c.senha_inss)}" style="padding-right:34px;width:100%;box-sizing:border-box"/>
+                <input type="password" id="mc-senha-inss" value="${escA(c.senha_inss)}" style="padding-right:60px;width:100%;box-sizing:border-box"/>
+                <button type="button" onclick="mcCopiarSenha(this)" style="position:absolute;right:31px;top:0;bottom:0;background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px" title="Copiar a senha">📋</button>
                 <button type="button" onclick="mcTogSenha(this)" style="position:absolute;right:7px;top:0;bottom:0;background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px" title="Mostrar/ocultar">👁</button>
               </div>
             </div>
@@ -2359,6 +2360,28 @@ function mcTogSenha(btn){
   const inp=$('mc-senha-inss');
   if(inp.type==='password'){inp.type='text';btn.textContent='🙈';}
   else{inp.type='password';btn.textContent='👁';}
+}
+
+/* Copiar sem precisar revelar. A senha fica mascarada porque a tela do
+   CRM é aberta ao lado de gente, mas quem vai protocolar precisa dela na
+   área de transferência — e selecionar texto num campo password não
+   funciona em todo navegador. */
+async function mcCopiarSenha(btn){
+  const inp=$('mc-senha-inss');
+  const v=(inp&&inp.value||'').trim();
+  if(!v){toast('Nenhuma senha salva neste card','er');return;}
+  try{
+    await navigator.clipboard.writeText(v);
+  }catch(e){
+    // clipboard bloqueado (http, permissão): cai no jeito antigo
+    const era=inp.type; inp.type='text'; inp.select();
+    try{document.execCommand('copy');}catch(_){ }
+    inp.type=era; window.getSelection&&window.getSelection().removeAllRanges();
+  }
+  const antes=btn.textContent;
+  btn.textContent='✅';
+  setTimeout(()=>{btn.textContent=antes;},1200);
+  toast('Senha copiada');
 }
 async function mcTrocarQuadro(){
   const q=$('mc-quadro').value;

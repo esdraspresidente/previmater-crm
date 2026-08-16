@@ -1845,12 +1845,17 @@ const TRIAGEM_ROTULOS=[
 ];
 function mcTriagemHtml(dados){
   const d=dados||{};
+  // Credencial nunca aparece aqui. O motor já barra na entrada, mas
+  // card antigo pode ter senha gravada de antes da trava — e este painel
+  // fica aberto para quem passar pela tela.
+  const PROIBIDAS=['senha','senha_inss','senha_gov','password'];
   const conhecidas=TRIAGEM_ROTULOS.filter(([k])=>{
+    if(PROIBIDAS.includes(k))return false;
     const v=d[k];return v!==null&&v!==undefined&&String(v).trim()!=='';
   });
   // Chave que a Samara gravou e nao esta na lista acima: mostra assim
   // mesmo, com o nome cru. Melhor feio que escondido.
-  const sobrando=Object.keys(d).filter(k=>!TRIAGEM_ROTULOS.some(([r])=>r===k)&&String(d[k]??'').trim()!=='');
+  const sobrando=Object.keys(d).filter(k=>!PROIBIDAS.includes(String(k).toLowerCase())&&!TRIAGEM_ROTULOS.some(([r])=>r===k)&&String(d[k]??'').trim()!=='');
   if(!conhecidas.length&&!sobrando.length){
     return `<div class="mcsens" style="background:var(--bg2,#f6f7f8);border:1.5px dashed var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
       <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px">🔎 Triagem</div>

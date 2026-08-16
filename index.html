@@ -537,7 +537,11 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 /* CLIENTES */
 .cl-chip.on{border-color:var(--teal);color:var(--teal);background:var(--teal-l);}
 .cl-tbl{background:var(--white);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;}
-.cl-hd,.cl-row{display:grid;grid-template-columns:minmax(0,1.6fr) 130px minmax(0,1.3fr) 92px;gap:10px;align-items:center;}
+.cl-hd,.cl-row{display:grid;grid-template-columns:minmax(0,1.6fr) 130px minmax(0,1.3fr) 92px 34px;gap:10px;align-items:center;}
+.cl-del{border:none;background:none;color:var(--text3);font-size:14px;cursor:pointer;padding:5px 6px;border-radius:7px;line-height:1;opacity:0;transition:opacity .12s,background .12s,color .12s;}
+.cl-row:hover .cl-del{opacity:1;}
+.cl-del:hover{background:#F7E4E0;color:var(--red);}
+.cl-del:focus{opacity:1;outline:2px solid var(--red);}
 .cl-hd{padding:10px 15px;background:var(--border2);font-size:11px;font-weight:700;color:var(--text2);}
 .cl-row{padding:11px 15px;border-top:1.5px solid var(--border2);cursor:pointer;transition:background .12s;}
 .cl-row:hover{background:var(--teal-l);}
@@ -554,8 +558,11 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .cl-arq{background:var(--border2);color:var(--text3);}
 @media(max-width:760px){
   .cl-hd{display:none;}
-  .cl-row{grid-template-columns:1fr auto;grid-template-areas:"nm dt" "fone sit";row-gap:6px;}
+  .cl-row{grid-template-columns:1fr auto 34px;grid-template-areas:"nm dt del" "fone sit sit";row-gap:6px;}
   .cl-nm{grid-area:nm;} .cl-dt{grid-area:dt;} .cl-fone{grid-area:fone;} .cl-row>div:nth-child(3){grid-area:sit;text-align:right;}
+  .cl-delwrap{grid-area:del;}
+  /* No celular nao existe hover: o botao fica sempre visivel. */
+  .cl-del{opacity:1;}
 }
 </style>
 </head>
@@ -1423,6 +1430,24 @@ async function mvpConfirmar(listaIdArg,posArg){
   const listaId=listaIdArg||$('mvp-lista').value;
   const pos=listaIdArg!==undefined&&posArg!==undefined?posArg:(parseInt($('mvp-pos').value,10)||0);
   if(!listaId){toast('Escolha uma lista','er');return;}
+
+  // O LINK DIGITADO E NAO SALVO.
+  //
+  // Este balao move o card e depois chama abrirCardCliente(), que
+  // recarrega tudo do banco. Ate 15/08/2026 isso jogava fora o que
+  // estivesse digitado no cartao sem ter passado pelo Salvar — e o
+  // campo mais caro de perder e o link do contrato: o card chegava em
+  // "Contrato enviado" sem link, o motor ficava esperando quieto e a
+  // cliente nao recebia nada. Aconteceu de verdade.
+  //
+  // Agora o link vai junto no mesmo update do movimento.
+  const campoLink=$('mc-link-contrato');
+  const linkDigitado=campoLink?campoLink.value.trim():'';
+
+  if(listaId===LISTA_CONTRATO_ENVIADO&&!linkDigitado){
+    if(!confirm('Este card esta indo para "Contrato enviado" sem o link do contrato.\n\nA Samara nao vai mandar nada ate o link ser preenchido — o card fica parado.\n\nMover assim mesmo?'))return;
+  }
+
   const{data:atualCli}=await sb.from('crm_clientes').select('lista_id,quadro').eq('id',id).single();
   const origListaId=atualCli?atualCli.lista_id:null;
   const{data:naLista}=await sb.from('crm_clientes').select('id,posicao').eq('lista_id',listaId).neq('id',id).order('posicao');
@@ -1430,7 +1455,13 @@ async function mvpConfirmar(listaIdArg,posArg){
   ord.splice(pos,0,id);
   const res=await Promise.all(ord.map((cid,i)=>{
     const p={lista_id:listaId,posicao:i,atualizado_em:new Date().toISOString()};
-    if(cid===id)p.quadro=quadro;
+    if(cid===id){
+      p.quadro=quadro;
+      // So grava quando ha algo digitado. Campo vazio nao apaga o link
+      // que ja estiver salvo no banco — para apagar de proposito, use o
+      // botao Salvar do cartao.
+      if(linkDigitado)p.link_contrato=linkDigitado;
+    }
     return sb.from('crm_clientes').update(p).eq('id',cid);
   }));
   if(res.find(r=>r.error)){toast('Não foi possível mover','er');return;}
@@ -3454,7 +3485,7 @@ async function clCarregar(reset){
   CL_CARREGANDO=true;
   if(reset)$('cl-lista').innerHTML='<div class="fhint" style="text-align:center;padding:26px 0">Carregando...</div>';
   let q=sb.from('crm_clientes')
-    .select('id,nome_completo,telefone_principal,cpf,quadro,lista_id,origem,arquivado_em,criado_em',{count:'exact'});
+    .select('id,nome_completo,telefone_principal,telefone_chave,cpf,quadro,lista_id,origem,arquivado_em,criado_em',{count:'exact'});
 
   if(CL_FILTRO==='sem_card')q=q.is('quadro',null).is('arquivado_em',null);
   else if(CL_FILTRO==='arquivados')q=q.not('arquivado_em','is',null);
@@ -3491,7 +3522,7 @@ function clRender(){
   }
   const listaNome=CL_LISTAS||{};
   let h='<div class="cl-tbl">';
-  h+='<div class="cl-hd"><span>Cliente</span><span>WhatsApp</span><span>Situação</span><span style="text-align:right">Entrada</span></div>';
+  h+='<div class="cl-hd"><span>Cliente</span><span>WhatsApp</span><span>Situação</span><span style="text-align:right">Entrada</span><span></span></div>';
   CL_ITENS.forEach(c=>{
     const arq=!!c.arquivado_em;
     const nome=c.nome_completo||'Sem nome';
@@ -3511,6 +3542,7 @@ function clRender(){
       <div class="cl-fone">${esc(c.telefone_principal||'—')}</div>
       <div style="min-width:0">${sit}${sub2?`<div class="cl-n2" style="margin-top:3px">${esc(sub2)}</div>`:''}</div>
       <div class="cl-dt">${clData(c.criado_em)}</div>
+      <div class="cl-delwrap"><button class="cl-del" title="Excluir contato" aria-label="Excluir ${escA(nome)}" onclick="event.stopPropagation();clExcluir('${c.id}','${escA(nome)}','${escA(c.telefone_chave||'')}')">✕</button></div>
     </div>`;
   });
   h+='</div>';
@@ -3747,6 +3779,71 @@ async function ibTogglePausa(clienteId,chave,pausar){
  * Serve tambem para contato que ainda nao virou cliente: nesse caso so
  * existem mensagens, e o resto e ignorado.
  */
+/**
+ * Apaga uma cliente e TUDO que pendura nela, na ordem certa.
+ *
+ * Existe uma vez so, de proposito. Antes o unico lugar que apagava
+ * direito era a Caixa de Entrada; o botao de dentro do cartao apagava
+ * so a linha da cliente e deixava automacao orfa disparando para um
+ * card que nao existe mais. Dois jeitos diferentes de apagar a mesma
+ * coisa e como isso acontece.
+ *
+ * Devolve a lista de falhas — vazia quando deu tudo certo.
+ */
+async function apagarClienteTudo(clienteId,telefoneChave){
+  const erros=[];
+  const tentar=async(rotulo,promessa)=>{
+    const{error}=await promessa;
+    if(error)erros.push(rotulo+': '+error.message);
+  };
+
+  // 1. Mensagens. Podem estar ligadas pelo cliente ou so pelo telefone.
+  if(clienteId)await tentar('mensagens',sb.from('crm_mensagens').delete().eq('cliente_id',clienteId));
+  if(telefoneChave)await tentar('mensagens do número',sb.from('crm_mensagens').delete().eq('telefone_chave',telefoneChave));
+
+  // 2. Tudo que pendura na cliente.
+  if(clienteId){
+    await tentar('automações',sb.from('crm_automacoes').delete().eq('cliente_id',clienteId));
+    await tentar('etiquetas',sb.from('crm_clientes_etiquetas').delete().eq('cliente_id',clienteId));
+    await tentar('atividades',sb.from('crm_atividades').delete().eq('cliente_id',clienteId));
+    await tentar('comentários',sb.from('crm_comentarios').delete().eq('cliente_id',clienteId));
+    await tentar('anexos',sb.from('crm_anexos').delete().eq('cliente_id',clienteId));
+    await tentar('notificações',sb.from('crm_notificacoes').delete().eq('cliente_id',clienteId));
+    // 3. E so entao a cliente.
+    await tentar('cliente',sb.from('crm_clientes').delete().eq('id',clienteId));
+  }
+  return erros;
+}
+
+/**
+ * Excluir pela tela de Contatos.
+ *
+ * Mesma confirmacao de dois passos da Caixa de Entrada: um aviso do que
+ * vai embora e depois digitar APAGAR. E a unica tela onde da para achar
+ * um contato pelo telefone e apagar sem precisar abrir o cartao.
+ */
+async function clExcluir(id,nome,telefoneChave){
+  if(!confirm(`Excluir ${nome}?\n\nVai apagar a cliente, o cartão, a conversa inteira e tudo que estiver agendado para ela.\n\nIsso NÃO pode ser desfeito.`))return;
+  if((prompt('Para confirmar, digite APAGAR')||'').trim().toUpperCase()!=='APAGAR'){
+    toast('Cancelado','er');return;
+  }
+
+  const erros=await apagarClienteTudo(id,telefoneChave||null);
+
+  if(erros.length){
+    console.error('[excluir] falhas:',erros);
+    toast('Apagado com pendências — veja o console','er');
+  }else{
+    toast('Excluído','ok');
+  }
+
+  // Tira da tela sem recarregar a lista inteira: numa base de 37 mil
+  // contatos, recarregar joga fora a rolagem e a busca.
+  CL_ITENS=CL_ITENS.filter(x=>x.id!==id);
+  if(CL_TOTAL>0)CL_TOTAL--;
+  clRender();
+}
+
 async function ibExcluirTudo(chave){
   const c=IB_CONVS.find(x=>x.chave===chave);
   if(!c)return;
@@ -3757,27 +3854,7 @@ async function ibExcluirTudo(chave){
     toast('Cancelado','er');return;
   }
 
-  const erros=[];
-  const tentar=async(rotulo,promessa)=>{
-    const{error}=await promessa;
-    if(error)erros.push(rotulo+': '+error.message);
-  };
-
-  // 1. Mensagens. Podem estar ligadas pelo cliente ou so pelo telefone.
-  if(c.clienteId)await tentar('mensagens',sb.from('crm_mensagens').delete().eq('cliente_id',c.clienteId));
-  if(c.telefoneChave)await tentar('mensagens do numero',sb.from('crm_mensagens').delete().eq('telefone_chave',c.telefoneChave));
-
-  // 2. Tudo que pendura no cliente.
-  if(c.clienteId){
-    await tentar('automações',sb.from('crm_automacoes').delete().eq('cliente_id',c.clienteId));
-    await tentar('etiquetas',sb.from('crm_clientes_etiquetas').delete().eq('cliente_id',c.clienteId));
-    await tentar('atividades',sb.from('crm_atividades').delete().eq('cliente_id',c.clienteId));
-    await tentar('comentários',sb.from('crm_comentarios').delete().eq('cliente_id',c.clienteId));
-    await tentar('anexos',sb.from('crm_anexos').delete().eq('cliente_id',c.clienteId));
-    await tentar('notificações',sb.from('crm_notificacoes').delete().eq('cliente_id',c.clienteId));
-    // 3. E so entao a cliente.
-    await tentar('cliente',sb.from('crm_clientes').delete().eq('id',c.clienteId));
-  }
+  const erros=await apagarClienteTudo(c.clienteId||null,c.telefoneChave||null);
 
   if(erros.length){
     console.error('[excluir] falhas:',erros);

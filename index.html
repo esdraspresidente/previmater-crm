@@ -377,6 +377,16 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .anexoicone img{width:100%;height:100%;object-fit:cover;}
 .anexonome{cursor:pointer;}
 .anexonome:hover{color:var(--teal);text-decoration:underline;}
+/* Zona de soltar arquivo. So aparece com o card aberto e so quando o que
+   esta sendo arrastado e arquivo de fora — arrastar card do Kanban nao ativa. */
+.mb-card.dropon{outline:3px dashed var(--teal);outline-offset:-7px;}
+.dropvel{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(10,147,150,.10);backdrop-filter:blur(1px);pointer-events:none;}
+.dropvel .dropmsg{background:var(--white);border:2px dashed var(--teal);border-radius:14px;padding:18px 26px;font-size:15px;font-weight:700;color:var(--teal);box-shadow:var(--shm);}
+.anexomenu{position:absolute;right:0;top:calc(100% + 4px);background:var(--white);border:1.5px solid var(--border);border-radius:10px;box-shadow:var(--shm);z-index:30;min-width:196px;overflow:hidden;}
+.anexomenu button{display:block;width:100%;text-align:left;padding:10px 13px;font-size:13px;font-weight:600;color:var(--text);background:none;border:none;cursor:pointer;}
+.anexomenu button:hover{background:var(--teal-l);color:var(--teal);}
+.anexomenu .amsep{height:1px;background:var(--border);}
+.anexoacoes{position:relative;}
 
 /* CARD MODAL — layout Trello (cabeçalho fixo + colunas) */
 .mb.mb-card{max-width:1120px;padding:0;}
@@ -693,6 +703,11 @@ const LISTA_CONTRATO_ENVIADO='c87d7210-b262-40a6-88fa-51d8faf12b1a';
 
 const PCT_HONORARIOS=0.30;
 const ANEXO_BUCKET='crm-anexos';
+/* Teto do envio pelo WhatsApp. O motor manda o arquivo em base64 dentro
+   de um JSON: 5 MB de arquivo viram quase 7 MB de texto na memoria da
+   Edge Function, e acima disso a rodada morre sem dizer por que. Vale
+   so para ENVIAR — anexar no card nao tem esse limite. */
+const LIMITE_ENVIO_BYTES=5*1024*1024;
 const QUADROS={
   comercial:{rotulo:'Comercial',icone:'◔',ordem:1},
   incubadora:{rotulo:'Incubadora',icone:'◍',ordem:2},
@@ -700,6 +715,24 @@ const QUADROS={
   financeiro:{rotulo:'Financeiro',icone:'◆',ordem:4}
 };
 const CANAIS={meta_oficial:'Meta oficial',evolution:'Evolution',whatsgw:'WhatsGW'};
+/* Canal por onde a conversa desta cliente acontece. Sao os DOIS valores
+   que crm_mensagens.canal aceita — e por isso os unicos que podem ser
+   gravados numa mensagem. O CANAIS acima e outra coisa: e a lista das
+   instancias de WhatsApp cadastradas, e tem valor ('meta_oficial') que
+   o CHECK de crm_mensagens recusa. Misturar os dois era o motivo de o
+   envio morrer com erro incompreensivel. */
+const CANAIS_ENVIO={whatsgw:'WhatsGW',oficial:'Oficial'};
+/* De onde sai o canal da conversa: crm_clientes.canal_ativo, que tem
+   default 'whatsgw' e esta preenchido em todos os cards. O
+   canal_whatsapp so entra como socorro, traduzido — ele esta vazio em
+   praticamente todo mundo e nao serve para decidir envio. */
+function canalDaConversa(c){
+  if(!c)return null;
+  if(c.canal_ativo)return c.canal_ativo;
+  if(c.canal_whatsapp==='whatsgw')return 'whatsgw';
+  if(c.canal_whatsapp==='meta_oficial')return 'oficial';
+  return null;
+}
 const ORIGENS={contato_direto:'Contato Direto',indicacao:'Indicação',redes_sociais:'Redes Sociais',site:'Site',outro:'Outro'};
 const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
@@ -722,7 +755,7 @@ function escA(s){return s?String(s).replace(/"/g,'&quot;'):'';}
 function toast(m,t){const e=$('toast');e.textContent=m;e.className='v '+(t||'ok');clearTimeout(e._t);e._t=setTimeout(()=>e.className='',2600);}
 function togSB(){$('sb').classList.toggle('o');$('ov').classList.toggle('o');}
 let mcPreviewAberto=false;
-function fecharModal(){$('modal').classList.add('h');mcPreviewAberto=false;if(typeof pararChatPoll==='function')pararChatPoll();}
+function fecharModal(){$('modal').classList.add('h');mcPreviewAberto=false;if(typeof mcMostrarVeu==='function'){mcDropProf=0;mcMostrarVeu(false);}if(typeof pararChatPoll==='function')pararChatPoll();}
 function fecharSeFundo(e){if(e.target===e.currentTarget)fecharInteligente();}
 function fecharInteligente(){
   if(mcPreviewAberto&&mcClienteId){mcPreviewAberto=false;abrirCardCliente(mcClienteId);return;}
@@ -731,6 +764,7 @@ function fecharInteligente(){
 function abrirModal(h,largo){const box=$('modalbox');if(typeof pararChatPoll==='function')pararChatPoll();box.onscroll=null;box.classList.remove('mb-card');box.innerHTML=h;box.classList.toggle('mb-wide',!!largo);$('modal').classList.remove('h');}
 function abrirModalCard(h){
   const box=$('modalbox');
+  mcLigarDropAnexos();
   box.onscroll=null;
   box.classList.remove('mb-wide');
   box.classList.add('mb-card');
@@ -1384,8 +1418,14 @@ async function carregarAnexos(clienteId){
         <div class="anexometa">${fmtBytes(a.tamanho_bytes)} · ${tempoRel(a.criado_em)}</div>
       </div>
       <div class="anexoacoes">
+        <button class="bic bg" title="Compartilhar" onclick="menuAnexo(event,'${a.id}')">⤴</button>
         <button class="bic bg" title="Baixar" onclick="baixarAnexo('${escA(a.caminho_storage)}','${escA(a.nome_arquivo)}')">⬇</button>
         <button class="bic bd" title="Excluir" onclick="excluirAnexo('${a.id}','${escA(a.caminho_storage)}','${clienteId}')">✕</button>
+        <div class="anexomenu h" id="anexomenu-${a.id}">
+          <button onclick="compartilharNativo('${escA(a.caminho_storage)}','${escA(a.nome_arquivo)}')">Compartilhar arquivo</button>
+          <div class="amsep"></div>
+          <button onclick="enviarAnexoCliente('${escA(a.caminho_storage)}','${escA(a.nome_arquivo)}','${clienteId}')">Enviar para a cliente</button>
+        </div>
       </div>
     </div>`).join('');
   data.filter(a=>anexoEhImagem(a.nome_arquivo)).forEach(async a=>{
@@ -1407,19 +1447,161 @@ async function visualizarAnexo(caminho,nome){
 }
 async function uploadAnexo(input,clienteId){
   const files=[...input.files];
-  if(!files.length)return;
+  input.value='';
+  await subirArquivosAnexo(files,clienteId);
+}
+/* Separado de uploadAnexo porque o arrastar-e-soltar entrega File[] direto,
+   sem passar por <input type=file>. Os dois caminhos gravam igual. */
+async function subirArquivosAnexo(files,clienteId){
+  if(!files||!files.length)return;
   for(const f of files){
     const caminho=`${clienteId}/${Date.now()}_${f.name.replace(/[^\w.\-]/g,'_')}`;
     const{error:eu}=await sb.storage.from(ANEXO_BUCKET).upload(caminho,f);
     if(eu){toast('Erro ao enviar '+f.name+': '+eu.message,'er');continue;}
     await sb.from('crm_anexos').insert({cliente_id:clienteId,usuario_id:U.id,nome_arquivo:f.name,caminho_storage:caminho,tamanho_bytes:f.size});
   }
-  toast('Anexo(s) enviado(s)','ok');
-  input.value='';
+  toast(files.length>1?files.length+' arquivos anexados':'Arquivo anexado','ok');
   if(typeof mcAba==='function'&&$('mcpane-anexos'))mcAba('anexos');
   carregarAnexos(clienteId);
   registrarAtividade(clienteId,`anexou ${files.length>1?files.length+' arquivos':'um arquivo'}`);
 }
+/* ============================================================
+   COMPARTILHAR ANEXO
+   Duas saidas: menu nativo do aparelho (o arquivo em si, sem link)
+   e envio direto na conversa da cliente.
+   ============================================================ */
+function menuAnexo(ev,id){
+  ev.stopPropagation();
+  const m=$('anexomenu-'+id);
+  if(!m)return;
+  const abrindo=m.classList.contains('h');
+  document.querySelectorAll('.anexomenu').forEach(x=>x.classList.add('h'));
+  if(abrindo)m.classList.remove('h');
+}
+document.addEventListener('click',()=>document.querySelectorAll('.anexomenu').forEach(x=>x.classList.add('h')));
+
+/* O WhatsGW decide como entregar pelo formato do arquivo. Sem isso ele
+   trata tudo como binario generico e a cliente recebe algo que nao abre. */
+function mimeDoNome(nome){
+  const m={pdf:'application/pdf',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
+    gif:'image/gif',webp:'image/webp',doc:'application/msword',
+    docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls:'application/vnd.ms-excel',
+    xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    txt:'text/plain',zip:'application/zip',mp3:'audio/mpeg',mp4:'video/mp4'};
+  return m[anexoExt(nome)]||'application/octet-stream';
+}
+async function baixarBlobAnexo(caminho){
+  const{data,error}=await sb.storage.from(ANEXO_BUCKET).download(caminho);
+  if(error||!data)throw new Error(error?error.message:'arquivo nao encontrado');
+  return data;
+}
+/* navigator.share com arquivo so existe em celular. No computador o
+   navegador recusa, entao caimos no download em vez de falhar calado. */
+async function compartilharNativo(caminho,nome){
+  document.querySelectorAll('.anexomenu').forEach(x=>x.classList.add('h'));
+  try{
+    const blob=await baixarBlobAnexo(caminho);
+    const arq=new File([blob],nome,{type:blob.type||'application/octet-stream'});
+    if(navigator.canShare&&navigator.canShare({files:[arq]})){
+      await navigator.share({files:[arq]});
+      return;
+    }
+    toast('Este navegador nao compartilha arquivo. Baixando...','in');
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=nome;a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+  }catch(e){
+    if(e&&e.name==='AbortError')return; // usuario fechou o menu, nao e erro
+    toast('Nao foi possivel compartilhar: '+(e.message||e),'er');
+  }
+}
+/* Grava na conversa como mensagem de saida pendente. Quem entrega no
+   WhatsApp e o motor. telefone_chave e id_externo sao obrigatorios pelo
+   CHECK crm_mensagens_conteudo_minimo — sem eles o banco recusa a linha. */
+async function enviarAnexoCliente(caminho,nome,clienteId){
+  document.querySelectorAll('.anexomenu').forEach(x=>x.classList.add('h'));
+  if(!mcChatCanal){toast('Defina o Canal WhatsApp da cliente antes de enviar','er');return;}
+  if(!mcChatChave){toast('Esta cliente nao tem telefone valido cadastrado','er');return;}
+  const{data:meta}=await sb.from('crm_anexos').select('tamanho_bytes').eq('caminho_storage',caminho).limit(1);
+  const tam=(meta&&meta[0])?meta[0].tamanho_bytes:null;
+  /* A recusa vem antes do confirm de proposito: perguntar "envia?" para
+     depois falhar na fila e pior do que dizer o motivo de cara. */
+  if(tam&&tam>LIMITE_ENVIO_BYTES){toast('Arquivo de '+(Math.round(tam/104857.6)/10)+' MB. O limite de envio pelo WhatsApp é 5 MB.','er');return;}
+  if(!confirm('Enviar "'+nome+'" para a cliente agora?'))return;
+  const{error}=await sb.from('crm_mensagens').insert({
+    cliente_id:clienteId,
+    telefone_chave:mcChatChave,
+    telefone_bruto:mcChatTel||null,
+    canal:mcChatCanal,
+    direcao:'saida',
+    autor_tipo:'humano',
+    usuario_id:U.id,
+    tipo:anexoEhImagem(nome)?'imagem':'documento',
+    midia_caminho:caminho,
+    midia_nome:nome,
+    midia_mime:mimeDoNome(nome),
+    midia_tamanho:tam,
+    id_externo:'crm:'+Date.now()+':'+Math.random().toString(36).slice(2,8),
+    status:'pendente_envio'
+  });
+  if(error){toast('Erro ao enfileirar: '+error.message,'er');return;}
+  toast('Arquivo na fila — sai em até 1 minuto','ok');
+  if(mcAbaAtual==='chat'){mcChatAssinatura='';carregarChat(clienteId);}
+  registrarAtividade(clienteId,'enviou o arquivo '+nome+' para a cliente');
+}
+
+/* ============================================================
+   ARRASTAR E SOLTAR
+   Vale so com o card aberto e so para arquivo vindo de fora. Se o que
+   esta sendo arrastado nao for arquivo, deixamos passar — senao o
+   arrastar de card entre colunas do Kanban quebraria.
+   ============================================================ */
+let mcDropLigado=false,mcDropProf=0;
+function ehArrastoDeArquivo(e){
+  const t=e.dataTransfer&&e.dataTransfer.types;
+  return !!t&&Array.prototype.indexOf.call(t,'Files')!==-1;
+}
+function mcMostrarVeu(mostrar){
+  let v=$('mc-dropvel');
+  if(mostrar&&!v){
+    v=document.createElement('div');v.id='mc-dropvel';v.className='dropvel';
+    v.innerHTML='<div class="dropmsg">Solte para anexar ao card</div>';
+    document.body.appendChild(v);
+  }else if(!mostrar&&v)v.remove();
+  const box=$('modalbox');
+  if(box)box.classList.toggle('dropon',!!mostrar);
+}
+function mcLigarDropAnexos(){
+  if(mcDropLigado)return;
+  mcDropLigado=true;
+  const box=$('modalbox');
+  if(!box)return;
+  const ativo=()=>!$('modal').classList.contains('h')&&box.classList.contains('mb-card')&&!!mcClienteId;
+  box.addEventListener('dragenter',e=>{
+    if(!ativo()||!ehArrastoDeArquivo(e))return;
+    e.preventDefault();e.stopPropagation();mcDropProf++;mcMostrarVeu(true);
+  });
+  box.addEventListener('dragover',e=>{
+    if(!ativo()||!ehArrastoDeArquivo(e))return;
+    e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='copy';
+  });
+  box.addEventListener('dragleave',e=>{
+    if(!ativo()||!ehArrastoDeArquivo(e))return;
+    mcDropProf--;if(mcDropProf<=0){mcDropProf=0;mcMostrarVeu(false);}
+  });
+  box.addEventListener('drop',async e=>{
+    if(!ativo()||!ehArrastoDeArquivo(e))return;
+    e.preventDefault();e.stopPropagation();
+    mcDropProf=0;mcMostrarVeu(false);
+    const arquivos=[...(e.dataTransfer.files||[])];
+    if(!arquivos.length){toast('Nao veio arquivo nenhum','er');return;}
+    const id=mcClienteId;
+    toast('Enviando '+arquivos.length+(arquivos.length>1?' arquivos...':' arquivo...'),'in');
+    await subirArquivosAnexo(arquivos,id);
+  });
+}
+
 async function baixarAnexo(caminho,nome){
   const{data,error}=await sb.storage.from(ANEXO_BUCKET).createSignedUrl(caminho,60);
   if(error||!data){toast('Erro ao gerar link','er');return;}
@@ -1952,7 +2134,10 @@ function renderCardClienteModal(c,etqSel,listas){
   const listaAtual=listas.find(l=>l.id===c.lista_id);
   const optQ=QPERM.map(q=>`<option value="${q}" ${c.quadro===q?'selected':''}>${QUADROS[q].rotulo}</option>`).join('');
   const optL=listas.map(l=>`<option value="${l.id}" ${c.lista_id===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
-  const optCanal=`<option value="">—</option>`+Object.keys(CANAIS).map(k=>`<option value="${k}" ${c.canal_whatsapp===k?'selected':''}>${CANAIS[k]}</option>`).join('');
+  /* Sem opcao vazia: canal_ativo sempre tem valor (default whatsgw), e
+     deixar em branco so serviria para travar o botao de enviar. */
+  const canalAtual=canalDaConversa(c)||'whatsgw';
+  const optCanal=Object.keys(CANAIS_ENVIO).map(k=>`<option value="${k}" ${canalAtual===k?'selected':''}>${CANAIS_ENVIO[k]}</option>`).join('');
   const optOrig=`<option value="">—</option>`+Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
   const etqPicker=ETQ.map(t=>`<label class="etp-row" data-nome="${escA((t.nome||'').toLowerCase())}"><input type="checkbox" ${etqSel.includes(t.id)?'checked':''} onchange="mcToggleEtq('${t.id}')"/><span class="etp-bar" style="background:${escA(t.cor)}">${esc(t.nome)}</span></label>`).join('')||'<div class="fhint" style="padding:6px 2px">Nenhuma etiqueta criada ainda.</div>';
   const pagHtml=mcPagamentosHtml(c.id);
@@ -2100,7 +2285,7 @@ function renderCardClienteModal(c,etqSel,listas){
 
         <div class="mcpane h" id="mcpane-chat">
           <div class="chathead">
-            ${chatBadgeHtml(c.canal_whatsapp)}
+            ${chatBadgeHtml(canalDaConversa(c))}
             <label class="chatpausa" title="Quando ligado, a Samara não responde esta cliente">
               <input type="checkbox" id="mc-samara-pausada" ${c.samara_pausada?'checked':''} onchange="mcTogSamara('${c.id}',this.checked)"/> Samara pausada
             </label>
@@ -2117,8 +2302,9 @@ function renderCardClienteModal(c,etqSel,listas){
     </div>
     </div>`);
   mcRecalcBox(c.valor_beneficio_esperado,c.valor_honorarios);
-  mcChatCanal=c.canal_whatsapp||null;
+  mcChatCanal=canalDaConversa(c);
   mcChatTel=c.telefone_principal||null;
+  mcChatChave=c.telefone_chave||null;
   mcChatAssinatura='';
   pararChatPoll();
   mcAba('coment');
@@ -2149,7 +2335,7 @@ function mcBloqueioChange(){
 // ============================================================
 // ABAS DO PAINEL DIREITO DO CARD (Anexos / Comentários / Chat)
 // ============================================================
-let mcAbaAtual='coment',mcChatTimer=null,mcChatCanal=null,mcChatTel=null,mcChatAssinatura='';
+let mcAbaAtual='coment',mcChatTimer=null,mcChatCanal=null,mcChatTel=null,mcChatChave=null,mcChatAssinatura='';
 function mcAba(nome){
   mcAbaAtual=nome;
   ['anexos','coment','chat'].forEach(n=>{
@@ -2168,7 +2354,7 @@ function mcAba(nome){
 }
 function pararChatPoll(){if(mcChatTimer){clearInterval(mcChatTimer);mcChatTimer=null;}}
 function chatBadgeHtml(canal){
-  if(canal==='meta_oficial')return'<span class="chatbadge of">Meta oficial</span>';
+  if(canal==='oficial'||canal==='meta_oficial')return'<span class="chatbadge of">Oficial</span>';
   if(canal==='evolution')return'<span class="chatbadge">Evolution · não oficial</span>';
   if(canal==='whatsgw')return'<span class="chatbadge">WhatsGW · não oficial</span>';
   return'<span class="chatbadge nd">Canal não definido</span>';
@@ -2248,7 +2434,10 @@ async function carregarChat(clienteId,silencioso){
   const jan=$('mc-chat-janela');
   if(jan)jan.innerHTML=chatJanelaHtml(msgs,mcChatCanal);
   const av=$('mc-chat-aviso');
-  if(av)av.innerHTML=mcChatCanal?'O envio real ainda não está ligado. A mensagem fica registrada aqui na conversa e sai de verdade quando a API de envio do canal for conectada.':'Defina o <b>Canal WhatsApp</b> desta cliente na coluna ao lado para o chat saber por onde a conversa acontece.';
+  /* O motor so entrega pelo WhatsGW. Dizer isso aqui evita a pergunta
+     "mandei e nao chegou": nos outros canais a linha fica na conversa e
+     e marcada como nao enviada. */
+  if(av)av.innerHTML=!mcChatCanal?'Defina o <b>Canal WhatsApp</b> desta cliente na coluna ao lado para o chat saber por onde a conversa acontece.':(mcChatCanal==='whatsgw'?'A mensagem entra na fila e o motor entrega em até 1 minuto.':'Esta cliente está no canal <b>'+esc(CANAIS_ENVIO[mcChatCanal]||mcChatCanal)+'</b>. O envio automático hoje só funciona pelo WhatsGW — aqui a mensagem fica registrada, mas não sai.');
   if(silencioso&&assinatura===mcChatAssinatura)return;
   mcChatAssinatura=assinatura;
   if(!msgs.length){feed.innerHTML='<div class="fhint" style="text-align:center;padding:20px 0">Nenhuma mensagem ainda.<br>A conversa aparece aqui a partir do dia em que o webhook estiver ligado.</div>';return;}
@@ -2258,8 +2447,12 @@ async function carregarChat(clienteId,silencioso){
     if(dia!==diaAnt){html+=`<div class="chatdia">${esc(dia)}</div>`;diaAnt=dia;}
     const cls=m.direcao==='entrada'?'chatb-in':(m.autor_tipo==='bot'?'chatb-bot':'chatb-out');
     const autor=m.direcao==='entrada'?'':(m.autor_tipo==='bot'?'Samara · ':(nomeUsuario(m.usuario_id)?nomeUsuario(m.usuario_id)+' · ':''));
-    const pend=m.status==='pendente_envio'?' · ⏳ não enviada':'';
-    html+=`<div class="chatb ${cls}">${chatCorpoMsg(m)}<span class="chatb-meta">${esc(autor)}${chatHoraMsg(m)}${pend}</span></div>`;
+    /* Situacao do envio. O motor troca o status desta linha: pendente_envio
+       -> enviando -> enviado, ou erro_envio quando desistiu. O motivo da
+       falha fica em bruto.envio.erro e aparece ao passar o mouse. */
+    const pend=m.status==='pendente_envio'?' · ⏳ na fila':(m.status==='enviando'?' · ⏳ enviando':(m.status==='erro_envio'?' · ⚠ não saiu':''));
+    const motivo=(m.status==='erro_envio'&&m.bruto&&m.bruto.envio&&m.bruto.envio.erro)?` title="${escA(m.bruto.envio.erro)}"`:'';
+    html+=`<div class="chatb ${cls}"${motivo}>${chatCorpoMsg(m)}<span class="chatb-meta">${esc(autor)}${chatHoraMsg(m)}${pend}</span></div>`;
   });
   feed.innerHTML=html;
   feed.scrollTop=feed.scrollHeight;
@@ -2272,8 +2465,14 @@ async function enviarMensagemChat(clienteId){
   if(!mcChatCanal){toast('Defina o Canal WhatsApp da cliente antes de enviar','er');return;}
   const btn=$('mc-chat-btn');
   if(btn){btn.disabled=true;btn.textContent='Registrando...';}
+  /* telefone_chave e id_externo sao exigidos pelo CHECK
+     crm_mensagens_conteudo_minimo. Faltavam os dois — era por isso que
+     este botao nunca gravou nada. enviada_em fica vazio de proposito:
+     quem preenche e o motor, quando o envio sai de fato. */
+  if(!mcChatChave){toast('Esta cliente nao tem telefone valido cadastrado','er');if(btn){btn.disabled=false;btn.textContent='Enviar';}return;}
   const{error}=await sb.from('crm_mensagens').insert({
     cliente_id:clienteId,
+    telefone_chave:mcChatChave,
     telefone_bruto:mcChatTel||null,
     canal:mcChatCanal,
     direcao:'saida',
@@ -2281,15 +2480,15 @@ async function enviarMensagemChat(clienteId){
     usuario_id:U.id,
     tipo:'texto',
     texto:txt,
-    status:'pendente_envio',
-    enviada_em:new Date().toISOString()
+    id_externo:'crm:'+Date.now()+':'+Math.random().toString(36).slice(2,8),
+    status:'pendente_envio'
   });
   if(btn){btn.disabled=false;btn.textContent='Enviar';}
   if(error){toast('Erro ao registrar: '+error.message,'er');return;}
   inp.value='';
   mcChatAssinatura='';
   carregarChat(clienteId);
-  toast('Mensagem registrada na conversa (envio real ainda não ligado)','in');
+  toast('Mensagem na fila — sai em até 1 minuto','ok');
 }
 // ============================================================
 // BUSCA GLOBAL — inclui clientes arquivados, com aviso na tela
@@ -2492,7 +2691,7 @@ async function salvarCardCliente(id){
     referencia1_telefone:$('mc-ref1-tel').value.trim()||null,
     referencia2_nome:$('mc-ref2-nome').value.trim()||null,
     referencia2_telefone:$('mc-ref2-tel').value.trim()||null,
-    canal_whatsapp:$('mc-canal').value||null,
+    canal_ativo:$('mc-canal').value||'whatsgw',
     origem:$('mc-origem').value||null,
     trello_url:$('mc-trello').value.trim()||null,
     quadro:quadro,
@@ -2666,7 +2865,8 @@ async function pageCliente(id){
   const optQ=QPERM.map(q=>`<option value="${q}" ${qAtual===q?'selected':''}>${QUADROS[q].rotulo}</option>`).join('');
   const lSel=(c&&c.lista_id)||listaPre||((listas&&listas[0])?listas[0].id:'');
   const optL=(listas||[]).map(l=>`<option value="${l.id}" ${lSel===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
-  const optCanal=Object.keys(CANAIS).map(k=>`<option value="${k}" ${c&&c.canal_whatsapp===k?'selected':''}>${CANAIS[k]}</option>`).join('');
+  const canalForm=canalDaConversa(c)||'whatsgw';
+  const optCanal=Object.keys(CANAIS_ENVIO).map(k=>`<option value="${k}" ${canalForm===k?'selected':''}>${CANAIS_ENVIO[k]}</option>`).join('');
   const optOrig=Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c&&c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
   const chips=ETQ.map(t=>`<span class="ett ${etqSel.includes(t.id)?'on':''}" data-etq="${t.id}" style="background:${escA(t.cor)}" onclick="this.classList.toggle('on')">${esc(t.nome)}</span>`).join('');
 
@@ -2683,7 +2883,7 @@ async function pageCliente(id){
         <div class="fld ff"><label>Nome completo *</label><input type="text" id="f-nome" value="${escA(c&&c.nome_completo)}"/></div>
         <div class="fld"><label>CPF</label><input type="text" id="f-cpf" inputmode="numeric" placeholder="000.000.000-00" value="${escA(c&&c.cpf)}" oninput="cpfMask(this)"/></div>
         <div class="fld"><label>Telefone / WhatsApp</label><input type="text" id="f-tel" value="${escA(c&&c.telefone_principal)}"/></div>
-        <div class="fld"><label>Canal WhatsApp</label><select id="f-canal"><option value="">— selecione —</option>${optCanal}</select></div>
+        <div class="fld"><label>Canal WhatsApp</label><select id="f-canal">${optCanal}</select></div>
         <div class="fld"><label>Origem</label><select id="f-origem"><option value="">— selecione —</option>${optOrig}</select></div>
         <div class="fld"><label>Data de nascimento do bebê</label><input type="date" id="f-dn" value="${(c&&c.data_nascimento_bebe)||''}"/></div>
         <div class="fld"><label>Link do Trello</label><input type="url" id="f-trello" placeholder="https://trello.com/c/..." value="${escA(c&&c.trello_url)}"/></div>
@@ -2754,7 +2954,7 @@ async function salvarCliente(id){
     nome_completo:nome,
     cpf:$('f-cpf').value.trim()||null,
     telefone_principal:$('f-tel').value.trim()||null,
-    canal_whatsapp:$('f-canal').value||null,
+    canal_ativo:$('f-canal').value||'whatsgw',
     origem:$('f-origem').value||null,
     trello_url:$('f-trello').value.trim()||null,
     quadro:quadro,
@@ -4250,7 +4450,7 @@ async function ibCarregarLista(silencioso){
   const idsClientes=[...new Set(msgs.filter(m=>m.cliente_id).map(m=>m.cliente_id))];
   let clientesMap={};
   if(idsClientes.length){
-    const{data:cl}=await sb.from('crm_clientes').select('id,nome_completo,canal_whatsapp,telefone_principal').in('id',idsClientes);
+    const{data:cl}=await sb.from('crm_clientes').select('id,nome_completo,canal_ativo,canal_whatsapp,telefone_principal').in('id',idsClientes);
     (cl||[]).forEach(c=>clientesMap[c.id]=c);
   }
   IB_CONVS=ordem.map(chave=>{
@@ -4259,7 +4459,7 @@ async function ibCarregarLista(silencioso){
     return{
       chave,clienteId:ultima.cliente_id||null,
       nome:cliente?cliente.nome_completo:(ultima.telefone_bruto||ultima.telefone_chave||'Contato desconhecido'),
-      canal:cliente?cliente.canal_whatsapp:ultima.canal,
+      canal:cliente?canalDaConversa(cliente):ultima.canal,
       telefoneChave:ultima.telefone_chave||null,
       lead:!ultima.cliente_id,
       ultimaMsg:ultima
@@ -4500,7 +4700,7 @@ async function ibCarregarChat(c,silencioso){
   const jan=$('ib-chat-janela');
   if(jan)jan.innerHTML=chatJanelaHtml(msgs,c.canal);
   const av=$('ib-chat-aviso');
-  if(av)av.innerHTML='O envio real ainda não está ligado. A mensagem fica registrada aqui na conversa e sai de verdade quando a API de envio do canal for conectada.';
+  if(av)av.innerHTML='A mensagem entra na fila e o motor entrega em até 1 minuto. O envio automático só funciona pelo WhatsGW.';
   if(silencioso&&assinatura===ibChatAssinatura)return;
   ibChatAssinatura=assinatura;
   if(!msgs.length){feed.innerHTML='<div class="fhint" style="text-align:center;padding:20px 0">Nenhuma mensagem ainda.</div>';return;}
@@ -4510,8 +4710,12 @@ async function ibCarregarChat(c,silencioso){
     if(dia!==diaAnt){html+=`<div class="chatdia">${esc(dia)}</div>`;diaAnt=dia;}
     const cls=m.direcao==='entrada'?'chatb-in':(m.autor_tipo==='bot'?'chatb-bot':'chatb-out');
     const autor=m.direcao==='entrada'?'':(m.autor_tipo==='bot'?'Samara · ':(nomeUsuario(m.usuario_id)?nomeUsuario(m.usuario_id)+' · ':''));
-    const pend=m.status==='pendente_envio'?' · ⏳ não enviada':'';
-    html+=`<div class="chatb ${cls}">${chatCorpoMsg(m)}<span class="chatb-meta">${esc(autor)}${chatHoraMsg(m)}${pend}</span></div>`;
+    /* Situacao do envio. O motor troca o status desta linha: pendente_envio
+       -> enviando -> enviado, ou erro_envio quando desistiu. O motivo da
+       falha fica em bruto.envio.erro e aparece ao passar o mouse. */
+    const pend=m.status==='pendente_envio'?' · ⏳ na fila':(m.status==='enviando'?' · ⏳ enviando':(m.status==='erro_envio'?' · ⚠ não saiu':''));
+    const motivo=(m.status==='erro_envio'&&m.bruto&&m.bruto.envio&&m.bruto.envio.erro)?` title="${escA(m.bruto.envio.erro)}"`:'';
+    html+=`<div class="chatb ${cls}"${motivo}>${chatCorpoMsg(m)}<span class="chatb-meta">${esc(autor)}${chatHoraMsg(m)}${pend}</span></div>`;
   });
   feed.innerHTML=html;
   feed.scrollTop=feed.scrollHeight;
@@ -4526,9 +4730,11 @@ async function ibEnviarMensagem(){
   if(!c.canal){toast('Este contato não tem um canal de WhatsApp definido','er');return;}
   const btn=$('ib-chat-btn');
   if(btn){btn.disabled=true;btn.textContent='Registrando...';}
+  /* Mesmo CHECK do chat do card: sem id_externo o banco recusa. */
+  if(!c.telefoneChave){toast('Este contato nao tem telefone valido','er');if(btn){btn.disabled=false;btn.textContent='Enviar';}return;}
   const{error}=await sb.from('crm_mensagens').insert({
     cliente_id:c.clienteId,
-    telefone_chave:c.telefoneChave||null,
+    telefone_chave:c.telefoneChave,
     telefone_bruto:c.ultimaMsg?c.ultimaMsg.telefone_bruto:null,
     canal:c.canal,
     direcao:'saida',
@@ -4536,15 +4742,15 @@ async function ibEnviarMensagem(){
     usuario_id:U.id,
     tipo:'texto',
     texto:txt,
-    status:'pendente_envio',
-    enviada_em:new Date().toISOString()
+    id_externo:'crm:'+Date.now()+':'+Math.random().toString(36).slice(2,8),
+    status:'pendente_envio'
   });
   if(btn){btn.disabled=false;btn.textContent='Enviar';}
   if(error){toast('Erro ao registrar: '+error.message,'er');return;}
   inp.value='';
   ibChatAssinatura='';
   ibCarregarChat(c);
-  toast('Mensagem registrada na conversa (envio real ainda não ligado)','in');
+  toast('Mensagem na fila — sai em até 1 minuto','ok');
 }
 
 // ============================================================
@@ -4604,7 +4810,7 @@ async function ibConfirmarCriarCliente(chave){
     }
   }
   if(btn)btn.textContent='Criando...';
-  const{data:novo,error}=await sb.from('crm_clientes').insert({nome_completo:nome,telefone_principal:tel||null,canal_whatsapp:c.canal||null,quadro,lista_id:listaId}).select('id').single();
+  const{data:novo,error}=await sb.from('crm_clientes').insert({nome_completo:nome,telefone_principal:tel||null,canal_ativo:c.canal||'whatsgw',quadro,lista_id:listaId}).select('id').single();
   if(error||!novo){if(btn){btn.disabled=false;btn.textContent='Criar cliente';}toast('Erro ao criar cliente: '+(error?error.message:''),'er');return;}
   let migradas=0;
   if(c.telefoneChave){

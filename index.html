@@ -703,6 +703,11 @@ const LISTA_CONTRATO_ENVIADO='c87d7210-b262-40a6-88fa-51d8faf12b1a';
 
 const PCT_HONORARIOS=0.30;
 const ANEXO_BUCKET='crm-anexos';
+/* Teto do envio pelo WhatsApp. O motor manda o arquivo em base64 dentro
+   de um JSON: 5 MB de arquivo viram quase 7 MB de texto na memoria da
+   Edge Function, e acima disso a rodada morre sem dizer por que. Vale
+   so para ENVIAR — anexar no card nao tem esse limite. */
+const LIMITE_ENVIO_BYTES=5*1024*1024;
 const QUADROS={
   comercial:{rotulo:'Comercial',icone:'◔',ordem:1},
   incubadora:{rotulo:'Incubadora',icone:'◍',ordem:2},
@@ -1500,9 +1505,12 @@ async function enviarAnexoCliente(caminho,nome,clienteId){
   document.querySelectorAll('.anexomenu').forEach(x=>x.classList.add('h'));
   if(!mcChatCanal){toast('Defina o Canal WhatsApp da cliente antes de enviar','er');return;}
   if(!mcChatChave){toast('Esta cliente nao tem telefone valido cadastrado','er');return;}
-  if(!confirm('Enviar "'+nome+'" para a cliente agora?'))return;
   const{data:meta}=await sb.from('crm_anexos').select('tamanho_bytes').eq('caminho_storage',caminho).limit(1);
   const tam=(meta&&meta[0])?meta[0].tamanho_bytes:null;
+  /* A recusa vem antes do confirm de proposito: perguntar "envia?" para
+     depois falhar na fila e pior do que dizer o motivo de cara. */
+  if(tam&&tam>LIMITE_ENVIO_BYTES){toast('Arquivo de '+(Math.round(tam/104857.6)/10)+' MB. O limite de envio pelo WhatsApp é 5 MB.','er');return;}
+  if(!confirm('Enviar "'+nome+'" para a cliente agora?'))return;
   const{error}=await sb.from('crm_mensagens').insert({
     cliente_id:clienteId,
     telefone_chave:mcChatChave,
@@ -1520,7 +1528,7 @@ async function enviarAnexoCliente(caminho,nome,clienteId){
     status:'pendente_envio'
   });
   if(error){toast('Erro ao enfileirar: '+error.message,'er');return;}
-  toast('Arquivo na fila de envio','ok');
+  toast('Arquivo na fila — sai em até 1 minuto','ok');
   if(mcAbaAtual==='chat'){mcChatAssinatura='';carregarChat(clienteId);}
   registrarAtividade(clienteId,'enviou o arquivo '+nome+' para a cliente');
 }
@@ -2405,7 +2413,10 @@ async function carregarChat(clienteId,silencioso){
   const jan=$('mc-chat-janela');
   if(jan)jan.innerHTML=chatJanelaHtml(msgs,mcChatCanal);
   const av=$('mc-chat-aviso');
-  if(av)av.innerHTML=mcChatCanal?'O envio real ainda não está ligado. A mensagem fica registrada aqui na conversa e sai de verdade quando a API de envio do canal for conectada.':'Defina o <b>Canal WhatsApp</b> desta cliente na coluna ao lado para o chat saber por onde a conversa acontece.';
+  /* O motor so entrega pelo WhatsGW. Dizer isso aqui evita a pergunta
+     "mandei e nao chegou": nos outros canais a linha fica na conversa e
+     e marcada como nao enviada. */
+  if(av)av.innerHTML=!mcChatCanal?'Defina o <b>Canal WhatsApp</b> desta cliente na coluna ao lado para o chat saber por onde a conversa acontece.':(mcChatCanal==='whatsgw'?'A mensagem entra na fila e o motor entrega em até 1 minuto.':'Esta cliente está no canal <b>'+esc(CANAIS[mcChatCanal]||mcChatCanal)+'</b>. O envio automático hoje só funciona pelo WhatsGW — aqui a mensagem fica registrada, mas não sai.');
   if(silencioso&&assinatura===mcChatAssinatura)return;
   mcChatAssinatura=assinatura;
   if(!msgs.length){feed.innerHTML='<div class="fhint" style="text-align:center;padding:20px 0">Nenhuma mensagem ainda.<br>A conversa aparece aqui a partir do dia em que o webhook estiver ligado.</div>';return;}
@@ -2415,8 +2426,12 @@ async function carregarChat(clienteId,silencioso){
     if(dia!==diaAnt){html+=`<div class="chatdia">${esc(dia)}</div>`;diaAnt=dia;}
     const cls=m.direcao==='entrada'?'chatb-in':(m.autor_tipo==='bot'?'chatb-bot':'chatb-out');
     const autor=m.direcao==='entrada'?'':(m.autor_tipo==='bot'?'Samara · ':(nomeUsuario(m.usuario_id)?nomeUsuario(m.usuario_id)+' · ':''));
-    const pend=m.status==='pendente_envio'?' · ⏳ não enviada':'';
-    html+=`<div class="chatb ${cls}">${chatCorpoMsg(m)}<span class="chatb-meta">${esc(autor)}${chatHoraMsg(m)}${pend}</span></div>`;
+    /* Situacao do envio. O motor troca o status desta linha: pendente_envio
+       -> enviando -> enviado, ou erro_envio quando desistiu. O motivo da
+       falha fica em bruto.envio.erro e aparece ao passar o mouse. */
+    const pend=m.status==='pendente_envio'?' · ⏳ na fila':(m.status==='enviando'?' · ⏳ enviando':(m.status==='erro_envio'?' · ⚠ não saiu':''));
+    const motivo=(m.status==='erro_envio'&&m.bruto&&m.bruto.envio&&m.bruto.envio.erro)?` title="${escA(m.bruto.envio.erro)}"`:'';
+    html+=`<div class="chatb ${cls}"${motivo}>${chatCorpoMsg(m)}<span class="chatb-meta">${esc(autor)}${chatHoraMsg(m)}${pend}</span></div>`;
   });
   feed.innerHTML=html;
   feed.scrollTop=feed.scrollHeight;
@@ -2452,7 +2467,7 @@ async function enviarMensagemChat(clienteId){
   inp.value='';
   mcChatAssinatura='';
   carregarChat(clienteId);
-  toast('Mensagem na fila de envio','ok');
+  toast('Mensagem na fila — sai em até 1 minuto','ok');
 }
 // ============================================================
 // BUSCA GLOBAL — inclui clientes arquivados, com aviso na tela
@@ -4663,7 +4678,7 @@ async function ibCarregarChat(c,silencioso){
   const jan=$('ib-chat-janela');
   if(jan)jan.innerHTML=chatJanelaHtml(msgs,c.canal);
   const av=$('ib-chat-aviso');
-  if(av)av.innerHTML='O envio real ainda não está ligado. A mensagem fica registrada aqui na conversa e sai de verdade quando a API de envio do canal for conectada.';
+  if(av)av.innerHTML='A mensagem entra na fila e o motor entrega em até 1 minuto. O envio automático só funciona pelo WhatsGW.';
   if(silencioso&&assinatura===ibChatAssinatura)return;
   ibChatAssinatura=assinatura;
   if(!msgs.length){feed.innerHTML='<div class="fhint" style="text-align:center;padding:20px 0">Nenhuma mensagem ainda.</div>';return;}
@@ -4673,8 +4688,12 @@ async function ibCarregarChat(c,silencioso){
     if(dia!==diaAnt){html+=`<div class="chatdia">${esc(dia)}</div>`;diaAnt=dia;}
     const cls=m.direcao==='entrada'?'chatb-in':(m.autor_tipo==='bot'?'chatb-bot':'chatb-out');
     const autor=m.direcao==='entrada'?'':(m.autor_tipo==='bot'?'Samara · ':(nomeUsuario(m.usuario_id)?nomeUsuario(m.usuario_id)+' · ':''));
-    const pend=m.status==='pendente_envio'?' · ⏳ não enviada':'';
-    html+=`<div class="chatb ${cls}">${chatCorpoMsg(m)}<span class="chatb-meta">${esc(autor)}${chatHoraMsg(m)}${pend}</span></div>`;
+    /* Situacao do envio. O motor troca o status desta linha: pendente_envio
+       -> enviando -> enviado, ou erro_envio quando desistiu. O motivo da
+       falha fica em bruto.envio.erro e aparece ao passar o mouse. */
+    const pend=m.status==='pendente_envio'?' · ⏳ na fila':(m.status==='enviando'?' · ⏳ enviando':(m.status==='erro_envio'?' · ⚠ não saiu':''));
+    const motivo=(m.status==='erro_envio'&&m.bruto&&m.bruto.envio&&m.bruto.envio.erro)?` title="${escA(m.bruto.envio.erro)}"`:'';
+    html+=`<div class="chatb ${cls}"${motivo}>${chatCorpoMsg(m)}<span class="chatb-meta">${esc(autor)}${chatHoraMsg(m)}${pend}</span></div>`;
   });
   feed.innerHTML=html;
   feed.scrollTop=feed.scrollHeight;
@@ -4709,7 +4728,7 @@ async function ibEnviarMensagem(){
   inp.value='';
   ibChatAssinatura='';
   ibCarregarChat(c);
-  toast('Mensagem na fila de envio','ok');
+  toast('Mensagem na fila — sai em até 1 minuto','ok');
 }
 
 // ============================================================

@@ -2472,8 +2472,15 @@ function chatDiaMsg(m){
 function pareceBase64(t){
   const s=String(t||'').trim();
   if(s.length<200)return false;
-  if(/\s/.test(s.slice(0,200)))return false;
-  return /^[A-Za-z0-9+/=_-]+$/.test(s.slice(0,400));
+  /* O WhatsGW manda o base64 quebrado em linhas. A versao antiga
+     desistia no primeiro \n e por isso o audio passava batido e a
+     parede de caracteres ia para a tela. Agora o espaco e ignorado —
+     mas so ate um limite, senao frase longa de gente vira "midia":
+     texto em portugues tem cerca de 16% de espaco, base64 quebrado
+     em linhas tem perto de 1%. */
+  const semEspaco=s.replace(/\s+/g,'');
+  if((s.length-semEspaco.length)/s.length>0.03)return false;
+  return /^[A-Za-z0-9+/=_-]+$/.test(semEspaco.slice(0,400));
 }
 function rotuloMidia(m){
   const ic={imagem:'🖼',audio:'🎤',video:'🎬',documento:'📄',figurinha:'🩹',localizacao:'📍'};
@@ -2483,16 +2490,18 @@ function rotuloMidia(m){
   return '📎 mídia';
 }
 function chatCorpoMsg(m){
-  let html='';
   const ehMidia=m.tipo&&m.tipo!=='texto';
-  if(ehMidia){
-    html+=`<span class="chatb-mid">${esc(rotuloMidia(m))}</span>`;
-  }
+  /* Mensagem de midia NUNCA imprime o texto cru. Naquele campo nao vem
+     legenda: vem o arquivo inteiro em base64. Antes isso dependia de
+     pareceBase64 acertar o palpite; agora e regra fixa, decidida pelo
+     tipo, que o webhook ja grava certo. */
+  if(ehMidia)return `<span class="chatb-mid">${esc(rotuloMidia(m))}</span>`;
   const cru=m.texto||'';
-  if(cru&&!pareceBase64(cru))html+=esc(cru).replace(/\n/g,'<br>');
-  else if(cru&&pareceBase64(cru)&&!ehMidia)html+=`<span class="chatb-mid">${esc(rotuloMidia(m))}</span>`;
-  else if(!cru&&!ehMidia)html+='<span style="opacity:.6">(mensagem sem texto)</span>';
-  return html;
+  if(!cru)return '<span style="opacity:.6">(mensagem sem texto)</span>';
+  /* Sobra o caso do tipo vir como "texto" mas o conteudo ser base64 —
+     acontece quando o WhatsGW nao classifica a midia. */
+  if(pareceBase64(cru))return `<span class="chatb-mid">${esc(rotuloMidia(m))}</span>`;
+  return esc(cru).replace(/\n/g,'<br>');
 }
 function chatJanelaHtml(msgs,canal){
   if(canal!=='meta_oficial')return'';

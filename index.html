@@ -994,6 +994,8 @@ function route(){
   if(r==='/dashboard')return pageDash();
   if(r==='/recebimentos')return pageRec();
   if(r==='/recebimento/novo')return pageNovoRec();
+  /* Chegou pelo botão dentro do card: a cliente já vem escolhida. */
+  if(m=r.match(/^\/recebimento\/novo\/(.+)$/))return pageNovoRec(m[1]);
   if(r==='/inbox')return pageInbox();
   if(r==='/clientes')return pageClientes();
   if(r==='/logs')return pageLogs();
@@ -1620,15 +1622,42 @@ async function excluirAnexo(id,caminho,clienteId){
 // ============================================================
 async function loadFin(forcar){
   if(finCarregado&&!forcar)return;
-  const[rc,rr,rp]=await Promise.all([
-    sb.from('crm_clientes').select('id,nome_completo,telefone_principal,trello_url,origem').order('nome_completo'),
+  const[rr,rp]=await Promise.all([
     sb.from('pm_recebimentos').select('*').order('created_at',{ascending:false}),
     sb.from('pm_parcelas').select('*').order('data_vencimento')
   ]);
-  CLI=(rc.data||[]).map(c=>({id:c.id,nome:c.nome_completo,whatsapp:c.telefone_principal,trello_url:c.trello_url,origem:c.origem}));
   REC=rr.data||[];
   PARC=rp.data||[];
+  /* CLI CARREGA SÓ QUEM TEM DINHEIRO ENVOLVIDO, E NÃO A BASE INTEIRA.
+     Antes era um select sem filtro em crm_clientes. Parecia trazer todo
+     mundo, mas o PostgREST corta em 1000 linhas caladamente — com 37 mil
+     clientes na base, o seletor de Recebimentos enxergava só a primeira
+     fatia em ordem alfabética. Cliente fora dela sumia da busca e não
+     dava para cadastrar pagamento nenhum para ela.
+     Aqui só entram os que já têm parcela ou recebimento, que é para o
+     que este array serve nesta tela (WhatsApp, Trello, nome). Quem for
+     novo entra pela busca no banco, em buscaCliAgora(). */
+  const ids=[...new Set([].concat(
+    PARC.map(pCli),
+    REC.map(r=>r.crm_cliente_id||r.cliente_id)
+  ).filter(Boolean))];
+  CLI=[];
+  for(let i=0;i<ids.length;i+=200){
+    const{data}=await sb.from('crm_clientes')
+      .select('id,nome_completo,telefone_principal,trello_url,origem')
+      .in('id',ids.slice(i,i+200));
+    (data||[]).forEach(c=>CLI.push({id:c.id,nome:c.nome_completo,whatsapp:c.telefone_principal,trello_url:c.trello_url,origem:c.origem}));
+  }
   finCarregado=true;
+}
+/* Guarda no CLI quem veio da busca ou da pré-seleção. selCli() e
+   submitRec() procuram a cliente aqui dentro — sem isto, escolher uma
+   cliente que não estava no array daria "Cliente não encontrada" na
+   hora de salvar. */
+function mesclarCli(lista){
+  (lista||[]).forEach(n=>{
+    if(!CLI.some(c=>String(c.id)===String(n.id)))CLI.push(n);
+  });
 }
 const pCli=p=>p.crm_cliente_id||p.cliente_id;
 
@@ -2221,7 +2250,10 @@ function renderCardClienteModal(c,etqSel,listas){
         <div class="mcsens" style="background:var(--yellow-bg);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${pagHtml.temParc?'10px':'0'}">
             <div style="font-size:12px;font-weight:700;color:var(--text2)">💰 Pagamentos</div>
-            <button class="btn btns" style="padding:4px 10px;font-size:11px" onclick="fecharModal();location.hash='#/quadro/financeiro'">Ver no Financeiro →</button>
+            <div style="display:flex;gap:6px">
+              <button class="btn btnp" style="padding:4px 10px;font-size:11px" onclick="fecharModal();location.hash='#/recebimento/novo/${c.id}'">+ Cadastrar pagamento</button>
+              <button class="btn btns" style="padding:4px 10px;font-size:11px" onclick="fecharModal();location.hash='#/quadro/financeiro'">Ver no Financeiro →</button>
+            </div>
           </div>
           ${pagHtml.html}
         </div>
@@ -3389,7 +3421,7 @@ async function varrerAtrasos(){
 // ============================================================
 // NOVO RECEBIMENTO
 // ============================================================
-async function pageNovoRec(){
+async function pageNovoRec(cidInicial){
   const pc=$('pc');marcarNav('novorec');
   if(!temFinanceiro()){pc.innerHTML='<div class="emp"><div class="empt">Área restrita</div></div>';return;}
   pc.innerHTML='<div class="emp">Carregando...</div>';
@@ -3459,12 +3491,47 @@ async function pageNovoRec(){
     <div class="brow" style="margin-bottom:30px"><button class="btn btns" onclick="location.hash='#/recebimentos'">Cancelar</button>
     <button class="btn btnp" id="fsubmit" onclick="submitRec()">Salvar recebimento</button></div>`;
   setTipo('i');recalc();
+  if(cidInicial)await preSelecionarCli(cidInicial);
 }
+/* Vem do botão "Cadastrar pagamento" no card. Busca pelo id direto,
+   porque a cliente pode perfeitamente não estar no CLI — é justamente
+   quem não aparecia na busca que mais precisa deste caminho. */
+async function preSelecionarCli(cid){
+  let c=CLI.find(x=>String(x.id)===String(cid));
+  if(!c){
+    const{data}=await sb.from('crm_clientes').select('id,nome_completo,telefone_principal').eq('id',cid).single();
+    if(!data){toast('Cliente não encontrada.','er');return;}
+    c={id:data.id,nome:data.nome_completo,whatsapp:data.telefone_principal};
+    mesclarCli([c]);
+  }
+  selCli(c.id);
+}
+/* A BUSCA VAI AO BANCO, NÃO A UM ARRAY EM MEMÓRIA.
+   Filtrar CLI localmente só funcionava enquanto CLI fosse a base
+   inteira — e nunca foi: o PostgREST devolve no máximo 1000 linhas.
+   Buscar no banco também aceita telefone, que é como você identifica
+   cliente quando o nome está escrito diferente do que ela mandou. */
+let _buscaCliTimer=null;
 function buscaCli(){
-  const q=($('fbcli').value||'').toLowerCase(),res=$('fbres');
-  if(!q){res.style.display='none';return;}
-  const f=CLI.filter(c=>(c.nome||'').toLowerCase().includes(q)).slice(0,8);
-  if(!f.length){res.style.display='none';return;}
+  clearTimeout(_buscaCliTimer);
+  _buscaCliTimer=setTimeout(buscaCliAgora,250); /* espera parar de digitar */
+}
+async function buscaCliAgora(){
+  const q=($('fbcli').value||'').trim(),res=$('fbres');
+  if(q.length<2){res.style.display='none';return;}
+  const digitos=q.replace(/\D/g,'');
+  const porTelefone=digitos.length>=4&&digitos.length>=q.replace(/\s/g,'').length-2;
+  const consulta=porTelefone
+    ? sb.from('crm_clientes').select('id,nome_completo,telefone_principal').ilike('telefone_principal','%'+digitos+'%').limit(8)
+    : sb.from('crm_clientes').select('id,nome_completo,telefone_principal').ilike('nome_completo','%'+q+'%').order('nome_completo').limit(8);
+  const{data}=await consulta;
+  const f=(data||[]).map(c=>({id:c.id,nome:c.nome_completo,whatsapp:c.telefone_principal}));
+  mesclarCli(f);
+  if(!f.length){
+    res.style.display='block';
+    res.innerHTML='<div class="fhint" style="padding:10px">Nenhuma cliente encontrada com esse nome ou telefone.</div>';
+    return;
+  }
   res.style.display='block';
   res.innerHTML=f.map(c=>`<div class="sri" onclick="selCli('${c.id}')">
     <div class="av" style="background:${avC(c.nome)};width:30px;height:30px;font-size:12px">${avL(c.nome)}</div>

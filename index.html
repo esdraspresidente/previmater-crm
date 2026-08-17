@@ -715,6 +715,24 @@ const QUADROS={
   financeiro:{rotulo:'Financeiro',icone:'◆',ordem:4}
 };
 const CANAIS={meta_oficial:'Meta oficial',evolution:'Evolution',whatsgw:'WhatsGW'};
+/* Canal por onde a conversa desta cliente acontece. Sao os DOIS valores
+   que crm_mensagens.canal aceita — e por isso os unicos que podem ser
+   gravados numa mensagem. O CANAIS acima e outra coisa: e a lista das
+   instancias de WhatsApp cadastradas, e tem valor ('meta_oficial') que
+   o CHECK de crm_mensagens recusa. Misturar os dois era o motivo de o
+   envio morrer com erro incompreensivel. */
+const CANAIS_ENVIO={whatsgw:'WhatsGW',oficial:'Oficial'};
+/* De onde sai o canal da conversa: crm_clientes.canal_ativo, que tem
+   default 'whatsgw' e esta preenchido em todos os cards. O
+   canal_whatsapp so entra como socorro, traduzido — ele esta vazio em
+   praticamente todo mundo e nao serve para decidir envio. */
+function canalDaConversa(c){
+  if(!c)return null;
+  if(c.canal_ativo)return c.canal_ativo;
+  if(c.canal_whatsapp==='whatsgw')return 'whatsgw';
+  if(c.canal_whatsapp==='meta_oficial')return 'oficial';
+  return null;
+}
 const ORIGENS={contato_direto:'Contato Direto',indicacao:'Indicação',redes_sociais:'Redes Sociais',site:'Site',outro:'Outro'};
 const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
@@ -2116,7 +2134,10 @@ function renderCardClienteModal(c,etqSel,listas){
   const listaAtual=listas.find(l=>l.id===c.lista_id);
   const optQ=QPERM.map(q=>`<option value="${q}" ${c.quadro===q?'selected':''}>${QUADROS[q].rotulo}</option>`).join('');
   const optL=listas.map(l=>`<option value="${l.id}" ${c.lista_id===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
-  const optCanal=`<option value="">—</option>`+Object.keys(CANAIS).map(k=>`<option value="${k}" ${c.canal_whatsapp===k?'selected':''}>${CANAIS[k]}</option>`).join('');
+  /* Sem opcao vazia: canal_ativo sempre tem valor (default whatsgw), e
+     deixar em branco so serviria para travar o botao de enviar. */
+  const canalAtual=canalDaConversa(c)||'whatsgw';
+  const optCanal=Object.keys(CANAIS_ENVIO).map(k=>`<option value="${k}" ${canalAtual===k?'selected':''}>${CANAIS_ENVIO[k]}</option>`).join('');
   const optOrig=`<option value="">—</option>`+Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
   const etqPicker=ETQ.map(t=>`<label class="etp-row" data-nome="${escA((t.nome||'').toLowerCase())}"><input type="checkbox" ${etqSel.includes(t.id)?'checked':''} onchange="mcToggleEtq('${t.id}')"/><span class="etp-bar" style="background:${escA(t.cor)}">${esc(t.nome)}</span></label>`).join('')||'<div class="fhint" style="padding:6px 2px">Nenhuma etiqueta criada ainda.</div>';
   const pagHtml=mcPagamentosHtml(c.id);
@@ -2264,7 +2285,7 @@ function renderCardClienteModal(c,etqSel,listas){
 
         <div class="mcpane h" id="mcpane-chat">
           <div class="chathead">
-            ${chatBadgeHtml(c.canal_whatsapp)}
+            ${chatBadgeHtml(canalDaConversa(c))}
             <label class="chatpausa" title="Quando ligado, a Samara não responde esta cliente">
               <input type="checkbox" id="mc-samara-pausada" ${c.samara_pausada?'checked':''} onchange="mcTogSamara('${c.id}',this.checked)"/> Samara pausada
             </label>
@@ -2281,7 +2302,7 @@ function renderCardClienteModal(c,etqSel,listas){
     </div>
     </div>`);
   mcRecalcBox(c.valor_beneficio_esperado,c.valor_honorarios);
-  mcChatCanal=c.canal_whatsapp||null;
+  mcChatCanal=canalDaConversa(c);
   mcChatTel=c.telefone_principal||null;
   mcChatChave=c.telefone_chave||null;
   mcChatAssinatura='';
@@ -2333,7 +2354,7 @@ function mcAba(nome){
 }
 function pararChatPoll(){if(mcChatTimer){clearInterval(mcChatTimer);mcChatTimer=null;}}
 function chatBadgeHtml(canal){
-  if(canal==='meta_oficial')return'<span class="chatbadge of">Meta oficial</span>';
+  if(canal==='oficial'||canal==='meta_oficial')return'<span class="chatbadge of">Oficial</span>';
   if(canal==='evolution')return'<span class="chatbadge">Evolution · não oficial</span>';
   if(canal==='whatsgw')return'<span class="chatbadge">WhatsGW · não oficial</span>';
   return'<span class="chatbadge nd">Canal não definido</span>';
@@ -2416,7 +2437,7 @@ async function carregarChat(clienteId,silencioso){
   /* O motor so entrega pelo WhatsGW. Dizer isso aqui evita a pergunta
      "mandei e nao chegou": nos outros canais a linha fica na conversa e
      e marcada como nao enviada. */
-  if(av)av.innerHTML=!mcChatCanal?'Defina o <b>Canal WhatsApp</b> desta cliente na coluna ao lado para o chat saber por onde a conversa acontece.':(mcChatCanal==='whatsgw'?'A mensagem entra na fila e o motor entrega em até 1 minuto.':'Esta cliente está no canal <b>'+esc(CANAIS[mcChatCanal]||mcChatCanal)+'</b>. O envio automático hoje só funciona pelo WhatsGW — aqui a mensagem fica registrada, mas não sai.');
+  if(av)av.innerHTML=!mcChatCanal?'Defina o <b>Canal WhatsApp</b> desta cliente na coluna ao lado para o chat saber por onde a conversa acontece.':(mcChatCanal==='whatsgw'?'A mensagem entra na fila e o motor entrega em até 1 minuto.':'Esta cliente está no canal <b>'+esc(CANAIS_ENVIO[mcChatCanal]||mcChatCanal)+'</b>. O envio automático hoje só funciona pelo WhatsGW — aqui a mensagem fica registrada, mas não sai.');
   if(silencioso&&assinatura===mcChatAssinatura)return;
   mcChatAssinatura=assinatura;
   if(!msgs.length){feed.innerHTML='<div class="fhint" style="text-align:center;padding:20px 0">Nenhuma mensagem ainda.<br>A conversa aparece aqui a partir do dia em que o webhook estiver ligado.</div>';return;}
@@ -2670,7 +2691,7 @@ async function salvarCardCliente(id){
     referencia1_telefone:$('mc-ref1-tel').value.trim()||null,
     referencia2_nome:$('mc-ref2-nome').value.trim()||null,
     referencia2_telefone:$('mc-ref2-tel').value.trim()||null,
-    canal_whatsapp:$('mc-canal').value||null,
+    canal_ativo:$('mc-canal').value||'whatsgw',
     origem:$('mc-origem').value||null,
     trello_url:$('mc-trello').value.trim()||null,
     quadro:quadro,
@@ -2844,7 +2865,8 @@ async function pageCliente(id){
   const optQ=QPERM.map(q=>`<option value="${q}" ${qAtual===q?'selected':''}>${QUADROS[q].rotulo}</option>`).join('');
   const lSel=(c&&c.lista_id)||listaPre||((listas&&listas[0])?listas[0].id:'');
   const optL=(listas||[]).map(l=>`<option value="${l.id}" ${lSel===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
-  const optCanal=Object.keys(CANAIS).map(k=>`<option value="${k}" ${c&&c.canal_whatsapp===k?'selected':''}>${CANAIS[k]}</option>`).join('');
+  const canalForm=canalDaConversa(c)||'whatsgw';
+  const optCanal=Object.keys(CANAIS_ENVIO).map(k=>`<option value="${k}" ${canalForm===k?'selected':''}>${CANAIS_ENVIO[k]}</option>`).join('');
   const optOrig=Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c&&c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
   const chips=ETQ.map(t=>`<span class="ett ${etqSel.includes(t.id)?'on':''}" data-etq="${t.id}" style="background:${escA(t.cor)}" onclick="this.classList.toggle('on')">${esc(t.nome)}</span>`).join('');
 
@@ -2861,7 +2883,7 @@ async function pageCliente(id){
         <div class="fld ff"><label>Nome completo *</label><input type="text" id="f-nome" value="${escA(c&&c.nome_completo)}"/></div>
         <div class="fld"><label>CPF</label><input type="text" id="f-cpf" inputmode="numeric" placeholder="000.000.000-00" value="${escA(c&&c.cpf)}" oninput="cpfMask(this)"/></div>
         <div class="fld"><label>Telefone / WhatsApp</label><input type="text" id="f-tel" value="${escA(c&&c.telefone_principal)}"/></div>
-        <div class="fld"><label>Canal WhatsApp</label><select id="f-canal"><option value="">— selecione —</option>${optCanal}</select></div>
+        <div class="fld"><label>Canal WhatsApp</label><select id="f-canal">${optCanal}</select></div>
         <div class="fld"><label>Origem</label><select id="f-origem"><option value="">— selecione —</option>${optOrig}</select></div>
         <div class="fld"><label>Data de nascimento do bebê</label><input type="date" id="f-dn" value="${(c&&c.data_nascimento_bebe)||''}"/></div>
         <div class="fld"><label>Link do Trello</label><input type="url" id="f-trello" placeholder="https://trello.com/c/..." value="${escA(c&&c.trello_url)}"/></div>
@@ -2932,7 +2954,7 @@ async function salvarCliente(id){
     nome_completo:nome,
     cpf:$('f-cpf').value.trim()||null,
     telefone_principal:$('f-tel').value.trim()||null,
-    canal_whatsapp:$('f-canal').value||null,
+    canal_ativo:$('f-canal').value||'whatsgw',
     origem:$('f-origem').value||null,
     trello_url:$('f-trello').value.trim()||null,
     quadro:quadro,
@@ -4428,7 +4450,7 @@ async function ibCarregarLista(silencioso){
   const idsClientes=[...new Set(msgs.filter(m=>m.cliente_id).map(m=>m.cliente_id))];
   let clientesMap={};
   if(idsClientes.length){
-    const{data:cl}=await sb.from('crm_clientes').select('id,nome_completo,canal_whatsapp,telefone_principal').in('id',idsClientes);
+    const{data:cl}=await sb.from('crm_clientes').select('id,nome_completo,canal_ativo,canal_whatsapp,telefone_principal').in('id',idsClientes);
     (cl||[]).forEach(c=>clientesMap[c.id]=c);
   }
   IB_CONVS=ordem.map(chave=>{
@@ -4437,7 +4459,7 @@ async function ibCarregarLista(silencioso){
     return{
       chave,clienteId:ultima.cliente_id||null,
       nome:cliente?cliente.nome_completo:(ultima.telefone_bruto||ultima.telefone_chave||'Contato desconhecido'),
-      canal:cliente?cliente.canal_whatsapp:ultima.canal,
+      canal:cliente?canalDaConversa(cliente):ultima.canal,
       telefoneChave:ultima.telefone_chave||null,
       lead:!ultima.cliente_id,
       ultimaMsg:ultima
@@ -4788,7 +4810,7 @@ async function ibConfirmarCriarCliente(chave){
     }
   }
   if(btn)btn.textContent='Criando...';
-  const{data:novo,error}=await sb.from('crm_clientes').insert({nome_completo:nome,telefone_principal:tel||null,canal_whatsapp:c.canal||null,quadro,lista_id:listaId}).select('id').single();
+  const{data:novo,error}=await sb.from('crm_clientes').insert({nome_completo:nome,telefone_principal:tel||null,canal_ativo:c.canal||'whatsgw',quadro,lista_id:listaId}).select('id').single();
   if(error||!novo){if(btn){btn.disabled=false;btn.textContent='Criar cliente';}toast('Erro ao criar cliente: '+(error?error.message:''),'er');return;}
   let migradas=0;
   if(c.telefoneChave){

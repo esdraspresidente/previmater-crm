@@ -483,6 +483,31 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .ib-voltar:hover,.ib-detalhes:hover{border-color:var(--teal);color:var(--teal);}
 .inb-chat-head-acoes{margin-left:auto;display:flex;align-items:center;gap:7px;flex-shrink:0;}
 .ib-fechar-painel{display:none;width:100%;margin-bottom:14px;border:1.5px solid var(--border);background:var(--white);color:var(--text2);border-radius:9px;padding:8px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;}
+/* Trilha e sequencias no topo do cartao. */
+.mcond{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px;}
+.trilha{display:inline-flex;align-items:center;gap:7px;background:var(--teal-l);border:1.5px solid var(--teal-m);border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:800;color:#0A6F72;cursor:pointer;font-family:inherit;}
+.trilha:hover{background:#D2EEEF;}
+.trilha .sep{color:var(--teal-m);font-weight:700;}
+.trilha .qd{font-weight:700;color:#3D7C7E;}
+.mcdesde{font-size:11.5px;color:var(--text3);font-weight:700;}
+.seqbox{border:1.5px solid var(--border);border-radius:14px;overflow:hidden;}
+.seqlinha{display:flex;align-items:center;gap:11px;padding:11px 14px;border-bottom:1px solid var(--border2);}
+.seqlinha:last-child{border-bottom:none;}
+.seqlinha.viva{background:#F7FCFC;}
+.seqic{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
+.ic-and{background:var(--green-bg);color:var(--green);}
+.ic-esp{background:var(--yellow-bg);color:var(--yellow);}
+.ic-pau{background:var(--gray-bg);color:var(--gray);}
+.ic-err{background:var(--red-bg);color:var(--red);}
+.ic-fim{background:var(--border2);color:var(--text3);}
+.seqcorpo{flex:1;min-width:0;}
+.seqnome{font-size:13.5px;font-weight:800;color:var(--text);}
+.seqnome.morta{color:var(--text3);font-weight:700;}
+.seqsub{font-size:11.5px;color:var(--text3);margin-top:2px;font-weight:600;}
+.seqpasso{font-size:11px;font-weight:800;color:var(--text2);background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:3px 8px;flex-shrink:0;white-space:nowrap;}
+.seqvazio{padding:14px;font-size:12.5px;color:var(--text3);text-align:center;font-weight:600;}
+.seqverfim{width:100%;background:none;border:none;border-top:1px solid var(--border2);padding:9px;font-size:11.5px;font-weight:800;color:var(--teal);cursor:pointer;font-family:inherit;}
+.seqverfim:hover{background:var(--bg);}
 /* Gravador de audio da Caixa de Entrada. */
 .ib-send-linha{display:flex;align-items:stretch;gap:8px;margin-top:9px;}
 .ib-send-linha .btn{flex:1;}
@@ -818,7 +843,7 @@ function escA(s){return s?String(s).replace(/"/g,'&quot;'):'';}
 function toast(m,t){const e=$('toast');e.textContent=m;e.className='v '+(t||'ok');clearTimeout(e._t);e._t=setTimeout(()=>e.className='',2600);}
 function togSB(){$('sb').classList.toggle('o');$('ov').classList.toggle('o');}
 let mcPreviewAberto=false;
-function fecharModal(){$('modal').classList.add('h');mcPreviewAberto=false;if(typeof mcMostrarVeu==='function'){mcDropProf=0;mcMostrarVeu(false);}if(typeof pararChatPoll==='function')pararChatPoll();}
+function fecharModal(){$('modal').classList.add('h');mcPreviewAberto=false;if(typeof gravCancelar==='function')gravCancelar();if(typeof mcMostrarVeu==='function'){mcDropProf=0;mcMostrarVeu(false);}if(typeof pararChatPoll==='function')pararChatPoll();}
 function fecharSeFundo(e){if(e.target===e.currentTarget)fecharInteligente();}
 function fecharInteligente(){
   if(mcPreviewAberto&&mcClienteId){mcPreviewAberto=false;abrirCardCliente(mcClienteId);return;}
@@ -2248,6 +2273,9 @@ function renderCardClienteModal(c,etqSel,listas){
       <div>
     <input type="text" id="mc-nome" class="mctit" value="${escA(c.nome_completo)}"/>
     <div class="mbs">Cliente desde ${fD(c.criado_em?c.criado_em.slice(0,10):null)}</div>
+    <div class="mcond" id="mc-trilha"></div>
+    <div class="st" style="margin:20px 0 9px">Sequências</div>
+    <div id="mc-seqs"><div class="seqbox"><div class="seqvazio">Carregando...</div></div></div>
     ${c.arquivado_em?`<div class="gb-arqbanner"><span>📦 Este cartão foi arquivado automaticamente (60 dias parado em Pago / encerrado)</span><button class="btn btns" style="padding:5px 12px;font-size:11.5px;flex-shrink:0" onclick="reativarCliente('${c.id}')">Reativar</button></div>`:''}
 
     <div class="mcetq" id="mc-etq-wrap">
@@ -2388,8 +2416,14 @@ function renderCardClienteModal(c,etqSel,listas){
           <div id="mc-chat-janela"></div>
           <div class="chatfeed" id="mc-chat-feed"><div class="fhint" style="text-align:center;padding:14px 0">Carregando...</div></div>
           <div class="chatsend">
-            <textarea id="mc-chat-input" placeholder="Escreva uma mensagem para a cliente..."></textarea>
-            <button class="btn btnp" style="width:100%;margin-top:7px" id="mc-chat-btn" onclick="enviarMensagemChat('${c.id}')">Enviar</button>
+            <div class="ib-grav" id="mc-grav"></div>
+            <div id="mc-escrever">
+              <textarea id="mc-chat-input" placeholder="Escreva uma mensagem para a cliente..."></textarea>
+              <div class="ib-send-linha">
+                <button class="ib-mic" onclick="gravMicClique('card')" title="Gravar audio">🎤</button>
+                <button class="btn btnp" id="mc-chat-btn" onclick="enviarMensagemChat('${c.id}')">Enviar</button>
+              </div>
+            </div>
             <div class="chataviso" id="mc-chat-aviso"></div>
           </div>
         </div>
@@ -2397,6 +2431,8 @@ function renderCardClienteModal(c,etqSel,listas){
     </div>
     </div>`);
   mcRecalcBox(c.valor_beneficio_esperado,c.valor_honorarios);
+  mcPintarTrilha(c);
+  mcCarregarSequencias(c.id);
   mcChatCanal=canalDaConversa(c);
   mcChatTel=c.telefone_principal||null;
   mcChatChave=c.telefone_chave||null;
@@ -4689,7 +4725,7 @@ function ibFiltrar(v){ibFiltroTxt=v;ibRenderLista();}
 /* Volta da conversa para a lista no celular. Em tela grande as duas
    convivem, entao o botao nem aparece. */
 function ibVoltarLista(){
-  ibCancelarGravacao(); // senao o microfone continua aberto numa conversa que voce ja deixou
+  gravCancelar(); // senao o microfone continua aberto numa conversa que voce ja deixou
   const wrap=document.querySelector('.inbwrap');if(wrap)wrap.classList.remove('chat-aberto');
   const pnl=$('ib-panel');if(pnl)pnl.classList.remove('aberto');
   pararInboxChatPoll();
@@ -4717,7 +4753,7 @@ function ibPintarSamara(cli){
 function ibSelecionar(chave){
   const c=IB_CONVS.find(x=>x.chave===chave);
   if(!c)return;
-  ibCancelarGravacao(); // trocar de conversa nao pode levar junto um audio gravado para outra pessoa
+  gravCancelar(); // trocar de conversa nao pode levar junto um audio gravado para outra pessoa
   ibSelId=chave;ibChatAssinatura='';
   // No celular o chat ocupa a tela toda: a lista sai de cena ate o voltar.
   const wrap=document.querySelector('.inbwrap');if(wrap)wrap.classList.add('chat-aberto');
@@ -4923,7 +4959,7 @@ async function ibCarregarChat(c,silencioso){
         <div id="ib-escrever">
           <textarea id="ib-chat-input" placeholder="Escreva uma mensagem..."></textarea>
           <div class="ib-send-linha">
-            <button class="ib-mic" id="ib-mic" onclick="ibMicClique()" title="Gravar audio">🎤</button>
+            <button class="ib-mic" onclick="gravMicClique('inbox')" title="Gravar audio">🎤</button>
             <button class="btn btnp" id="ib-chat-btn" onclick="ibEnviarMensagem()">Enviar</button>
           </div>
         </div>
@@ -4974,148 +5010,181 @@ function pararInboxChatPoll(){if(ibChatTimer){clearInterval(ibChatTimer);ibChatT
    baixado SO quando voce toca no microfone pela primeira vez: sao
    algumas centenas de KB que ninguem deve pagar so por abrir a tela.
    ============================================================ */
-const IB_OMR='https://cdn.jsdelivr.net/npm/opus-media-recorder@0.8.0/';
-const IB_GRAV_MAX_MS=5*60*1000; // teto de 5 min: acima disso o arquivo comeca a se aproximar do limite de envio
-let ibOmrPronto=null,ibGravador=null,ibGravStream=null,ibGravBlob=null,ibGravUrl=null,ibGravInicio=0,ibGravTimer=null,ibGravDurMs=0;
+/* ============================================================
+   GRAVADOR DE AUDIO — serve a Caixa de Entrada e o chat do cartao
+   ============================================================
+   O MediaRecorder nativo do Chrome so entrega audio/webm. Testado em
+   17/08/2026: o WhatsGW aceita webm e responde sucesso, o WhatsApp
+   descarta sem avisar — a mensagem fica "enviada" no CRM e a cliente
+   nunca recebe. So ogg/opus vira nota de voz. Dai o encoder wasm.
 
-function ibCarregarGravador(){
-  if(ibOmrPronto)return ibOmrPronto;
-  ibOmrPronto=(async()=>{
-    await new Promise((ok,falha)=>{
-      const sc=document.createElement('script');
-      sc.src=IB_OMR+'OpusMediaRecorder.umd.js';
-      sc.onload=ok;sc.onerror=()=>falha(new Error('nao consegui baixar o gravador'));
-      document.head.appendChild(sc);
-    });
+   O encoder e baixado SO no primeiro toque no microfone: sao algumas
+   centenas de KB que ninguem deve pagar so por abrir a tela.
+
+   POR QUE UM GRAVADOR SO PARA AS DUAS TELAS: elas guardam o destino em
+   lugares diferentes (IB_CONVS na Caixa de Entrada, mcChat* no cartao).
+   Duas copias do gravador seriam duas chances de corrigir uma e
+   esquecer a outra. Aqui a tela so diz QUEM e o destino.
+   ============================================================ */
+const GRAV_OMR='https://cdn.jsdelivr.net/npm/opus-media-recorder@0.8.0/';
+const GRAV_MAX_MS=5*60*1000; // 5 min: acima disso o arquivo se aproxima do limite de envio
+let gravOmrPronto=null,gravador=null,gravStream=null,gravBlob=null,gravUrl=null,gravInicio=0,gravTimer=null,gravDurMs=0,gravDest=null;
+
+/* Traduz "de qual tela veio" para tudo que o envio precisa saber. */
+function gravMontarDestino(onde){
+  if(onde==='card'){
+    if(!mcClienteId)return null;
+    return{onde:'card',canal:mcChatCanal,chave:mcChatChave,tel:mcChatTel,clienteId:mcClienteId,
+      idBox:'mc-grav',idEscrever:'mc-escrever',
+      recarregar:()=>{mcChatAssinatura='';carregarChat(mcClienteId);}};
+  }
+  const c=IB_CONVS.find(x=>x.chave===ibSelId);
+  if(!c)return null;
+  return{onde:'inbox',canal:c.canal,chave:c.telefoneChave,
+    tel:c.ultimaMsg?c.ultimaMsg.telefone_bruto:null,clienteId:c.clienteId,
+    idBox:'ib-grav',idEscrever:'ib-escrever',
+    recarregar:()=>{ibChatAssinatura='';ibCarregarChat(c);}};
+}
+
+function gravCarregarEncoder(){
+  if(gravOmrPronto)return gravOmrPronto;
+  gravOmrPronto=(async()=>{
+    if(!window.OpusMediaRecorder){
+      await new Promise((ok,falha)=>{
+        const sc=document.createElement('script');
+        sc.src=GRAV_OMR+'OpusMediaRecorder.umd.js';
+        sc.onload=ok;sc.onerror=()=>falha(new Error('nao consegui baixar o gravador'));
+        document.head.appendChild(sc);
+      });
+    }
     /* O Worker TEM que vir do mesmo dominio: new Worker() apontando para
-       outro site e bloqueado pelo navegador. Entao baixamos o codigo do
-       worker como texto e montamos um Worker a partir de um blob local.
-       O .wasm continua vindo do CDN, que isso o fetch de dentro do
-       worker resolve normalmente. */
-    const txt=await (await fetch(IB_OMR+'encoderWorker.umd.js')).text();
+       outro site e bloqueado pelo navegador. Baixamos o codigo como
+       texto e montamos um Worker a partir de um blob local. O .wasm
+       continua vindo do CDN, que isso o fetch de dentro do worker faz. */
+    const txt=await (await fetch(GRAV_OMR+'encoderWorker.umd.js')).text();
     const urlWorker=URL.createObjectURL(new Blob([txt],{type:'text/javascript'}));
     return{
       encoderWorkerFactory:()=>new Worker(urlWorker),
-      OggOpusEncoderWasmPath:IB_OMR+'OggOpusEncoder.wasm',
-      WebMOpusEncoderWasmPath:IB_OMR+'WebMOpusEncoder.wasm'
+      OggOpusEncoderWasmPath:GRAV_OMR+'OggOpusEncoder.wasm',
+      WebMOpusEncoderWasmPath:GRAV_OMR+'WebMOpusEncoder.wasm'
     };
-  })().catch(e=>{ibOmrPronto=null;throw e;});
-  return ibOmrPronto;
+  })().catch(e=>{gravOmrPronto=null;throw e;});
+  return gravOmrPronto;
 }
 
-function ibTempoGrav(ms){
+function gravTempo(ms){
   const t=Math.floor(ms/1000);
   return Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
 }
 
-/* Desenha a area de gravacao e some com a caixa de texto enquanto ela
+/* Desenha a area de gravacao e esconde a caixa de texto enquanto ela
    estiver ocupada — escrever e gravar ao mesmo tempo so gera duvida
    sobre o que o botao Enviar vai mandar. */
-function ibGravPintar(estado){
-  const box=$('ib-grav'),escrever=$('ib-escrever');
-  if(!box)return;
-  if(escrever)escrever.style.display=(estado==='gravando'||estado==='pronto')?'none':'';
-  if(estado==='carregando'){
-    box.innerHTML='<span class="ib-grav-txt">Preparando o gravador...</span>';
-  }else if(estado==='gravando'){
-    box.innerHTML=`<span class="ib-grav-ponto"></span><span class="ib-grav-tempo" id="ib-grav-tempo">0:00</span>
-      <button class="pr" onclick="ibPararGravacao()">Parar</button>
-      <button onclick="ibCancelarGravacao()">Cancelar</button>`;
-  }else if(estado==='pronto'){
-    box.innerHTML=`<audio controls src="${ibGravUrl}"></audio>
-      <button class="pr" id="ib-grav-env" onclick="ibEnviarAudio()">Enviar audio</button>
-      <button onclick="ibCancelarGravacao()">Descartar</button>`;
-  }else{
-    box.innerHTML='';
-  }
+function gravPintar(estado){
+  const alvos=gravDest?[gravDest]:[{idBox:'ib-grav',idEscrever:'ib-escrever'},{idBox:'mc-grav',idEscrever:'mc-escrever'}];
+  alvos.forEach(d=>{
+    const box=$(d.idBox),escrever=$(d.idEscrever);
+    if(escrever)escrever.style.display=(estado==='gravando'||estado==='pronto')?'none':'';
+    if(!box)return;
+    if(estado==='carregando'){
+      box.innerHTML='<span class="ib-grav-txt">Preparando o gravador...</span>';
+    }else if(estado==='gravando'){
+      box.innerHTML=`<span class="ib-grav-ponto"></span><span class="ib-grav-tempo" id="grav-tempo">0:00</span>
+        <button class="pr" onclick="gravParar()">Parar</button>
+        <button onclick="gravCancelar()">Cancelar</button>`;
+    }else if(estado==='pronto'){
+      box.innerHTML=`<audio controls src="${gravUrl}"></audio>
+        <button class="pr" id="grav-env" onclick="gravEnviar()">Enviar áudio</button>
+        <button onclick="gravCancelar()">Descartar</button>`;
+    }else{
+      box.innerHTML='';
+    }
+  });
 }
 
 /* Soltar o microfone e obrigatorio: sem isto o Android mantem a bolinha
    vermelha de "gravando" na barra de status depois que a gente parou. */
-function ibSoltarMicrofone(){
-  if(ibGravStream){ibGravStream.getTracks().forEach(t=>t.stop());ibGravStream=null;}
-  if(ibGravTimer){clearInterval(ibGravTimer);ibGravTimer=null;}
+function gravSoltarMicrofone(){
+  if(gravStream){gravStream.getTracks().forEach(t=>t.stop());gravStream=null;}
+  if(gravTimer){clearInterval(gravTimer);gravTimer=null;}
 }
 
-async function ibMicClique(){
-  const c=IB_CONVS.find(x=>x.chave===ibSelId);
-  if(!c){toast('Abra uma conversa primeiro','er');return;}
-  if(!c.canal){toast('Este contato nao tem canal de WhatsApp definido','er');return;}
-  if(!c.telefoneChave){toast('Este contato nao tem telefone valido','er');return;}
-  if(c.canal!=='whatsgw'){toast('Audio so sai pelo WhatsGW — esta conversa e do canal oficial','er');return;}
+async function gravMicClique(onde){
+  const d=gravMontarDestino(onde);
+  if(!d){toast('Abra uma conversa primeiro','er');return;}
+  if(!d.canal){toast('Este contato nao tem canal de WhatsApp definido','er');return;}
+  if(!d.chave){toast('Este contato nao tem telefone valido','er');return;}
+  if(d.canal!=='whatsgw'){toast('Áudio só sai pelo WhatsGW — esta conversa é do canal oficial','er');return;}
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast('Este navegador nao grava audio','er');return;}
-  const mic=$('ib-mic');if(mic)mic.disabled=true;
+  gravDest=d;
   try{
-    ibGravPintar('carregando');
-    const opcoes=await ibCarregarGravador();
+    gravPintar('carregando');
+    const opcoes=await gravCarregarEncoder();
     const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    ibGravStream=stream;
+    gravStream=stream;
     const pedacos=[];
-    ibGravador=new OpusMediaRecorder(stream,{mimeType:'audio/ogg'},opcoes);
-    ibGravador.ondataavailable=e=>{if(e.data&&e.data.size)pedacos.push(e.data);};
-    ibGravador.onstop=()=>{
-      ibDurGravacao();
-      ibSoltarMicrofone();
-      ibGravBlob=new Blob(pedacos,{type:'audio/ogg'});
-      if(ibGravUrl)URL.revokeObjectURL(ibGravUrl);
-      ibGravUrl=URL.createObjectURL(ibGravBlob);
-      ibGravPintar('pronto');
+    gravador=new OpusMediaRecorder(stream,{mimeType:'audio/ogg'},opcoes);
+    gravador.ondataavailable=e=>{if(e.data&&e.data.size)pedacos.push(e.data);};
+    gravador.onstop=()=>{
+      gravDurMs=gravInicio?Date.now()-gravInicio:0;
+      gravSoltarMicrofone();
+      gravBlob=new Blob(pedacos,{type:'audio/ogg'});
+      if(gravUrl)URL.revokeObjectURL(gravUrl);
+      gravUrl=URL.createObjectURL(gravBlob);
+      gravPintar('pronto');
     };
-    ibGravador.onerror=e=>{ibCancelarGravacao();toast('Erro ao gravar: '+((e&&e.message)||e),'er');};
-    ibGravador.start();
-    ibGravInicio=Date.now();
-    ibGravPintar('gravando');
-    ibGravTimer=setInterval(()=>{
-      const dec=Date.now()-ibGravInicio;
-      const t=$('ib-grav-tempo');if(t)t.textContent=ibTempoGrav(dec);
-      if(dec>=IB_GRAV_MAX_MS){toast('Limite de 5 minutos — gravacao encerrada','in');ibPararGravacao();}
+    gravador.onerror=e=>{gravCancelar();toast('Erro ao gravar: '+((e&&e.message)||e),'er');};
+    gravador.start();
+    gravInicio=Date.now();
+    gravPintar('gravando');
+    gravTimer=setInterval(()=>{
+      const dec=Date.now()-gravInicio;
+      const t=$('grav-tempo');if(t)t.textContent=gravTempo(dec);
+      if(dec>=GRAV_MAX_MS){toast('Limite de 5 minutos — gravação encerrada','in');gravParar();}
     },400);
   }catch(e){
-    ibSoltarMicrofone();ibGravPintar('');
-    const nao=e&&(e.name==='NotAllowedError'||e.name==='SecurityError');
-    toast(nao?'Voce precisa permitir o microfone para este site':'Nao consegui gravar: '+((e&&e.message)||e),'er');
-  }finally{
-    if(mic)mic.disabled=false;
+    gravSoltarMicrofone();gravPintar('');gravDest=null;
+    const negado=e&&(e.name==='NotAllowedError'||e.name==='SecurityError');
+    toast(negado?'Você precisa permitir o microfone para este site':'Nao consegui gravar: '+((e&&e.message)||e),'er');
   }
 }
 
-function ibDurGravacao(){ibGravDurMs=ibGravInicio?Date.now()-ibGravInicio:0;}
-
-function ibPararGravacao(){
-  if(ibGravador&&ibGravador.state!=='inactive'){ibGravador.stop();return;}
-  ibSoltarMicrofone();ibGravPintar('');
+function gravParar(){
+  if(gravador&&gravador.state!=='inactive'){gravador.stop();return;}
+  gravSoltarMicrofone();gravPintar('');
 }
 
-function ibCancelarGravacao(){
-  try{if(ibGravador&&ibGravador.state!=='inactive')ibGravador.stop();}catch(e){}
-  ibSoltarMicrofone();
-  ibGravador=null;ibGravBlob=null;
-  if(ibGravUrl){URL.revokeObjectURL(ibGravUrl);ibGravUrl=null;}
-  ibGravPintar('');
+function gravCancelar(){
+  try{if(gravador&&gravador.state!=='inactive')gravador.stop();}catch(e){}
+  gravSoltarMicrofone();
+  gravador=null;gravBlob=null;
+  if(gravUrl){URL.revokeObjectURL(gravUrl);gravUrl=null;}
+  gravPintar('');
+  gravDest=null;
 }
 
 /* Sobe o arquivo e enfileira. Quem entrega no WhatsApp e o motor, igual
    a qualquer outra mensagem: o CRM so cria a linha. */
-async function ibEnviarAudio(){
-  const c=IB_CONVS.find(x=>x.chave===ibSelId);
-  if(!c||!ibGravBlob){toast('Nao ha audio gravado','er');return;}
-  if(ibGravBlob.size>LIMITE_ENVIO_BYTES){
-    toast('Audio de '+(Math.round(ibGravBlob.size/104857.6)/10)+' MB — o limite de envio e 5 MB','er');return;
+async function gravEnviar(){
+  const d=gravDest;
+  if(!d||!gravBlob){toast('Nao ha audio gravado','er');return;}
+  if(gravBlob.size>LIMITE_ENVIO_BYTES){
+    toast('Áudio de '+(Math.round(gravBlob.size/104857.6)/10)+' MB — o limite de envio é 5 MB','er');return;
   }
-  const bt=$('ib-grav-env');if(bt){bt.disabled=true;bt.textContent='Enviando...';}
+  const bt=$('grav-env');if(bt){bt.disabled=true;bt.textContent='Enviando...';}
   const agora=new Date();
-  const nome='audio-'+agora.toISOString().slice(0,19).replace(/[:T]/g,'')+'.ogg';
-  const caminho='audios/'+(c.clienteId||c.telefoneChave)+'/'+Date.now()+'.ogg';
-  const{error:eu}=await sb.storage.from(ANEXO_BUCKET).upload(caminho,ibGravBlob,{contentType:'audio/ogg'});
-  if(eu){if(bt){bt.disabled=false;bt.textContent='Enviar audio';}toast('Erro ao subir o audio: '+eu.message,'er');return;}
+  const nome='audio-'+agora.toISOString().slice(0,19).replace(/[:T-]/g,'')+'.ogg';
+  const caminho='audios/'+(d.clienteId||d.chave)+'/'+Date.now()+'.ogg';
+  const{error:eu}=await sb.storage.from(ANEXO_BUCKET).upload(caminho,gravBlob,{contentType:'audio/ogg'});
+  if(eu){if(bt){bt.disabled=false;bt.textContent='Enviar áudio';}toast('Erro ao subir o audio: '+eu.message,'er');return;}
   /* O mimetype vai com o codec junto, exatamente como no teste que
-     chegou como nota de voz. Sem "codecs=opus" nao foi testado — e
-     este e o campo que o WhatsGW repassa para o WhatsApp. */
+     chegou como nota de voz. Sem "codecs=opus" nao foi testado — e este
+     e o campo que o WhatsGW repassa ao WhatsApp. */
   const{error}=await sb.from('crm_mensagens').insert({
-    cliente_id:c.clienteId,
-    telefone_chave:c.telefoneChave,
-    telefone_bruto:c.ultimaMsg?c.ultimaMsg.telefone_bruto:null,
-    canal:c.canal,
+    cliente_id:d.clienteId,
+    telefone_chave:d.chave,
+    telefone_bruto:d.tel||null,
+    canal:d.canal,
     direcao:'saida',
     autor_tipo:'humano',
     usuario_id:U.id,
@@ -5123,17 +5192,150 @@ async function ibEnviarAudio(){
     midia_caminho:caminho,
     midia_nome:nome,
     midia_mime:'audio/ogg; codecs=opus',
-    midia_tamanho:ibGravBlob.size,
+    midia_tamanho:gravBlob.size,
     id_externo:'crm:'+Date.now()+':'+Math.random().toString(36).slice(2,8),
     status:'pendente_envio'
   });
-  if(error){if(bt){bt.disabled=false;bt.textContent='Enviar audio';}toast('Erro ao enfileirar: '+error.message,'er');return;}
-  if(c.clienteId)registrarAtividade(c.clienteId,'mandou um audio de '+ibTempoGrav(ibGravDurMs)+' para a cliente');
-  ibCancelarGravacao();
-  ibChatAssinatura='';
-  ibCarregarChat(c);
-  toast('Audio na fila — sai em ate 1 minuto','ok');
+  if(error){if(bt){bt.disabled=false;bt.textContent='Enviar áudio';}toast('Erro ao enfileirar: '+error.message,'er');return;}
+  const dur=gravTempo(gravDurMs),recarregar=d.recarregar;
+  if(d.clienteId)registrarAtividade(d.clienteId,'mandou um áudio de '+dur+' para a cliente');
+  gravCancelar();
+  if(recarregar)recarregar();
+  toast('Áudio na fila — sai em até 1 minuto','ok');
 }
+
+/* ============================================================
+   TOPO DO CARTAO — onde ele esta e o que esta rodando
+   ============================================================ */
+
+/* Quadro > lista, com ha quanto tempo o cartao parou ali. O tempo na
+   lista e o que denuncia caso esquecido: "Lead novo" nao diz nada,
+   "Lead novo ha 9 dias" diz tudo. */
+async function mcPintarTrilha(c){
+  const box=$('mc-trilha');
+  if(!box)return;
+  const quadro=c.quadro&&QUADROS[c.quadro]?QUADROS[c.quadro].rotulo:'Sem quadro';
+  let lista='sem lista';
+  if(c.lista_id){
+    const{data}=await sb.from('crm_listas').select('nome').eq('id',c.lista_id).limit(1);
+    if(data&&data[0])lista=data[0].nome;
+  }
+  if(!$('mc-trilha')||mcClienteId!==c.id)return; // o cartao ja foi fechado ou trocado
+  let desde='';
+  if(c.lista_desde){
+    const dias=Math.floor((Date.now()-new Date(c.lista_desde).getTime())/86400000);
+    desde=dias<=0?'entrou hoje nesta lista':(dias===1?'há 1 dia nesta lista':'há '+dias+' dias nesta lista');
+  }
+  const arq=c.arquivado_em?'<span class="mcdesde">· arquivado</span>':'';
+  box.innerHTML=`<button class="trilha" onclick="fecharModal();location.hash='#/quadro/${escA(c.quadro||'comercial')}'">
+      <span class="qd">${esc(quadro)}</span><span class="sep">›</span><span>${esc(lista)}</span></button>
+    ${desde?`<span class="mcdesde">${esc(desde)}</span>`:''}${arq}`;
+}
+
+/* Todas as sequencias em que esta cliente esta inscrita.
+   Uma linha por sequencia, nao por mensagem: a fila de automacoes ja
+   mostra mensagem a mensagem, e aqui a pergunta e outra — "o que esta
+   rodando para ela?". O que ja terminou fica escondido atras do botao,
+   senao em duas semanas o bloco empurra o cartao inteiro para baixo. */
+let mcSeqMostrarFim=false;
+async function mcCarregarSequencias(clienteId){
+  const box=$('mc-seqs');
+  if(!box)return;
+  mcSeqMostrarFim=false;
+  const{data:autos,error}=await sb.from('crm_automacoes')
+    .select('id,sequencia_id,tipo_automacao,ordem,status,data_hora_agendada,enviado_em,motivo_cancelamento,criado_em')
+    .eq('cliente_id',clienteId).order('criado_em',{ascending:true}).limit(500);
+  if(!$('mc-seqs')||mcClienteId!==clienteId)return;
+  if(error){box.innerHTML='<div class="seqbox"><div class="seqvazio">Erro ao carregar: '+esc(error.message)+'</div></div>';return;}
+  const linhas=autos||[];
+  if(!linhas.length){box.innerHTML='<div class="seqbox"><div class="seqvazio">Nenhuma sequência rodando para esta cliente.</div></div>';return;}
+  const ids=[...new Set(linhas.filter(a=>a.sequencia_id).map(a=>a.sequencia_id))];
+  let nomes={},totais={};
+  if(ids.length){
+    const[{data:seqs},{data:cads}]=await Promise.all([
+      sb.from('crm_sequencias').select('id,nome').in('id',ids),
+      sb.from('crm_cadencia').select('sequencia_id,ordem').in('sequencia_id',ids).limit(1000)
+    ]);
+    (seqs||[]).forEach(x=>{nomes[x.id]=x.nome;});
+    (cads||[]).forEach(x=>{totais[x.sequencia_id]=Math.max(totais[x.sequencia_id]||0,x.ordem||0);});
+  }
+  MC_SEQS=mcAgruparSequencias(linhas,nomes,totais);
+  mcRenderSequencias();
+}
+let MC_SEQS=[];
+
+/* Uma sequencia pode ter varias automacoes ao mesmo tempo. O estado que
+   vale e o mais urgente: o que espera voce vem antes do que esta
+   agendado, que vem antes do que esta pausado. */
+const SEQ_PESO={aguardando_aprovacao:5,erro:4,agendado:3,vencida:3,pausado:2};
+function mcAgruparSequencias(linhas,nomes,totais){
+  const grupos={};
+  linhas.forEach(a=>{
+    const chave=a.sequencia_id||('avulsa:'+(a.tipo_automacao||'?'));
+    if(!grupos[chave]){
+      grupos[chave]={
+        nome:a.sequencia_id?(nomes[a.sequencia_id]||'Sequência sem nome'):(a.tipo_automacao||'Avulsa'),
+        total:a.sequencia_id?(totais[a.sequencia_id]||0):0,
+        peso:0,estado:'fim',ordem:a.ordem||0,quando:null,motivo:null,ultima:null
+      };
+    }
+    const g=grupos[chave];
+    if(a.enviado_em&&(!g.ultima||a.enviado_em>g.ultima))g.ultima=a.enviado_em;
+    const peso=SEQ_PESO[a.status]||0;
+    if(peso>g.peso){
+      g.peso=peso;g.estado=a.status;g.ordem=a.ordem||g.ordem;
+      g.quando=a.data_hora_agendada||null;g.motivo=a.motivo_cancelamento||null;
+    }
+    if(!g.peso&&(a.ordem||0)>g.ordem)g.ordem=a.ordem||g.ordem;
+  });
+  const vivos=[],mortos=[];
+  Object.values(grupos).forEach(g=>(g.peso?vivos:mortos).push(g));
+  vivos.sort((a,b)=>b.peso-a.peso);
+  return{vivos,mortos};
+}
+
+function mcQuandoTexto(iso){
+  if(!iso)return '';
+  const d=new Date(iso),hoje=new Date();
+  const hora=d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  if(d.toDateString()===hoje.toDateString())return 'hoje às '+hora;
+  const amanha=new Date(hoje.getTime()+86400000);
+  if(d.toDateString()===amanha.toDateString())return 'amanhã às '+hora;
+  return d.toLocaleDateString('pt-BR')+' às '+hora;
+}
+
+function mcSeqLinha(g,viva){
+  const passo=g.total?('passo '+(g.ordem||1)+' de '+g.total):(g.ordem?('passo '+g.ordem):'');
+  let ic='ic-fim',sim='✓',sub='';
+  if(g.estado==='aguardando_aprovacao'){ic='ic-esp';sim='⏳';sub='esperando sua aprovação';}
+  else if(g.estado==='agendado'){ic='ic-and';sim='▶';sub=g.quando?('próxima '+mcQuandoTexto(g.quando)):'agendada';}
+  else if(g.estado==='vencida'){ic='ic-esp';sim='⏳';sub='vencida — passou da hora e não saiu';}
+  else if(g.estado==='pausado'){ic='ic-pau';sim='⏸';sub='pausada'+(g.motivo?' — '+g.motivo:'');}
+  else if(g.estado==='erro'){ic='ic-err';sim='⚠';sub='falhou no envio';}
+  else sub=g.ultima?('terminou '+mcQuandoTexto(g.ultima)):'encerrada';
+  return`<div class="seqlinha${viva?' viva':''}">
+    <div class="seqic ${ic}">${sim}</div>
+    <div class="seqcorpo"><div class="seqnome${viva?'':' morta'}">${esc(g.nome)}</div>
+      <div class="seqsub">${esc(sub)}</div></div>
+    ${passo?`<div class="seqpasso">${esc(passo)}</div>`:''}
+  </div>`;
+}
+
+function mcRenderSequencias(){
+  const box=$('mc-seqs');
+  if(!box)return;
+  const{vivos,mortos}=MC_SEQS;
+  let html='<div class="seqbox">';
+  if(!vivos.length&&!mortos.length)html+='<div class="seqvazio">Nenhuma sequência rodando para esta cliente.</div>';
+  if(!vivos.length&&mortos.length)html+='<div class="seqvazio">Nenhuma sequência rodando agora.</div>';
+  vivos.forEach(g=>{html+=mcSeqLinha(g,true);});
+  if(mcSeqMostrarFim)mortos.forEach(g=>{html+=mcSeqLinha(g,false);});
+  if(mortos.length){
+    html+=`<button class="seqverfim" onclick="mcSeqTogFim()">${mcSeqMostrarFim?'esconder as que já terminaram':'mostrar '+(mortos.length===1?'a que já terminou':'as '+mortos.length+' que já terminaram')}</button>`;
+  }
+  box.innerHTML=html+'</div>';
+}
+function mcSeqTogFim(){mcSeqMostrarFim=!mcSeqMostrarFim;mcRenderSequencias();}
 
 async function ibEnviarMensagem(){
   const c=IB_CONVS.find(x=>x.chave===ibSelId);

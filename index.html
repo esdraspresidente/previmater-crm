@@ -382,6 +382,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .mb-card.dropon{outline:3px dashed var(--teal);outline-offset:-7px;}
 .dropvel{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(10,147,150,.10);backdrop-filter:blur(1px);pointer-events:none;}
 .dropvel .dropmsg{background:var(--white);border:2px dashed var(--teal);border-radius:14px;padding:18px 26px;font-size:15px;font-weight:700;color:var(--teal);box-shadow:var(--shm);}
+.anexomenu.h{display:none;}
 .anexomenu{position:absolute;right:0;top:calc(100% + 4px);background:var(--white);border:1.5px solid var(--border);border-radius:10px;box-shadow:var(--shm);z-index:30;min-width:196px;overflow:hidden;}
 .anexomenu button{display:block;width:100%;text-align:left;padding:10px 13px;font-size:13px;font-weight:600;color:var(--text);background:none;border:none;cursor:pointer;}
 .anexomenu button:hover{background:var(--teal-l);color:var(--teal);}
@@ -2655,13 +2656,20 @@ function mcPagamentosHtml(clienteId){
   const totalHon=parc.reduce((s,p)=>s+(p.valor_honorario||0),0);
   const recHon=recebidas.reduce((s,p)=>s+(p.valor_honorario||0),0);
   const proxima=parc.filter(p=>p.status!=='recebido').sort((a,b)=>(a.data_vencimento||'').localeCompare(b.data_vencimento||''))[0];
-  const resumo=`<div style="font-size:12.5px;color:var(--text2);margin-bottom:9px">${recebidas.length} de ${parc.length} parcelas recebidas · ${R(recHon)} de ${R(totalHon)}${proxima?' · Próxima: '+fD(proxima.data_vencimento):''}</div>`;
+  /* O QUE A CLIENTE RECEBE FICA AO LADO DO QUE ELA PAGA.
+     Sem isto, saber se R$ 990 de honorário bate com o valor do INSS
+     exigia abrir Recebimentos e procurar a cliente lá — que é
+     justamente a busca que não achava todo mundo. */
+  const totalCli=parc.reduce((s,p)=>s+(parseFloat(p.valor_cliente)||0),0);
+  const linhaCli=totalCli>0?`<div style="font-size:12.5px;color:var(--green);font-weight:700;margin-bottom:9px">Cliente recebe ${R(totalCli)} · nossos honorários ${R(totalHon)}</div>`:'';
+  const resumo=linhaCli+`<div style="font-size:12.5px;color:var(--text2);margin-bottom:9px">${recebidas.length} de ${parc.length} parcelas recebidas · ${R(recHon)} de ${R(totalHon)}${proxima?' · Próxima: '+fD(proxima.data_vencimento):''}</div>`;
   const badgeCor={recebido:['var(--green-bg)','var(--green)'],inadimplente:['var(--red-bg)','var(--red)'],previsto:['var(--gray-bg)','var(--gray)']};
   const linhas=parc.map(p=>{
     const[bg,fg]=badgeCor[p.status]||badgeCor.previsto;
     const rotulo=p.status==='recebido'?'Recebido':p.status==='inadimplente'?'Inadimplente':'Previsto';
+    const vc=parseFloat(p.valor_cliente)||0;
     return`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid var(--border2);font-size:12.5px">
-      <span>Parcela ${p.num_parcela}/${p.total_parcelas} · ${fD(p.data_vencimento)}</span>
+      <span>Parcela ${p.num_parcela}/${p.total_parcelas} · ${fD(p.data_vencimento)}${vc>0?`<span style="color:var(--green);font-weight:600"> · cliente recebe ${R(vc)}</span>`:''}</span>
       <span style="display:flex;align-items:center;gap:8px">${R(p.valor_honorario)}<span style="background:${bg};color:${fg};padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700">${rotulo}</span></span>
     </div>`;
   }).join('');

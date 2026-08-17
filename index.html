@@ -4575,8 +4575,44 @@ async function pageInbox(){
       </div>
       <div class="inb-panel" id="ib-panel"></div>
     </div>`;
+  ibLigarAjusteAltura();
   await ibCarregarLista();
   ibIniciarListaPoll();
+}
+/* Altura da Caixa de Entrada, medida em vez de adivinhada.
+ *
+ * O CSS trazia height:calc(100vh - 122px) — 122 sendo um palpite do
+ * tamanho do cabecalho da pagina. O cabecalho muda: o subtitulo quebra
+ * em duas linhas numa janela estreita, o padding e outro no celular, e
+ * a janela do navegador nem sempre tem a altura que a gente imagina.
+ * Quando o palpite erra para menos, o cartao termina depois do fim da
+ * tela e o rodape de envio fica cortado — e como nada rola por dentro,
+ * a tela parece travada.
+ *
+ * Aqui a conta usa a posicao real do cartao no documento e o padding
+ * real do container. Sem numero magico: se amanha o cabecalho crescer,
+ * a conta se ajusta sozinha.
+ */
+function ibAjustarAltura(){
+  const w=document.querySelector('.inbwrap');
+  if(!w)return;
+  const pc=$('pc');
+  // rect.top + scrollY = distancia ate o topo do DOCUMENTO. So o rect
+  // sozinho mudaria a cada rolagem e a altura ficaria pulando.
+  const topo=w.getBoundingClientRect().top+(window.scrollY||0);
+  const rodape=pc?(parseFloat(getComputedStyle(pc).paddingBottom)||0):0;
+  const alt=Math.max(320,window.innerHeight-topo-rodape-8);
+  w.style.height=alt+'px';
+}
+let ibAlturaLigada=false;
+function ibLigarAjusteAltura(){
+  ibAjustarAltura();
+  if(ibAlturaLigada)return;
+  ibAlturaLigada=true;
+  // Um ouvinte so, para sempre: ele mesmo desiste quando a tela nao e
+  // mais a Caixa de Entrada, entao nao ha o que desligar.
+  window.addEventListener('resize',ibAjustarAltura);
+  window.addEventListener('orientationchange',()=>setTimeout(ibAjustarAltura,250));
 }
 function ibIniciarListaPoll(){
   pararInboxPoll();
@@ -4625,7 +4661,7 @@ function ibRenderLista(){
   if(!lista.length){cont.innerHTML='<div class="fhint" style="text-align:center;padding:20px 0">Nenhuma conversa ainda.</div>';return;}
   cont.innerHTML=lista.map(c=>{
     const m=c.ultimaMsg;
-    let prev=(m.texto&&!pareceBase64(m.texto))?m.texto:((m.tipo&&m.tipo!=='texto')||pareceBase64(m.texto)?rotuloMidia(m):'');
+    let prev=ibPrevia(m);
     if(m.direcao==='saida')prev=(m.autor_tipo==='bot'?'Samara: ':'Você: ')+prev;
     return`<div class="inb-item ${c.chave===ibSelId?'a':''}" onclick="ibSelecionar('${escA(c.chave)}')">
       <div class="av" style="background:${avC(c.nome)}">${avL(c.nome)}</div>
@@ -4637,6 +4673,18 @@ function ibRenderLista(){
     </div>`;
   }).join('');
 }
+/* Uma linha de resumo para a lista de conversas.
+   Decide pelo TIPO, nao por palpite sobre o conteudo: em mensagem de
+   midia o campo texto guarda o arquivo inteiro em base64, nao legenda.
+   A versao anterior chamava pareceBase64 primeiro e, quando ele errava,
+   despejava a parede de caracteres no lugar do resumo. */
+function ibPrevia(m){
+  if(m.tipo&&m.tipo!=='texto')return rotuloMidia(m);
+  const t=m.texto||'';
+  if(!t)return '';
+  return pareceBase64(t)?rotuloMidia(m):t;
+}
+
 function ibFiltrar(v){ibFiltroTxt=v;ibRenderLista();}
 /* Volta da conversa para a lista no celular. Em tela grande as duas
    convivem, entao o botao nem aparece. */

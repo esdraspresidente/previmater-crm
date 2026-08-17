@@ -483,6 +483,21 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .ib-voltar:hover,.ib-detalhes:hover{border-color:var(--teal);color:var(--teal);}
 .inb-chat-head-acoes{margin-left:auto;display:flex;align-items:center;gap:7px;flex-shrink:0;}
 .ib-fechar-painel{display:none;width:100%;margin-bottom:14px;border:1.5px solid var(--border);background:var(--white);color:var(--text2);border-radius:9px;padding:8px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;}
+/* Gravador de audio da Caixa de Entrada. */
+.ib-send-linha{display:flex;align-items:stretch;gap:8px;margin-top:9px;}
+.ib-send-linha .btn{flex:1;}
+.ib-mic{flex-shrink:0;width:48px;border:1.5px solid var(--border);background:var(--white);border-radius:10px;font-size:18px;line-height:1;cursor:pointer;font-family:inherit;}
+.ib-mic:hover{border-color:var(--teal);}
+.ib-mic:disabled{opacity:.5;cursor:default;}
+.ib-grav{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:10px;}
+.ib-grav:empty{display:none;}
+.ib-grav-ponto{width:10px;height:10px;border-radius:50%;background:var(--red);flex-shrink:0;animation:ibpulso 1s infinite;}
+@keyframes ibpulso{0%,100%{opacity:1}50%{opacity:.2}}
+.ib-grav-tempo{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;flex-shrink:0;}
+.ib-grav-txt{font-size:12.5px;color:var(--text3);font-weight:700;}
+.ib-grav audio{flex:1;min-width:170px;height:38px;}
+.ib-grav button{flex-shrink:0;border:1.5px solid var(--border);background:var(--white);color:var(--text2);border-radius:9px;padding:8px 14px;font-size:12.5px;font-weight:700;font-family:inherit;cursor:pointer;}
+.ib-grav button.pr{background:var(--teal);border-color:var(--teal);color:#fff;}
 /* Os dois @media ficam no fim do bloco de proposito: especificidade
    igual e desempate por ordem, entao regra base escrita depois de um
    @media simplesmente o anula. Foi o que aconteceu com o botao voltar. */
@@ -4626,6 +4641,7 @@ function ibFiltrar(v){ibFiltroTxt=v;ibRenderLista();}
 /* Volta da conversa para a lista no celular. Em tela grande as duas
    convivem, entao o botao nem aparece. */
 function ibVoltarLista(){
+  ibCancelarGravacao(); // senao o microfone continua aberto numa conversa que voce ja deixou
   const wrap=document.querySelector('.inbwrap');if(wrap)wrap.classList.remove('chat-aberto');
   const pnl=$('ib-panel');if(pnl)pnl.classList.remove('aberto');
   pararInboxChatPoll();
@@ -4653,6 +4669,7 @@ function ibPintarSamara(cli){
 function ibSelecionar(chave){
   const c=IB_CONVS.find(x=>x.chave===chave);
   if(!c)return;
+  ibCancelarGravacao(); // trocar de conversa nao pode levar junto um audio gravado para outra pessoa
   ibSelId=chave;ibChatAssinatura='';
   // No celular o chat ocupa a tela toda: a lista sai de cena ate o voltar.
   const wrap=document.querySelector('.inbwrap');if(wrap)wrap.classList.add('chat-aberto');
@@ -4854,8 +4871,14 @@ async function ibCarregarChat(c,silencioso){
       <div class="ib-sambar" id="ib-sambar"></div>
       <div class="inb-chat-body"><div id="ib-chat-janela"></div><div class="chatfeed" id="ib-chat-feed"><div class="fhint" style="text-align:center;padding:20px 0">Carregando...</div></div></div>
       <div class="inb-chat-send">
-        <textarea id="ib-chat-input" placeholder="Escreva uma mensagem..."></textarea>
-        <button class="btn btnp" style="width:100%;margin-top:9px" id="ib-chat-btn" onclick="ibEnviarMensagem()">Enviar</button>
+        <div class="ib-grav" id="ib-grav"></div>
+        <div id="ib-escrever">
+          <textarea id="ib-chat-input" placeholder="Escreva uma mensagem..."></textarea>
+          <div class="ib-send-linha">
+            <button class="ib-mic" id="ib-mic" onclick="ibMicClique()" title="Gravar audio">🎤</button>
+            <button class="btn btnp" id="ib-chat-btn" onclick="ibEnviarMensagem()">Enviar</button>
+          </div>
+        </div>
         <div class="chataviso" id="ib-chat-aviso"></div>
       </div>`;
   }
@@ -4891,6 +4914,179 @@ async function ibCarregarChat(c,silencioso){
   feed.scrollTop=feed.scrollHeight;
 }
 function pararInboxChatPoll(){if(ibChatTimer){clearInterval(ibChatTimer);ibChatTimer=null;}}
+/* ============================================================
+   GRAVADOR DE AUDIO — Caixa de Entrada
+   ============================================================
+   O MediaRecorder nativo do Chrome so entrega audio/webm. Testado em
+   17/08/2026: o WhatsGW aceita webm e responde sucesso, o WhatsApp
+   descarta sem avisar — a mensagem fica "enviada" no CRM e a cliente
+   nunca recebe. So ogg/opus vira nota de voz de verdade.
+
+   Por isso o encoder vem em WebAssembly (opus-media-recorder), e ele e
+   baixado SO quando voce toca no microfone pela primeira vez: sao
+   algumas centenas de KB que ninguem deve pagar so por abrir a tela.
+   ============================================================ */
+const IB_OMR='https://cdn.jsdelivr.net/npm/opus-media-recorder@0.8.0/';
+const IB_GRAV_MAX_MS=5*60*1000; // teto de 5 min: acima disso o arquivo comeca a se aproximar do limite de envio
+let ibOmrPronto=null,ibGravador=null,ibGravStream=null,ibGravBlob=null,ibGravUrl=null,ibGravInicio=0,ibGravTimer=null,ibGravDurMs=0;
+
+function ibCarregarGravador(){
+  if(ibOmrPronto)return ibOmrPronto;
+  ibOmrPronto=(async()=>{
+    await new Promise((ok,falha)=>{
+      const sc=document.createElement('script');
+      sc.src=IB_OMR+'OpusMediaRecorder.umd.js';
+      sc.onload=ok;sc.onerror=()=>falha(new Error('nao consegui baixar o gravador'));
+      document.head.appendChild(sc);
+    });
+    /* O Worker TEM que vir do mesmo dominio: new Worker() apontando para
+       outro site e bloqueado pelo navegador. Entao baixamos o codigo do
+       worker como texto e montamos um Worker a partir de um blob local.
+       O .wasm continua vindo do CDN, que isso o fetch de dentro do
+       worker resolve normalmente. */
+    const txt=await (await fetch(IB_OMR+'encoderWorker.umd.js')).text();
+    const urlWorker=URL.createObjectURL(new Blob([txt],{type:'text/javascript'}));
+    return{
+      encoderWorkerFactory:()=>new Worker(urlWorker),
+      OggOpusEncoderWasmPath:IB_OMR+'OggOpusEncoder.wasm',
+      WebMOpusEncoderWasmPath:IB_OMR+'WebMOpusEncoder.wasm'
+    };
+  })().catch(e=>{ibOmrPronto=null;throw e;});
+  return ibOmrPronto;
+}
+
+function ibTempoGrav(ms){
+  const t=Math.floor(ms/1000);
+  return Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
+}
+
+/* Desenha a area de gravacao e some com a caixa de texto enquanto ela
+   estiver ocupada — escrever e gravar ao mesmo tempo so gera duvida
+   sobre o que o botao Enviar vai mandar. */
+function ibGravPintar(estado){
+  const box=$('ib-grav'),escrever=$('ib-escrever');
+  if(!box)return;
+  if(escrever)escrever.style.display=(estado==='gravando'||estado==='pronto')?'none':'';
+  if(estado==='carregando'){
+    box.innerHTML='<span class="ib-grav-txt">Preparando o gravador...</span>';
+  }else if(estado==='gravando'){
+    box.innerHTML=`<span class="ib-grav-ponto"></span><span class="ib-grav-tempo" id="ib-grav-tempo">0:00</span>
+      <button class="pr" onclick="ibPararGravacao()">Parar</button>
+      <button onclick="ibCancelarGravacao()">Cancelar</button>`;
+  }else if(estado==='pronto'){
+    box.innerHTML=`<audio controls src="${ibGravUrl}"></audio>
+      <button class="pr" id="ib-grav-env" onclick="ibEnviarAudio()">Enviar audio</button>
+      <button onclick="ibCancelarGravacao()">Descartar</button>`;
+  }else{
+    box.innerHTML='';
+  }
+}
+
+/* Soltar o microfone e obrigatorio: sem isto o Android mantem a bolinha
+   vermelha de "gravando" na barra de status depois que a gente parou. */
+function ibSoltarMicrofone(){
+  if(ibGravStream){ibGravStream.getTracks().forEach(t=>t.stop());ibGravStream=null;}
+  if(ibGravTimer){clearInterval(ibGravTimer);ibGravTimer=null;}
+}
+
+async function ibMicClique(){
+  const c=IB_CONVS.find(x=>x.chave===ibSelId);
+  if(!c){toast('Abra uma conversa primeiro','er');return;}
+  if(!c.canal){toast('Este contato nao tem canal de WhatsApp definido','er');return;}
+  if(!c.telefoneChave){toast('Este contato nao tem telefone valido','er');return;}
+  if(c.canal!=='whatsgw'){toast('Audio so sai pelo WhatsGW — esta conversa e do canal oficial','er');return;}
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast('Este navegador nao grava audio','er');return;}
+  const mic=$('ib-mic');if(mic)mic.disabled=true;
+  try{
+    ibGravPintar('carregando');
+    const opcoes=await ibCarregarGravador();
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    ibGravStream=stream;
+    const pedacos=[];
+    ibGravador=new OpusMediaRecorder(stream,{mimeType:'audio/ogg'},opcoes);
+    ibGravador.ondataavailable=e=>{if(e.data&&e.data.size)pedacos.push(e.data);};
+    ibGravador.onstop=()=>{
+      ibDurGravacao();
+      ibSoltarMicrofone();
+      ibGravBlob=new Blob(pedacos,{type:'audio/ogg'});
+      if(ibGravUrl)URL.revokeObjectURL(ibGravUrl);
+      ibGravUrl=URL.createObjectURL(ibGravBlob);
+      ibGravPintar('pronto');
+    };
+    ibGravador.onerror=e=>{ibCancelarGravacao();toast('Erro ao gravar: '+((e&&e.message)||e),'er');};
+    ibGravador.start();
+    ibGravInicio=Date.now();
+    ibGravPintar('gravando');
+    ibGravTimer=setInterval(()=>{
+      const dec=Date.now()-ibGravInicio;
+      const t=$('ib-grav-tempo');if(t)t.textContent=ibTempoGrav(dec);
+      if(dec>=IB_GRAV_MAX_MS){toast('Limite de 5 minutos — gravacao encerrada','in');ibPararGravacao();}
+    },400);
+  }catch(e){
+    ibSoltarMicrofone();ibGravPintar('');
+    const nao=e&&(e.name==='NotAllowedError'||e.name==='SecurityError');
+    toast(nao?'Voce precisa permitir o microfone para este site':'Nao consegui gravar: '+((e&&e.message)||e),'er');
+  }finally{
+    if(mic)mic.disabled=false;
+  }
+}
+
+function ibDurGravacao(){ibGravDurMs=ibGravInicio?Date.now()-ibGravInicio:0;}
+
+function ibPararGravacao(){
+  if(ibGravador&&ibGravador.state!=='inactive'){ibGravador.stop();return;}
+  ibSoltarMicrofone();ibGravPintar('');
+}
+
+function ibCancelarGravacao(){
+  try{if(ibGravador&&ibGravador.state!=='inactive')ibGravador.stop();}catch(e){}
+  ibSoltarMicrofone();
+  ibGravador=null;ibGravBlob=null;
+  if(ibGravUrl){URL.revokeObjectURL(ibGravUrl);ibGravUrl=null;}
+  ibGravPintar('');
+}
+
+/* Sobe o arquivo e enfileira. Quem entrega no WhatsApp e o motor, igual
+   a qualquer outra mensagem: o CRM so cria a linha. */
+async function ibEnviarAudio(){
+  const c=IB_CONVS.find(x=>x.chave===ibSelId);
+  if(!c||!ibGravBlob){toast('Nao ha audio gravado','er');return;}
+  if(ibGravBlob.size>LIMITE_ENVIO_BYTES){
+    toast('Audio de '+(Math.round(ibGravBlob.size/104857.6)/10)+' MB — o limite de envio e 5 MB','er');return;
+  }
+  const bt=$('ib-grav-env');if(bt){bt.disabled=true;bt.textContent='Enviando...';}
+  const agora=new Date();
+  const nome='audio-'+agora.toISOString().slice(0,19).replace(/[:T]/g,'')+'.ogg';
+  const caminho='audios/'+(c.clienteId||c.telefoneChave)+'/'+Date.now()+'.ogg';
+  const{error:eu}=await sb.storage.from(ANEXO_BUCKET).upload(caminho,ibGravBlob,{contentType:'audio/ogg'});
+  if(eu){if(bt){bt.disabled=false;bt.textContent='Enviar audio';}toast('Erro ao subir o audio: '+eu.message,'er');return;}
+  /* O mimetype vai com o codec junto, exatamente como no teste que
+     chegou como nota de voz. Sem "codecs=opus" nao foi testado — e
+     este e o campo que o WhatsGW repassa para o WhatsApp. */
+  const{error}=await sb.from('crm_mensagens').insert({
+    cliente_id:c.clienteId,
+    telefone_chave:c.telefoneChave,
+    telefone_bruto:c.ultimaMsg?c.ultimaMsg.telefone_bruto:null,
+    canal:c.canal,
+    direcao:'saida',
+    autor_tipo:'humano',
+    usuario_id:U.id,
+    tipo:'audio',
+    midia_caminho:caminho,
+    midia_nome:nome,
+    midia_mime:'audio/ogg; codecs=opus',
+    midia_tamanho:ibGravBlob.size,
+    id_externo:'crm:'+Date.now()+':'+Math.random().toString(36).slice(2,8),
+    status:'pendente_envio'
+  });
+  if(error){if(bt){bt.disabled=false;bt.textContent='Enviar audio';}toast('Erro ao enfileirar: '+error.message,'er');return;}
+  if(c.clienteId)registrarAtividade(c.clienteId,'mandou um audio de '+ibTempoGrav(ibGravDurMs)+' para a cliente');
+  ibCancelarGravacao();
+  ibChatAssinatura='';
+  ibCarregarChat(c);
+  toast('Audio na fila — sai em ate 1 minuto','ok');
+}
+
 async function ibEnviarMensagem(){
   const c=IB_CONVS.find(x=>x.chave===ibSelId);
   const inp=$('ib-chat-input');

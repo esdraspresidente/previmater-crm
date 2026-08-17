@@ -439,32 +439,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 
 /* CAIXA DE ENTRADA GERAL */
 .inbwrap{display:grid;grid-template-columns:300px 1fr 280px;height:calc(100vh - 122px);background:var(--white);border:1.5px solid var(--border);border-radius:16px;overflow:hidden;position:relative;}
-/* Abaixo de 980px nao cabe a terceira coluna. Antes ela simplesmente
-   sumia — e levava junto o unico botao de pausar a Samara, justamente
-   no celular. Agora o painel vira gaveta e abre pelo botao do cabecalho. */
-@media(max-width:980px){
-  .inbwrap{grid-template-columns:260px 1fr;}
-  .inb-panel{position:absolute;top:0;right:0;bottom:0;width:300px;max-width:86%;background:var(--white);border-left:1.5px solid var(--border);box-shadow:-8px 0 26px rgba(0,0,0,.16);z-index:40;transform:translateX(103%);transition:transform .18s ease;}
-  .inb-panel.aberto{transform:none;}
-  .ib-detalhes{display:inline-flex;}
-  .ib-fechar-painel{display:block;}
-}
-/* No celular lista e chat viram duas telas, como em qualquer app de
-   mensagem. Empilhadas, era preciso rolar a pagina inteira para chegar
-   no chat, e o que ficava embaixo dele nunca era alcancado. */
-@media(max-width:700px){
-  .inbwrap{grid-template-columns:1fr;height:calc(100vh - 168px);height:calc(100dvh - 168px);}
-  .inb-list{border-right:none;}
-  .inb-chat{display:none;}
-  .inbwrap.chat-aberto .inb-list{display:none;}
-  .inbwrap.chat-aberto .inb-chat{display:flex;}
-  .ib-voltar{display:inline-flex;}
-  .inb-chat-head{padding:11px 13px;gap:9px;}
-  .inb-chat-body{padding:15px 13px;}
-  .inb-chat-send{padding:12px 13px;}
-  .ib-sambar{padding:9px 13px;}
-}
-.inb-list{border-right:1.5px solid var(--border);display:flex;flex-direction:column;min-width:0;}
+.inb-list{border-right:1.5px solid var(--border);display:flex;flex-direction:column;min-width:0;min-height:0;}
 .inb-search{padding:14px;border-bottom:1.5px solid var(--border);flex-shrink:0;}
 .inb-search input{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:9px 13px;font-size:13.5px;font-family:inherit;color:var(--text);}
 .inb-search input:focus{outline:none;border-color:var(--teal);}
@@ -478,13 +453,19 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .inb-item-prev{font-size:12px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;}
 .inb-item-time{font-size:10.5px;color:var(--text3);flex-shrink:0;white-space:nowrap;}
 .inb-lead-tag{font-size:9px;font-weight:800;text-transform:uppercase;background:#F3F4F6;color:#6B7280;padding:2px 6px;border-radius:6px;}
-.inb-chat{display:flex;flex-direction:column;min-width:0;}
+.inb-chat{display:flex;flex-direction:column;min-width:0;min-height:0;}
 .inb-chat-head{display:flex;align-items:center;gap:12px;padding:16px 22px;border-bottom:1.5px solid var(--border);flex-shrink:0;}
 .inb-chat-head .av{width:36px;height:36px;font-size:14px;}
 .inb-chat-nome{font-size:15.5px;font-weight:800;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.inb-chat-body{flex:1;overflow-y:auto;padding:20px 22px;}
+.inb-chat-body{flex:1;min-height:0;overflow-y:auto;padding:20px 22px;}
 .inb-chat-body .chatfeed{max-height:none;}
-.inb-chat-send{padding:16px 22px;border-top:1.5px solid var(--border);flex-shrink:0;}
+.inb-chat-send{padding:16px 22px;border-top:1.5px solid var(--border);flex-shrink:0;background:var(--white);}
+/* O textarea daqui estava sem regra nenhuma: a unica que existia era
+   .chatsend textarea, do chat de dentro do cartao, que nao alcanca esta
+   classe. Resultado: caixinha crua do navegador, estreita e de duas
+   linhas, praticamente impossivel de usar no celular. */
+.inb-chat-send textarea{width:100%;display:block;background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:12px 15px;font-size:15px;font-family:inherit;line-height:1.4;resize:vertical;min-height:56px;max-height:180px;color:var(--text);box-sizing:border-box;}
+.inb-chat-send textarea:focus{outline:none;border-color:var(--teal);}
 .inb-panel{padding:20px;overflow-y:auto;}
 .inb-panel-title{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;}
 .inb-panel-chips{display:flex;flex-wrap:wrap;gap:7px;}
@@ -502,6 +483,36 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .ib-voltar:hover,.ib-detalhes:hover{border-color:var(--teal);color:var(--teal);}
 .inb-chat-head-acoes{margin-left:auto;display:flex;align-items:center;gap:7px;flex-shrink:0;}
 .ib-fechar-painel{display:none;width:100%;margin-bottom:14px;border:1.5px solid var(--border);background:var(--white);color:var(--text2);border-radius:9px;padding:8px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;}
+/* Os dois @media ficam no fim do bloco de proposito: especificidade
+   igual e desempate por ordem, entao regra base escrita depois de um
+   @media simplesmente o anula. Foi o que aconteceu com o botao voltar. */
+/* Abaixo de 980px nao cabe a terceira coluna. Some-la era o que existia
+   antes, e isso levava junto o unico botao de pausar a Samara, justamente
+   no celular. Agora o painel vira gaveta, chamada pelo botao do cabecalho. */
+@media(max-width:980px){
+  .inbwrap{grid-template-columns:260px 1fr;}
+  .inb-panel{position:absolute;top:0;right:0;bottom:0;width:300px;max-width:86%;background:var(--white);border-left:1.5px solid var(--border);box-shadow:-8px 0 26px rgba(0,0,0,.16);z-index:40;transform:translateX(103%);transition:transform .18s ease;}
+  .inb-panel.aberto{transform:none;}
+  .ib-detalhes{display:inline-flex;}
+  .ib-fechar-painel{display:block;}
+}
+/* No celular lista e chat viram duas telas, como em qualquer app de
+   mensagem. Empilhadas, era preciso rolar a pagina inteira para chegar
+   no chat, e o que ficasse abaixo dele nunca era alcancado. */
+@media(max-width:700px){
+  .inbwrap{grid-template-columns:1fr;height:calc(100vh - 168px);height:calc(100dvh - 168px);}
+  .inb-list{border-right:none;}
+  .inb-chat{display:none;}
+  .inbwrap.chat-aberto .inb-list{display:none;}
+  .inbwrap.chat-aberto .inb-chat{display:flex;}
+  .ib-voltar{display:inline-flex;}
+  .inb-chat-head{padding:11px 13px;gap:9px;}
+  .inb-chat-body{padding:15px 13px;}
+  .inb-chat-send{padding:11px 13px;}
+  .inb-chat-send textarea{min-height:48px;font-size:16px;}
+  .ib-sambar{padding:9px 13px;}
+  .chataviso{display:none;}
+}
 
 /* AUTOMAÇÕES POR LISTA */
 .filatabs{display:flex;gap:22px;border-bottom:1.5px solid var(--border);margin:18px 0 16px;}

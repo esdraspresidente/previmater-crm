@@ -377,6 +377,16 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .anexoicone img{width:100%;height:100%;object-fit:cover;}
 .anexonome{cursor:pointer;}
 .anexonome:hover{color:var(--teal);text-decoration:underline;}
+/* Zona de soltar arquivo. So aparece com o card aberto e so quando o que
+   esta sendo arrastado e arquivo de fora — arrastar card do Kanban nao ativa. */
+.mb-card.dropon{outline:3px dashed var(--teal);outline-offset:-7px;}
+.dropvel{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(10,147,150,.10);backdrop-filter:blur(1px);pointer-events:none;}
+.dropvel .dropmsg{background:var(--white);border:2px dashed var(--teal);border-radius:14px;padding:18px 26px;font-size:15px;font-weight:700;color:var(--teal);box-shadow:var(--shm);}
+.anexomenu{position:absolute;right:0;top:calc(100% + 4px);background:var(--white);border:1.5px solid var(--border);border-radius:10px;box-shadow:var(--shm);z-index:30;min-width:196px;overflow:hidden;}
+.anexomenu button{display:block;width:100%;text-align:left;padding:10px 13px;font-size:13px;font-weight:600;color:var(--text);background:none;border:none;cursor:pointer;}
+.anexomenu button:hover{background:var(--teal-l);color:var(--teal);}
+.anexomenu .amsep{height:1px;background:var(--border);}
+.anexoacoes{position:relative;}
 
 /* CARD MODAL — layout Trello (cabeçalho fixo + colunas) */
 .mb.mb-card{max-width:1120px;padding:0;}
@@ -722,7 +732,7 @@ function escA(s){return s?String(s).replace(/"/g,'&quot;'):'';}
 function toast(m,t){const e=$('toast');e.textContent=m;e.className='v '+(t||'ok');clearTimeout(e._t);e._t=setTimeout(()=>e.className='',2600);}
 function togSB(){$('sb').classList.toggle('o');$('ov').classList.toggle('o');}
 let mcPreviewAberto=false;
-function fecharModal(){$('modal').classList.add('h');mcPreviewAberto=false;if(typeof pararChatPoll==='function')pararChatPoll();}
+function fecharModal(){$('modal').classList.add('h');mcPreviewAberto=false;if(typeof mcMostrarVeu==='function'){mcDropProf=0;mcMostrarVeu(false);}if(typeof pararChatPoll==='function')pararChatPoll();}
 function fecharSeFundo(e){if(e.target===e.currentTarget)fecharInteligente();}
 function fecharInteligente(){
   if(mcPreviewAberto&&mcClienteId){mcPreviewAberto=false;abrirCardCliente(mcClienteId);return;}
@@ -731,6 +741,7 @@ function fecharInteligente(){
 function abrirModal(h,largo){const box=$('modalbox');if(typeof pararChatPoll==='function')pararChatPoll();box.onscroll=null;box.classList.remove('mb-card');box.innerHTML=h;box.classList.toggle('mb-wide',!!largo);$('modal').classList.remove('h');}
 function abrirModalCard(h){
   const box=$('modalbox');
+  mcLigarDropAnexos();
   box.onscroll=null;
   box.classList.remove('mb-wide');
   box.classList.add('mb-card');
@@ -1384,8 +1395,14 @@ async function carregarAnexos(clienteId){
         <div class="anexometa">${fmtBytes(a.tamanho_bytes)} · ${tempoRel(a.criado_em)}</div>
       </div>
       <div class="anexoacoes">
+        <button class="bic bg" title="Compartilhar" onclick="menuAnexo(event,'${a.id}')">⤴</button>
         <button class="bic bg" title="Baixar" onclick="baixarAnexo('${escA(a.caminho_storage)}','${escA(a.nome_arquivo)}')">⬇</button>
         <button class="bic bd" title="Excluir" onclick="excluirAnexo('${a.id}','${escA(a.caminho_storage)}','${clienteId}')">✕</button>
+        <div class="anexomenu h" id="anexomenu-${a.id}">
+          <button onclick="compartilharNativo('${escA(a.caminho_storage)}','${escA(a.nome_arquivo)}')">Compartilhar arquivo</button>
+          <div class="amsep"></div>
+          <button onclick="enviarAnexoCliente('${escA(a.caminho_storage)}','${escA(a.nome_arquivo)}','${clienteId}')">Enviar para a cliente</button>
+        </div>
       </div>
     </div>`).join('');
   data.filter(a=>anexoEhImagem(a.nome_arquivo)).forEach(async a=>{
@@ -1407,19 +1424,158 @@ async function visualizarAnexo(caminho,nome){
 }
 async function uploadAnexo(input,clienteId){
   const files=[...input.files];
-  if(!files.length)return;
+  input.value='';
+  await subirArquivosAnexo(files,clienteId);
+}
+/* Separado de uploadAnexo porque o arrastar-e-soltar entrega File[] direto,
+   sem passar por <input type=file>. Os dois caminhos gravam igual. */
+async function subirArquivosAnexo(files,clienteId){
+  if(!files||!files.length)return;
   for(const f of files){
     const caminho=`${clienteId}/${Date.now()}_${f.name.replace(/[^\w.\-]/g,'_')}`;
     const{error:eu}=await sb.storage.from(ANEXO_BUCKET).upload(caminho,f);
     if(eu){toast('Erro ao enviar '+f.name+': '+eu.message,'er');continue;}
     await sb.from('crm_anexos').insert({cliente_id:clienteId,usuario_id:U.id,nome_arquivo:f.name,caminho_storage:caminho,tamanho_bytes:f.size});
   }
-  toast('Anexo(s) enviado(s)','ok');
-  input.value='';
+  toast(files.length>1?files.length+' arquivos anexados':'Arquivo anexado','ok');
   if(typeof mcAba==='function'&&$('mcpane-anexos'))mcAba('anexos');
   carregarAnexos(clienteId);
   registrarAtividade(clienteId,`anexou ${files.length>1?files.length+' arquivos':'um arquivo'}`);
 }
+/* ============================================================
+   COMPARTILHAR ANEXO
+   Duas saidas: menu nativo do aparelho (o arquivo em si, sem link)
+   e envio direto na conversa da cliente.
+   ============================================================ */
+function menuAnexo(ev,id){
+  ev.stopPropagation();
+  const m=$('anexomenu-'+id);
+  if(!m)return;
+  const abrindo=m.classList.contains('h');
+  document.querySelectorAll('.anexomenu').forEach(x=>x.classList.add('h'));
+  if(abrindo)m.classList.remove('h');
+}
+document.addEventListener('click',()=>document.querySelectorAll('.anexomenu').forEach(x=>x.classList.add('h')));
+
+/* O WhatsGW decide como entregar pelo formato do arquivo. Sem isso ele
+   trata tudo como binario generico e a cliente recebe algo que nao abre. */
+function mimeDoNome(nome){
+  const m={pdf:'application/pdf',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
+    gif:'image/gif',webp:'image/webp',doc:'application/msword',
+    docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls:'application/vnd.ms-excel',
+    xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    txt:'text/plain',zip:'application/zip',mp3:'audio/mpeg',mp4:'video/mp4'};
+  return m[anexoExt(nome)]||'application/octet-stream';
+}
+async function baixarBlobAnexo(caminho){
+  const{data,error}=await sb.storage.from(ANEXO_BUCKET).download(caminho);
+  if(error||!data)throw new Error(error?error.message:'arquivo nao encontrado');
+  return data;
+}
+/* navigator.share com arquivo so existe em celular. No computador o
+   navegador recusa, entao caimos no download em vez de falhar calado. */
+async function compartilharNativo(caminho,nome){
+  document.querySelectorAll('.anexomenu').forEach(x=>x.classList.add('h'));
+  try{
+    const blob=await baixarBlobAnexo(caminho);
+    const arq=new File([blob],nome,{type:blob.type||'application/octet-stream'});
+    if(navigator.canShare&&navigator.canShare({files:[arq]})){
+      await navigator.share({files:[arq]});
+      return;
+    }
+    toast('Este navegador nao compartilha arquivo. Baixando...','in');
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=nome;a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+  }catch(e){
+    if(e&&e.name==='AbortError')return; // usuario fechou o menu, nao e erro
+    toast('Nao foi possivel compartilhar: '+(e.message||e),'er');
+  }
+}
+/* Grava na conversa como mensagem de saida pendente. Quem entrega no
+   WhatsApp e o motor. telefone_chave e id_externo sao obrigatorios pelo
+   CHECK crm_mensagens_conteudo_minimo — sem eles o banco recusa a linha. */
+async function enviarAnexoCliente(caminho,nome,clienteId){
+  document.querySelectorAll('.anexomenu').forEach(x=>x.classList.add('h'));
+  if(!mcChatCanal){toast('Defina o Canal WhatsApp da cliente antes de enviar','er');return;}
+  if(!mcChatChave){toast('Esta cliente nao tem telefone valido cadastrado','er');return;}
+  if(!confirm('Enviar "'+nome+'" para a cliente agora?'))return;
+  const{data:meta}=await sb.from('crm_anexos').select('tamanho_bytes').eq('caminho_storage',caminho).limit(1);
+  const tam=(meta&&meta[0])?meta[0].tamanho_bytes:null;
+  const{error}=await sb.from('crm_mensagens').insert({
+    cliente_id:clienteId,
+    telefone_chave:mcChatChave,
+    telefone_bruto:mcChatTel||null,
+    canal:mcChatCanal,
+    direcao:'saida',
+    autor_tipo:'humano',
+    usuario_id:U.id,
+    tipo:anexoEhImagem(nome)?'imagem':'documento',
+    midia_caminho:caminho,
+    midia_nome:nome,
+    midia_mime:mimeDoNome(nome),
+    midia_tamanho:tam,
+    id_externo:'crm:'+Date.now()+':'+Math.random().toString(36).slice(2,8),
+    status:'pendente_envio'
+  });
+  if(error){toast('Erro ao enfileirar: '+error.message,'er');return;}
+  toast('Arquivo na fila de envio','ok');
+  if(mcAbaAtual==='chat'){mcChatAssinatura='';carregarChat(clienteId);}
+  registrarAtividade(clienteId,'enviou o arquivo '+nome+' para a cliente');
+}
+
+/* ============================================================
+   ARRASTAR E SOLTAR
+   Vale so com o card aberto e so para arquivo vindo de fora. Se o que
+   esta sendo arrastado nao for arquivo, deixamos passar — senao o
+   arrastar de card entre colunas do Kanban quebraria.
+   ============================================================ */
+let mcDropLigado=false,mcDropProf=0;
+function ehArrastoDeArquivo(e){
+  const t=e.dataTransfer&&e.dataTransfer.types;
+  return !!t&&Array.prototype.indexOf.call(t,'Files')!==-1;
+}
+function mcMostrarVeu(mostrar){
+  let v=$('mc-dropvel');
+  if(mostrar&&!v){
+    v=document.createElement('div');v.id='mc-dropvel';v.className='dropvel';
+    v.innerHTML='<div class="dropmsg">Solte para anexar ao card</div>';
+    document.body.appendChild(v);
+  }else if(!mostrar&&v)v.remove();
+  const box=$('modalbox');
+  if(box)box.classList.toggle('dropon',!!mostrar);
+}
+function mcLigarDropAnexos(){
+  if(mcDropLigado)return;
+  mcDropLigado=true;
+  const box=$('modalbox');
+  if(!box)return;
+  const ativo=()=>!$('modal').classList.contains('h')&&box.classList.contains('mb-card')&&!!mcClienteId;
+  box.addEventListener('dragenter',e=>{
+    if(!ativo()||!ehArrastoDeArquivo(e))return;
+    e.preventDefault();e.stopPropagation();mcDropProf++;mcMostrarVeu(true);
+  });
+  box.addEventListener('dragover',e=>{
+    if(!ativo()||!ehArrastoDeArquivo(e))return;
+    e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='copy';
+  });
+  box.addEventListener('dragleave',e=>{
+    if(!ativo()||!ehArrastoDeArquivo(e))return;
+    mcDropProf--;if(mcDropProf<=0){mcDropProf=0;mcMostrarVeu(false);}
+  });
+  box.addEventListener('drop',async e=>{
+    if(!ativo()||!ehArrastoDeArquivo(e))return;
+    e.preventDefault();e.stopPropagation();
+    mcDropProf=0;mcMostrarVeu(false);
+    const arquivos=[...(e.dataTransfer.files||[])];
+    if(!arquivos.length){toast('Nao veio arquivo nenhum','er');return;}
+    const id=mcClienteId;
+    toast('Enviando '+arquivos.length+(arquivos.length>1?' arquivos...':' arquivo...'),'in');
+    await subirArquivosAnexo(arquivos,id);
+  });
+}
+
 async function baixarAnexo(caminho,nome){
   const{data,error}=await sb.storage.from(ANEXO_BUCKET).createSignedUrl(caminho,60);
   if(error||!data){toast('Erro ao gerar link','er');return;}
@@ -2119,6 +2275,7 @@ function renderCardClienteModal(c,etqSel,listas){
   mcRecalcBox(c.valor_beneficio_esperado,c.valor_honorarios);
   mcChatCanal=c.canal_whatsapp||null;
   mcChatTel=c.telefone_principal||null;
+  mcChatChave=c.telefone_chave||null;
   mcChatAssinatura='';
   pararChatPoll();
   mcAba('coment');
@@ -2149,7 +2306,7 @@ function mcBloqueioChange(){
 // ============================================================
 // ABAS DO PAINEL DIREITO DO CARD (Anexos / Comentários / Chat)
 // ============================================================
-let mcAbaAtual='coment',mcChatTimer=null,mcChatCanal=null,mcChatTel=null,mcChatAssinatura='';
+let mcAbaAtual='coment',mcChatTimer=null,mcChatCanal=null,mcChatTel=null,mcChatChave=null,mcChatAssinatura='';
 function mcAba(nome){
   mcAbaAtual=nome;
   ['anexos','coment','chat'].forEach(n=>{
@@ -2272,8 +2429,14 @@ async function enviarMensagemChat(clienteId){
   if(!mcChatCanal){toast('Defina o Canal WhatsApp da cliente antes de enviar','er');return;}
   const btn=$('mc-chat-btn');
   if(btn){btn.disabled=true;btn.textContent='Registrando...';}
+  /* telefone_chave e id_externo sao exigidos pelo CHECK
+     crm_mensagens_conteudo_minimo. Faltavam os dois — era por isso que
+     este botao nunca gravou nada. enviada_em fica vazio de proposito:
+     quem preenche e o motor, quando o envio sai de fato. */
+  if(!mcChatChave){toast('Esta cliente nao tem telefone valido cadastrado','er');if(btn){btn.disabled=false;btn.textContent='Enviar';}return;}
   const{error}=await sb.from('crm_mensagens').insert({
     cliente_id:clienteId,
+    telefone_chave:mcChatChave,
     telefone_bruto:mcChatTel||null,
     canal:mcChatCanal,
     direcao:'saida',
@@ -2281,15 +2444,15 @@ async function enviarMensagemChat(clienteId){
     usuario_id:U.id,
     tipo:'texto',
     texto:txt,
-    status:'pendente_envio',
-    enviada_em:new Date().toISOString()
+    id_externo:'crm:'+Date.now()+':'+Math.random().toString(36).slice(2,8),
+    status:'pendente_envio'
   });
   if(btn){btn.disabled=false;btn.textContent='Enviar';}
   if(error){toast('Erro ao registrar: '+error.message,'er');return;}
   inp.value='';
   mcChatAssinatura='';
   carregarChat(clienteId);
-  toast('Mensagem registrada na conversa (envio real ainda não ligado)','in');
+  toast('Mensagem na fila de envio','ok');
 }
 // ============================================================
 // BUSCA GLOBAL — inclui clientes arquivados, com aviso na tela
@@ -4526,9 +4689,11 @@ async function ibEnviarMensagem(){
   if(!c.canal){toast('Este contato não tem um canal de WhatsApp definido','er');return;}
   const btn=$('ib-chat-btn');
   if(btn){btn.disabled=true;btn.textContent='Registrando...';}
+  /* Mesmo CHECK do chat do card: sem id_externo o banco recusa. */
+  if(!c.telefoneChave){toast('Este contato nao tem telefone valido','er');if(btn){btn.disabled=false;btn.textContent='Enviar';}return;}
   const{error}=await sb.from('crm_mensagens').insert({
     cliente_id:c.clienteId,
-    telefone_chave:c.telefoneChave||null,
+    telefone_chave:c.telefoneChave,
     telefone_bruto:c.ultimaMsg?c.ultimaMsg.telefone_bruto:null,
     canal:c.canal,
     direcao:'saida',
@@ -4536,15 +4701,15 @@ async function ibEnviarMensagem(){
     usuario_id:U.id,
     tipo:'texto',
     texto:txt,
-    status:'pendente_envio',
-    enviada_em:new Date().toISOString()
+    id_externo:'crm:'+Date.now()+':'+Math.random().toString(36).slice(2,8),
+    status:'pendente_envio'
   });
   if(btn){btn.disabled=false;btn.textContent='Enviar';}
   if(error){toast('Erro ao registrar: '+error.message,'er');return;}
   inp.value='';
   ibChatAssinatura='';
   ibCarregarChat(c);
-  toast('Mensagem registrada na conversa (envio real ainda não ligado)','in');
+  toast('Mensagem na fila de envio','ok');
 }
 
 // ============================================================

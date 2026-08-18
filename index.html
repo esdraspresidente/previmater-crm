@@ -1148,6 +1148,7 @@ function montarSidebar(){
     h+=`<button class="snlb ${fechado?'fechado':''}" onclick="navAlternarSecao('receb')">
           <span class="snlc">▾</span>Recebimentos</button>`;
     if(!fechado){
+      h+=`<button class="ni" id="nav-resumo" onclick="location.hash='#/resumo'"><div class="nic">⊞</div>Resumo do mês</button>`;
       h+=`<button class="ni" id="nav-recebimentos" onclick="location.hash='#/recebimentos'"><div class="nic">≡</div>Recebimentos</button>`;
       h+=`<button class="ni" id="nav-novorec" onclick="location.hash='#/recebimento/novo'"><div class="nic">＋</div>Novo recebimento</button>`;
     }
@@ -1235,6 +1236,7 @@ function route(){
   if(r==='/fila')return pageFila();
   if(r==='/campanha')return pageCampanha();
   if(r==='/dashboard')return pageDash();
+  if(r==='/resumo')return pageResumoRec();
   if(r==='/recebimentos')return pageRec();
   if(r==='/recebimento/novo')return pageNovoRec();
   /* Chegou pelo botão dentro do card: a cliente já vem escolhida. */
@@ -3688,6 +3690,69 @@ function dwrPintar(){
     h+=`<button class="dwr-mais" onclick="dwrBuscar()">Carregar mais ${Math.min(DWR_PAGINA,faltam)} de ${faltam}</button>`;
   }
   $('dwrb').innerHTML=h;
+}
+
+/* ============================================================
+   RESUMO DE RECEBIMENTOS
+   Esta tela e a que existia antes com o nome de Dashboard. Ela nao foi
+   substituida pelo dashboard novo: sao trabalhos diferentes. Aqui voce
+   navega mes a mes, ve comissao e sobra liquida e baixa parcela atrasada
+   sem sair da linha. O dashboard novo e visao geral e nao faz nada disso.
+   Segue liberada para quem tem permissao de financeiro, nao so para
+   proprietario.
+   ============================================================ */
+let recMes=new Date();recMes.setDate(1);
+function mudaMes(d){recMes=new Date(recMes.getFullYear(),recMes.getMonth()+d,1);pageResumoRec();}
+async function pageResumoRec(){
+  const pc=$('pc');marcarNav('resumo');
+  if(!temFinanceiro()){pc.innerHTML='<div class="emp"><div class="empt">Área restrita</div></div>';return;}
+  pc.innerHTML='<div class="emp">Carregando...</div>';
+  await loadFin();
+  const ms=`${recMes.getFullYear()}-${String(recMes.getMonth()+1).padStart(2,'0')}`;
+  const pM=PARC.filter(p=>p.data_vencimento&&p.data_vencimento.startsWith(ms)&&p.status!=='cancelado');
+  const tot=pM.reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
+  const recM=pM.filter(p=>p.status==='recebido').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
+  const aRec=pM.filter(p=>stD(p)==='previsto').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
+  const atr=pM.filter(p=>stD(p)==='atrasado').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
+  const totR=PARC.filter(p=>p.status==='recebido').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
+  const pend=PARC.filter(p=>stD(p)==='previsto').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
+  const com=REC.reduce((s,r)=>s+parseFloat(r.indicador_comissao_total||0),0);
+  const atrs=PARC.filter(p=>stD(p)==='atrasado').sort((a,b)=>a.data_vencimento.localeCompare(b.data_vencimento));
+  const prox=PARC.filter(p=>stD(p)==='previsto'&&p.data_vencimento>=fISO(today())).sort((a,b)=>a.data_vencimento.localeCompare(b.data_vencimento)).slice(0,8);
+
+  pc.innerHTML=`
+    <div class="pgh">
+      <div><div class="pgt">Resumo de recebimentos</div><div class="pgs">Mês a mês, com comissões e atrasadas</div></div>
+      <div class="mn"><button class="mb2" onclick="mudaMes(-1)">‹</button><span class="ml">${fMes(recMes)}</span><button class="mb2" onclick="mudaMes(1)">›</button></div>
+    </div>
+    <div class="st" style="margin-top:0">Resumo de ${fMes(recMes)}</div>
+    <div class="sgrid">
+      <div class="sc"><div class="scl">Total do mês</div><div class="scv">${R(tot)}</div><div class="scs">${pM.length} parcelas</div></div>
+      <div class="sc"><div class="scl" style="color:var(--teal)">Já recebido</div><div class="scv tl">${R(recM)}</div></div>
+      <div class="sc"><div class="scl" style="color:var(--yellow)">A receber</div><div class="scv yw">${R(aRec)}</div></div>
+      <div class="sc"><div class="scl" style="color:var(--red)">Atrasado</div><div class="scv rd">${R(atr)}</div></div>
+    </div>
+    <div class="st">Visão geral</div>
+    <div class="kgrid">
+      <div class="kpc" onclick="location.hash='#/recebimentos'"><div class="ki" style="background:var(--yellow-bg)">🕐</div><div class="kpl">Previsões pendentes</div><div class="kv" style="color:var(--yellow)">${R(pend)}</div><div class="kh">Clique para ver →</div></div>
+      <div class="kpc"><div class="ki" style="background:var(--green-bg)">📈</div><div class="kpl">Total recebido</div><div class="kv" style="color:var(--green)">${R(totR)}</div><div class="kh">Histórico completo</div></div>
+      <div class="kpc"><div class="ki" style="background:var(--rose-l)">💸</div><div class="kpl">Comissões pagas</div><div class="kv" style="color:var(--rose)">${R(com)}</div><div class="kh">Total de indicações</div></div>
+      <div class="kpc"><div class="ki" style="background:var(--teal-l)">💲</div><div class="kpl">Sobra líquida</div><div class="kv" style="color:var(--teal)">${R(totR-com)}</div><div class="kh">Recebido − comissões</div></div>
+    </div>
+    ${atrs.length?`<div class="aw"><div class="at">⚠ Parcelas atrasadas (${atrs.length})</div><div class="card">${atrs.map(p=>`
+      <div class="lr" ${pCli(p)?`style="cursor:pointer" onclick="abrirCardCliente('${pCli(p)}')"`:''}><div class="av" style="background:${avC(p.cliente_nome)}">${avL(p.cliente_nome)}</div>
+      <div style="flex:1;min-width:0"><div class="rn">${esc(p.cliente_nome)}</div><div class="rm" style="color:var(--red)">Venceu em ${fD(p.data_vencimento)} — ${dAtr(p.data_vencimento)} dias atrás</div></div>
+      <div class="rr"><div class="rv rd">${R(p.valor_honorario)}</div>
+      <div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end"><button class="bic bg" onclick="event.stopPropagation();abreMRec('${p.id}')">✓</button><button class="bic bp2" onclick="event.stopPropagation();marcaInad('${p.id}')">⚑</button></div></div></div>`).join('')}</div></div>`:''}
+    <div class="st" style="display:flex;justify-content:space-between;align-items:center"><span>Próximos recebimentos</span>
+      <button style="background:none;border:none;font-size:11px;color:var(--teal);font-weight:700;cursor:pointer" onclick="location.hash='#/recebimentos'">Ver todos →</button></div>
+    <div class="card">${prox.length?prox.map(p=>{
+      const d=dVenc(p.data_vencimento);
+      const db=d===0?`<span class="dh">hoje</span>`:d<=3?`<span class="dh">em ${d}d</span>`:d<=7?`<span class="dw">em ${d}d</span>`:`<span class="dn">em ${d}d</span>`;
+      return`<div class="lr" ${pCli(p)?`style="cursor:pointer" onclick="abrirCardCliente('${pCli(p)}')"`:''}><div class="av" style="background:${avC(p.cliente_nome)}">${avL(p.cliente_nome)}</div>
+      <div style="flex:1;min-width:0"><div class="rn">${esc(p.cliente_nome)}</div><div class="rm">Parcela ${p.num_parcela}/${p.total_parcelas} — ${fD(p.data_vencimento)}${db}</div></div>
+      <div class="rr"><div class="rv">${R(p.valor_honorario)}</div>${bdg('previsto')}</div></div>`;
+    }).join(''):`<div class="emp"><div class="empi">✅</div><div class="empt">Tudo em dia!</div></div>`}</div>`;
 }
 
 // ============================================================

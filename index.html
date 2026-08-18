@@ -1127,7 +1127,14 @@ function montarSidebar(){
      geral da operacao inteira — por isso subiu para o topo e saiu da
      secao de dinheiro. So proprietario. */
   let h='';
-  if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-dashboard" onclick="location.hash='#/dashboard'"><div class="nic">⊞</div>Dashboard</button>`;
+  if(U.nivel==='proprietario'){
+    h+=`<button class="ni" id="nav-dashboard" onclick="location.hash='#/dashboard'"><div class="nic">⊞</div>Dashboard</button>`;
+    /* A fila subiu para junto do dashboard e saiu de Configurações. Ela
+       não é ajuste de sistema: é o trabalho do dia — o que está esperando
+       aprovação, o que falhou e o que venceu. Enterrada no rodapé, só era
+       vista quando alguém já tinha reclamado. */
+    h+=`<button class="ni" id="nav-fila" onclick="location.hash='#/fila'"><div class="nic">☰</div>Fila de automações<span class="nidot h" id="nav-fila-dot"></span></button>`;
+  }
   h+='<div class="snl">Mensagens</div>';
   h+=`<button class="ni" id="nav-inbox" onclick="location.hash='#/inbox'"><div class="nic">💬</div>Caixa de Entrada</button>`;
   h+=`<button class="ni" id="nav-clientes" onclick="location.hash='#/clientes'"><div class="nic">◎</div>Contatos</button>`;
@@ -1147,10 +1154,17 @@ function montarSidebar(){
       h+=`<button class="ni" id="nav-novorec" onclick="location.hash='#/recebimento/novo'"><div class="nic">＋</div>Novo recebimento</button>`;
     }
   }
-  h+='<div class="snl">Configurações</div>';
-  h+=`<button class="ni" id="nav-etiquetas" onclick="location.hash='#/etiquetas'"><div class="nic">◇</div>Etiquetas</button>`;
-  if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-fila" onclick="location.hash='#/fila'"><div class="nic">☰</div>Fila de automações<span class="nidot h" id="nav-fila-dot"></span></button>`;
-  if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-logs" onclick="location.hash='#/logs'"><div class="nic">▤</div>Logs</button>`;
+  /* Configurações agora abre e fecha igual Recebimentos, e pelo mesmo
+     motivo: são telas de ajuste, olhadas de vez em quando, mas ficavam
+     ocupando o pé do menu o dia inteiro. Mesmo armazenamento (kl_nav_*),
+     então fechar uma vez fecha para sempre. */
+  const cfgFechado=navSecaoFechada('config');
+  h+=`<button class="snlb ${cfgFechado?'fechado':''}" onclick="navAlternarSecao('config')">
+        <span class="snlc">▾</span>Configurações</button>`;
+  if(!cfgFechado){
+    h+=`<button class="ni" id="nav-etiquetas" onclick="location.hash='#/etiquetas'"><div class="nic">◇</div>Etiquetas</button>`;
+    if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-logs" onclick="location.hash='#/logs'"><div class="nic">▤</div>Logs</button>`;
+  }
   $('sbnav').innerHTML=h;
   atualizarSinalFila();
 }
@@ -1167,21 +1181,65 @@ function navAlternarSecao(id){
 }
 
 /* A BOLINHA DA FILA.
-   Acende quando existe alguma coisa que depende de uma decisão sua:
-   mensagem esperando aprovação, aviso seu, envio que falhou ou que
-   venceu. NÃO conta o que está apenas agendado — isso é o motor
-   trabalhando, não trabalho seu.
-   Pergunta com head:true e count exato: o banco devolve o número sem
-   trazer nenhuma linha, então pode rodar de minuto em minuto sem peso. */
-async function atualizarSinalFila(){
-  const dot=$('nav-fila-dot');
-  if(!dot||!U||U.nivel!=='proprietario')return;
+   Antes ela acendia sempre que existisse qualquer pendência. Como quase
+   sempre sobra alguma coisa vencida ou com erro parada lá, ela vivia
+   acesa, virou paisagem e parou de avisar qualquer coisa.
+   Agora ela avisa NOVIDADE: só acende se apareceu coisa depois da última
+   vez que a tela da fila foi aberta.
+
+   São duas perguntas, as duas com head:true e count exato — o banco
+   devolve só o número, sem trazer linha nenhuma, então pode rodar de
+   minuto em minuto sem peso:
+   1) nasceu alguma pendência depois da última visita? (criado_em)
+   2) o total de erro/vencida subiu desde a última visita? Isso pega a
+      mensagem antiga que só agora falhou ou venceu — o criado_em dela é
+      velho, então a pergunta 1 nunca a veria. A tabela não tem coluna de
+      atualização, então a contagem é o único jeito de perceber.
+   Se esse total cair (você resolveu, ou o motor reenviou), a régua desce
+   junto — senão a bolinha ficaria muda para sempre depois de um pico. */
+const FILA_VISTO_K='kl_fila_visto';
+function filaVisto(){
+  try{const v=JSON.parse(localStorage.getItem(FILA_VISTO_K)||'null');if(v&&v.em)return v;}catch(_){}
+  return null;
+}
+function filaGravarVisto(v){try{localStorage.setItem(FILA_VISTO_K,JSON.stringify(v));}catch(_){}}
+async function filaContarProblemas(){
   try{
     const{count,error}=await sb.from('crm_automacoes')
       .select('id',{count:'exact',head:true})
-      .in('status',['aguardando_aprovacao','erro','vencida']);
-    if(error)return;
-    dot.classList.toggle('h',!(count>0));
+      .in('status',['erro','vencida']);
+    return error?null:(count||0);
+  }catch(_){return null;}
+}
+/* Chamado quando a tela da fila abre: apaga a bolinha e passa a régua
+   para agora. Ver a tela é o que conta como "já vi". */
+async function filaMarcarVista(){
+  const n=await filaContarProblemas();
+  filaGravarVisto({em:new Date().toISOString(),ev:n==null?0:n});
+  const dot=$('nav-fila-dot');if(dot)dot.classList.add('h');
+}
+async function atualizarSinalFila(){
+  const dot=$('nav-fila-dot');
+  if(!dot||!U||U.nivel!=='proprietario')return;
+  let v=filaVisto();
+  /* Primeiro acesso deste navegador: não faz sentido acender por coisa
+     antiga que ninguém nunca viu como novidade. Marca a régua e cala. */
+  if(!v){await filaMarcarVista();return;}
+  try{
+    const[novos,problemas]=await Promise.all([
+      sb.from('crm_automacoes')
+        .select('id',{count:'exact',head:true})
+        .in('status',['aguardando_aprovacao','erro','vencida'])
+        .gt('criado_em',v.em),
+      filaContarProblemas()
+    ]);
+    if(novos.error)return;
+    let acender=(novos.count||0)>0;
+    if(problemas!=null){
+      if(problemas>(v.ev||0))acender=true;
+      else if(problemas<(v.ev||0)){v={em:v.em,ev:problemas};filaGravarVisto(v);}
+    }
+    dot.classList.toggle('h',!acender);
   }catch(_){}
 }
 function marcarNav(id){
@@ -4413,6 +4471,7 @@ async function pageFila(){
   (vars||[]).forEach(v=>{FILA_FREIOS[v.chave]=(v.valor_texto||'sim').toLowerCase();});
   FILA_SEL.clear();
   renderFila();
+  filaMarcarVista();
 }
 
 function freioBotao(chave,titulo,ligadoTxt,paradoTxt,explica){

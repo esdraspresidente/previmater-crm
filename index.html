@@ -3810,6 +3810,16 @@ async function pageRec(){
       <select class="ss" id="rordem" onchange="renderLista()"><option value="proximo">Próximo vencimento</option><option value="nome">Nome A-Z</option><option value="valor">Maior valor</option></select></div>
     <div id="rlista"></div>`;
   renderChips();renderCal();renderLista();
+  /* Depois de pintar a tela, nao antes: a varredura escreve no banco e nao
+     deve segurar o carregamento. Se corrigir algo, recarrega os dados e
+     redesenha, para a tela nao continuar mostrando o estado velho. */
+  varrerConsistenciaFinanceiro().then(async r=>{
+    if(!r||!r.corrigidos)return;
+    await loadFin(true);
+    renderChips();renderCal();renderLista();
+    toast(r.corrigidos+' cartao'+(r.corrigidos===1?'':'es')+' realinhado'+(r.corrigidos===1?'':'s')+' com as parcelas','ok');
+    console.log('Varredura financeira:',r);
+  }).catch(e=>console.error('Varredura financeira falhou:',e));
 }
 function renderChips(){
   const c={todos:0,previstos:0,atrasados:0,recebidos:0,inadimplentes:0,cancelados:0};
@@ -4092,6 +4102,67 @@ async function sincronizarFinanceiroCliente(crmClienteId,logar){
 }
 async function checarFinalizacaoCliente(crmClienteId){
   await sincronizarFinanceiroCliente(crmClienteId,true);
+}
+/* VARREDURA DE CONSISTENCIA DO FINANCEIRO.
+   sincronizarFinanceiroCliente() so roda quando alguem mexe numa parcela por
+   esta tela. Mudanca feita por fora — SQL direto, outro app, importacao — nao
+   move o cartao, e ele fica parado numa lista que contradiz as parcelas. Foi
+   assim que uma cliente ficou marcada como inadimplente com duas parcelas
+   ainda esperando pagamento.
+   Esta funcao le o que ja esta em memoria e so escreve nos divergentes.
+
+   Corrige APENAS quem ja esta no quadro Financeiro. Cartao em outro quadro
+   (Comercial, por exemplo) que tenha parcela cadastrada e apenas contado no
+   relato, nunca movido: arrastar cartao entre quadros em lote atropelaria o
+   trabalho de quem esta com ele em maos, e nao ha desfazer. */
+async function varrerConsistenciaFinanceiro(){
+  if(!Array.isArray(PARC)||!PARC.length)return null;
+
+  /* PARC vem de loadFin com select sem limite. O PostgREST corta em 1000
+     linhas sem avisar, entao a partir dai a varredura estaria decidindo com
+     base em meia base — melhor nao rodar do que corrigir pela metade. */
+  if(PARC.length>=1000){
+    console.warn('Varredura ignorada: PARC pode estar truncado em 1000 linhas.');
+    return null;
+  }
+
+  const esperadoPorCliente={};
+  PARC.forEach(p=>{
+    if(p.status==='cancelado')return;
+    const cid=pCli(p);if(!cid)return;
+    if(!esperadoPorCliente[cid])esperadoPorCliente[cid]={inad:false,todasRecebidas:true};
+    if(p.status==='inadimplente')esperadoPorCliente[cid].inad=true;
+    if(p.status!=='recebido')esperadoPorCliente[cid].todasRecebidas=false;
+  });
+  const ids=Object.keys(esperadoPorCliente);
+  if(!ids.length)return null;
+
+  const listas=await listasFinanceiro();
+  const chavePorListaId={};
+  for(const chave of Object.keys(LISTAS_FIN)){
+    for(const cand of LISTAS_FIN[chave]){
+      const achou=listas.find(l=>_norm(l.nome)===_norm(cand));
+      if(achou&&!chavePorListaId[achou.id])chavePorListaId[achou.id]=chave;
+    }
+  }
+
+  const{data:clientes}=await sb.from('crm_clientes')
+    .select('id,nome_completo,quadro,lista_id').in('id',ids);
+  if(!clientes)return null;
+
+  const divergentes=[];let foraDoFinanceiro=0;
+  clientes.forEach(c=>{
+    const e=esperadoPorCliente[c.id];if(!e)return;
+    const chaveEsperada=e.inad?'inadimplente':(e.todasRecebidas?'encerrado':'pagamento');
+    if(c.quadro!=='financeiro'){foraDoFinanceiro++;return;}
+    if(chavePorListaId[c.lista_id]===chaveEsperada)return;
+    divergentes.push({id:c.id,nome:c.nome_completo,chave:chaveEsperada});
+  });
+
+  for(const d of divergentes)await moverClienteFinanceiro(d.id,d.chave,true);
+
+  return{conferidos:clientes.length,corrigidos:divergentes.length,
+         foraDoFinanceiro:foraDoFinanceiro,nomes:divergentes.map(d=>d.nome)};
 }
 async function notificarAtraso(clienteId,nome,dias){
   if(!U)return;

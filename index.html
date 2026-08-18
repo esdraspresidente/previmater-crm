@@ -319,7 +319,6 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .tbl td{font-size:13px;color:var(--text);padding:10px 13px;border-top:1px solid var(--border2);}
 .inp-mini{background:#F3FAFA;border:1.5px solid var(--border);border-radius:8px;padding:6px 9px;font-size:12px;font-family:inherit;width:70px;color:var(--text);}
 .inp-cor{width:44px;height:32px;padding:2px;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;}
-.alertbar{background:var(--red-bg);color:var(--red);border:1px solid #F5C6C0;padding:11px 15px;border-radius:11px;margin-bottom:16px;font-size:12px;font-weight:700;}
 
 #toast{position:fixed;bottom:calc(26px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(120px);background:var(--text);color:#fff;padding:11px 20px;border-radius:22px;font-size:13px;font-weight:700;z-index:9999;transition:transform .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;box-shadow:0 8px 28px rgba(0,0,0,.18);}
 #toast.v{transform:translateX(-50%) translateY(0);}
@@ -1151,7 +1150,6 @@ function montarSidebar(){
   h+='<div class="snl">Configurações</div>';
   h+=`<button class="ni" id="nav-etiquetas" onclick="location.hash='#/etiquetas'"><div class="nic">◇</div>Etiquetas</button>`;
   if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-fila" onclick="location.hash='#/fila'"><div class="nic">☰</div>Fila de automações<span class="nidot h" id="nav-fila-dot"></span></button>`;
-  if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-campanha" onclick="location.hash='#/campanha'"><div class="nic">◐</div>Campanha</button>`;
   if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-logs" onclick="location.hash='#/logs'"><div class="nic">▤</div>Logs</button>`;
   $('sbnav').innerHTML=h;
   atualizarSinalFila();
@@ -1227,7 +1225,6 @@ function route(){
   if(m=r.match(/^\/cliente\/(.+)$/))return pageCliente(m[1]);
   if(r==='/etiquetas')return pageEtiquetas();
   if(r==='/fila')return pageFila();
-  if(r==='/campanha')return pageCampanha();
   if(r==='/dashboard')return pageDash();
   if(r==='/resumo')return pageResumoRec();
   if(r==='/recebimentos')return pageRec();
@@ -4834,67 +4831,6 @@ async function filaSalvarQuando(id){
   await filaAtualizar(id,{data_hora_agendada:new Date(v).toISOString()},'Reagendada');
 }
 
-// ============================================================
-// CAMPANHA
-// ============================================================
-async function pageCampanha(){
-  const pc=$('pc');marcarNav('campanha');
-  if(U.nivel!=='proprietario'){pc.innerHTML='<div class="emp"><div class="empt">Tela restrita a proprietários</div></div>';return;}
-  pc.innerHTML='<div class="emp">Carregando...</div>';
-  const[{data:inst,error},{data:disp}]=await Promise.all([
-    sb.from('crm_instancias_whatsapp').select('*').order('numero_telefone'),
-    sb.from('crm_campanha_disparos').select('*').order('criado_em',{ascending:false}).limit(30)
-  ]);
-  if(error){pc.innerHTML='<div class="emp"><div class="empt">Erro ao carregar</div></div>';return;}
-  const I=inst||[],D=disp||[];
-  const ruins=I.filter(x=>x.status==='degradado'||(x.taxa_entrega!==null&&x.taxa_entrega<80));
-  const alerta=ruins.length?`<div class="alertbar">Atenção: ${ruins.length===1?'o número '+esc(ruins[0].numero_telefone)+' está':ruins.length+' números estão'} com entrega baixa. Considere reduzir o teto diário ou pausar.</div>`:'';
-  const linhasI=I.map(x=>{
-    const tx=(x.taxa_entrega!==null&&x.taxa_entrega!==undefined)?Number(x.taxa_entrega).toFixed(0)+'%':'—';
-    const cl=(x.taxa_entrega===null||x.taxa_entrega===undefined)?'nt':(x.taxa_entrega<80?'wr':'ok');
-    const sc=x.status==='ativo'?'ok':(x.status==='degradado'?'wr':'nt');
-    return`<tr data-inst="${x.id}">
-      <td style="font-weight:700">${esc(x.numero_telefone)}</td><td>${CANAIS[x.canal]||esc(x.canal)}</td>
-      <td><input class="inp-mini" type="number" min="0" value="${x.teto_diario_atual}"/> <button class="bmini" onclick="salvarTeto('${x.id}',this)">Salvar</button></td>
-      <td>${x.disparos_hoje} / ${x.teto_diario_atual}</td>
-      <td><span class="bdg ${cl}">${tx}</span></td><td><span class="bdg ${sc}">${esc(x.status)}</span></td></tr>`;
-  }).join('');
-  const cls={agendado:'nt',enviado:'nt',entregue:'ok',lido:'ok',respondido:'ok',falhou:'wr'};
-  const mapa={};I.forEach(x=>mapa[x.id]=x.numero_telefone);
-  const linhasD=D.map(d=>`<tr><td>${esc(d.contato_nome)||'—'}</td><td>${esc(d.contato_telefone)}</td>
-      <td>${esc(mapa[d.instancia_id])||'—'}</td>
-      <td>${d.data_hora_agendada?new Date(d.data_hora_agendada).toLocaleString('pt-BR'):'—'}</td>
-      <td><span class="bdg ${cls[d.status]||'nt'}">${esc(d.status)}</span></td></tr>`).join('');
-  pc.innerHTML=`<div class="pgh"><div><div class="pgt">Campanha</div><div class="pgs">Números, tetos diários e disparos de indicação</div></div></div>
-    ${alerta}
-    <div class="fs"><div class="fst">Adicionar número</div>
-      <div class="fg" style="align-items:end">
-        <div class="fld"><label>Número (com DDD)</label><input type="text" id="ni-num" placeholder="41999999999"/></div>
-        <div class="fld"><label>Canal</label><select id="ni-canal"><option value="whatsgw">WhatsGW</option><option value="evolution">Evolution</option><option value="meta_oficial">Meta oficial</option></select></div>
-        <div class="fld"><label>Teto diário inicial</label><input type="number" id="ni-teto" min="0" value="20"/></div>
-        <div class="fld"><button class="btn btnp" onclick="criarInstancia()" style="width:auto">Adicionar</button></div>
-      </div></div>
-    <div class="st">Números / instâncias</div>
-    ${I.length?`<table class="tbl"><thead><tr><th>Número</th><th>Canal</th><th>Teto diário</th><th>Hoje</th><th>Entrega</th><th>Status</th></tr></thead><tbody>${linhasI}</tbody></table>`
-      :'<div class="emp"><div class="empt">Nenhum número cadastrado</div></div>'}
-    <div class="st">Últimos disparos</div>
-    ${D.length?`<table class="tbl"><thead><tr><th>Contato</th><th>Telefone</th><th>Número usado</th><th>Agendado</th><th>Status</th></tr></thead><tbody>${linhasD}</tbody></table>`
-      :'<div class="emp"><div class="empt">Nenhum disparo registrado</div></div>'}`;
-}
-async function salvarTeto(id,btn){
-  const v=parseInt(btn.closest('tr').querySelector('input').value,10);
-  if(isNaN(v)||v<0){toast('Número inválido','er');return;}
-  const{error}=await sb.from('crm_instancias_whatsapp').update({teto_diario_atual:v,atualizado_em:new Date().toISOString()}).eq('id',id);
-  if(error){toast('Erro ao salvar','er');return;}
-  toast('Teto atualizado','ok');pageCampanha();
-}
-async function criarInstancia(){
-  const num=$('ni-num').value.trim(),canal=$('ni-canal').value,teto=parseInt($('ni-teto').value,10)||0;
-  if(!num){toast('Digite o número','er');return;}
-  const{error}=await sb.from('crm_instancias_whatsapp').insert({numero_telefone:num,canal,teto_diario_atual:teto,disparos_hoje:0,status:'ativo'});
-  if(error){toast('Erro ao adicionar','er');return;}
-  toast('Número adicionado','ok');pageCampanha();
-}
 
 
 // ============================================================

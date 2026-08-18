@@ -718,6 +718,143 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .lgrod{text-align:center;padding:13px;color:var(--text3);font-size:12px;}
 .lgmais{color:var(--teal);font-weight:700;cursor:pointer;}
 @media(max-width:640px){.lghora{min-width:44px;font-size:11px;}.lgbusca{min-width:100%;}}
+/* ============================================================
+   DASHBOARD
+   Prefixo dsh- em tudo de proposito: a folha ja tem .mc, .mv, .dh,
+   .bar e .chip usados por outras telas. Classe generica aqui quebraria
+   card, quadro e recebimentos de um jeito dificil de achar depois.
+   ============================================================ */
+.dsh-num{font-variant-numeric:tabular-nums;letter-spacing:-.5px;}
+.dsh-chips{display:flex;gap:8px;flex-wrap:wrap;}
+.dsh-chip{display:flex;align-items:center;gap:7px;background:var(--white);border:1px solid var(--border);border-radius:999px;padding:7px 13px;font-size:12px;font-weight:700;color:var(--text2);box-shadow:var(--sh);}
+.dsh-chip b{color:var(--text);}
+.dsh-chip button{background:none;border:none;font:inherit;color:var(--teal);cursor:pointer;padding:0;}
+.dsh-dot{width:7px;height:7px;border-radius:50%;background:var(--green);position:relative;flex:none;}
+.dsh-dot::after{content:'';position:absolute;inset:-4px;border-radius:50%;background:var(--green);opacity:.25;animation:dshpl 1.8s ease-out infinite;}
+.dsh-dot.off{background:var(--red);}.dsh-dot.off::after{background:var(--red);}
+@keyframes dshpl{0%{transform:scale(.6);opacity:.35}100%{transform:scale(1.9);opacity:0}}
+@media(prefers-reduced-motion:reduce){.dsh-dot::after{animation:none}}
+
+/* A esteira: a jornada inteira da cliente em uma linha. */
+.dsh-est{background:var(--white);border:1px solid var(--border);border-radius:var(--rx);padding:20px 22px 22px;box-shadow:var(--shm);margin-bottom:16px;position:relative;overflow:hidden;}
+.dsh-est::before{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,var(--teal),var(--teal2) 55%,var(--rose));}
+.dsh-estt{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px;gap:12px;flex-wrap:wrap;}
+.dsh-eyb{font-size:10px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;color:var(--text3);}
+.dsh-estt .tot{font-size:12px;font-weight:700;color:var(--text2);}
+.dsh-esg{display:grid;grid-template-columns:repeat(7,1fr);position:relative;}
+.dsh-esg::before{content:'';position:absolute;left:6%;right:6%;top:26px;height:2px;background:linear-gradient(90deg,var(--teal-m),var(--teal2),var(--rose));opacity:.35;}
+.dsh-et{text-align:center;position:relative;padding:0 4px;border:none;background:none;font-family:inherit;}
+.dsh-et .bola{width:52px;height:52px;border-radius:50%;background:var(--white);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:800;margin:0 auto 10px;position:relative;z-index:1;box-shadow:0 2px 10px rgba(10,147,150,.10);}
+.dsh-et.on .bola{border-color:var(--teal);color:var(--teal);}
+.dsh-et.rose .bola{border-color:var(--rose);color:var(--rose);}
+.dsh-et.gold .bola{border-color:var(--yellow);color:var(--yellow);}
+.dsh-et.vazio .bola{color:var(--text3);}
+/* Base de reativacao: e cliente de verdade, mas sao 659 de 668 cartoes
+   do Comercial. Anel tracejado e sem cor para nao engolir o quadro. */
+.dsh-et.frio .bola{border-style:dashed;border-color:var(--text3);color:var(--text3);background:var(--gray-bg);box-shadow:none;}
+.dsh-et.frio .nm{color:var(--text3);}
+.dsh-et .nm{font-size:11px;font-weight:700;color:var(--text2);line-height:1.25;}
+.dsh-et .vl{font-size:11px;font-weight:700;color:var(--text3);margin-top:3px;}
+.dsh-clic{cursor:pointer;}
+.dsh-clic:hover .bola,.dsh-clic:hover .n{filter:brightness(.93);}
+.dsh-clic:focus-visible{outline:2px solid var(--teal);outline-offset:3px;border-radius:10px;}
+@media(max-width:860px){.dsh-esg{grid-template-columns:repeat(4,1fr);row-gap:18px;}.dsh-esg::before{display:none;}}
+@media(max-width:560px){.dsh-esg{grid-template-columns:repeat(3,1fr);}}
+
+/* Movimento do periodo. */
+.dsh-mov{background:var(--white);border:1px solid var(--border);border-radius:var(--rx);padding:18px 22px 20px;box-shadow:var(--sh);margin-bottom:22px;}
+.dsh-movt{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+.dsh-seg{display:flex;background:var(--gray-bg);border-radius:99px;padding:3px;gap:2px;}
+.dsh-seg button{border:none;background:none;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--text2);padding:6px 14px;border-radius:99px;cursor:pointer;transition:background .15s,color .15s;}
+.dsh-seg button[aria-selected="true"]{background:var(--white);color:var(--teal);box-shadow:var(--sh);}
+.dsh-seg button:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+.dsh-mvg{display:grid;grid-template-columns:repeat(5,1fr) 14px 1fr;gap:0 4px;}
+.dsh-mv{padding:2px 10px;border-left:1px solid var(--border2);border-top:none;border-right:none;border-bottom:none;background:none;font-family:inherit;text-align:left;}
+.dsh-mv:first-child{border-left:none;padding-left:0;}
+.dsh-mv .n{font-size:30px;font-weight:800;letter-spacing:-1.4px;line-height:1;}
+.dsh-mv .l{font-size:11px;font-weight:700;color:var(--text2);margin-top:6px;line-height:1.3;}
+.dsh-mv.zero .n{color:#BFD8D8;}
+.dsh-mv.out .n{color:var(--red);}
+.dsh-sep{border-left:1px dashed var(--border);margin:0 6px;}
+.dsh-nota{font-size:10.5px;font-weight:600;color:var(--text3);margin-top:14px;padding-top:12px;border-top:1px solid var(--border2);}
+@media(max-width:900px){.dsh-mvg{grid-template-columns:repeat(3,1fr);gap:16px 0;}.dsh-mv{border-left:none;padding-left:0;}.dsh-sep{display:none;}}
+
+/* Alertas: so entra o que precisa de acao. Zerado nao aparece. */
+.dsh-al{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:22px;}
+.dsh-ac{background:var(--white);border:1px solid var(--border);border-left:3px solid var(--gray);border-radius:var(--r);padding:13px 15px;cursor:pointer;box-shadow:var(--sh);text-align:left;font-family:inherit;transition:transform .12s,box-shadow .12s;}
+.dsh-ac:hover{transform:translateY(-2px);box-shadow:var(--shm);}
+.dsh-ac:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+.dsh-ac .n{font-size:22px;font-weight:800;line-height:1;}
+.dsh-ac .l{font-size:11.5px;font-weight:700;color:var(--text2);margin-top:5px;}
+.dsh-ac .h{font-size:10.5px;color:var(--text3);margin-top:3px;font-weight:600;}
+.dsh-ac.r{border-left-color:var(--red);} .dsh-ac.r .n{color:var(--red);}
+.dsh-ac.y{border-left-color:var(--yellow);} .dsh-ac.y .n{color:var(--yellow);}
+.dsh-ac.p{border-left-color:var(--purple);} .dsh-ac.p .n{color:var(--purple);}
+.dsh-ac.t{border-left-color:var(--teal);} .dsh-ac.t .n{color:var(--teal);}
+
+.dsh-g2{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;margin-bottom:22px;}
+@media(max-width:980px){.dsh-g2{grid-template-columns:1fr;}}
+.dsh-card{background:var(--white);border:1px solid var(--border);border-radius:var(--rl);padding:20px;box-shadow:var(--sh);}
+.dsh-hero{background:linear-gradient(150deg,#0A9396,#0E7F92 55%,#00B4D8);border:none;color:#fff;border-radius:var(--rl);padding:20px;}
+.dsh-hero .dsh-eyb{color:rgba(255,255,255,.72);}
+.dsh-big{font-size:40px;font-weight:800;line-height:1;letter-spacing:-1.6px;margin:9px 0 4px;}
+.dsh-hero .meta{font-size:12px;font-weight:600;color:rgba(255,255,255,.85);}
+.dsh-bar{height:7px;border-radius:99px;background:rgba(255,255,255,.22);margin:15px 0 8px;overflow:hidden;}
+.dsh-bar i{display:block;height:100%;border-radius:99px;background:#fff;}
+.dsh-lg{display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:rgba(255,255,255,.85);}
+.dsh-sp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.2);}
+.dsh-sp div span{display:block;font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:rgba(255,255,255,.65);margin-bottom:4px;}
+.dsh-sp div b{font-size:17px;font-weight:800;letter-spacing:-.5px;}
+.dsh-mini{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.dsh-mc{background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:14px;box-shadow:var(--sh);}
+.dsh-mc .l{font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);}
+.dsh-mc .v{font-size:20px;font-weight:800;letter-spacing:-.7px;margin-top:6px;}
+.dsh-mc .s{font-size:10.5px;font-weight:600;color:var(--text3);margin-top:3px;}
+.dsh-gr{width:100%;height:auto;display:block;overflow:visible;}
+.dsh-lgd{display:flex;gap:14px;font-size:11px;font-weight:700;color:var(--text2);margin-top:12px;flex-wrap:wrap;}
+.dsh-lgd i{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:-1px;}
+.dsh-fl{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;}
+.dsh-qb{font-size:11px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--text2);margin-bottom:10px;display:flex;justify-content:space-between;}
+.dsh-li{margin-bottom:9px;}
+.dsh-li .t{display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;color:var(--text2);margin-bottom:4px;}
+.dsh-li .t b{color:var(--text);}
+.dsh-li .b{height:6px;background:var(--gray-bg);border-radius:99px;overflow:hidden;}
+.dsh-li .b i{display:block;height:100%;border-radius:99px;}
+.dsh-fi{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border2);font-size:12px;}
+.dsh-fi:last-child{border-bottom:none;}
+.dsh-fi .h{font-size:10.5px;font-weight:700;color:var(--text3);white-space:nowrap;font-variant-numeric:tabular-nums;}
+.dsh-fi .mod{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--teal);}
+.dsh-fi .m{font-weight:600;color:var(--text2);line-height:1.35;}
+
+/* ============ PAINEL DOS CARTOES ============
+   Painel e nao modal: o cartao do CRM ja e um modal (z-index 500). Se a
+   lista tambem fosse, abrir uma cliente fecharia o recorte e voce teria
+   que refazer o caminho a cada nome. Aqui o cartao abre POR CIMA e a
+   lista continua atras. */
+.dwr-v{position:fixed;inset:0;background:rgba(13,43,43,.34);opacity:0;pointer-events:none;transition:opacity .2s;z-index:300;}
+.dwr-v.on{opacity:1;pointer-events:auto;}
+.dwr{position:fixed;top:0;right:0;bottom:0;width:min(430px,100%);background:var(--white);box-shadow:-8px 0 40px rgba(10,147,150,.22);z-index:301;display:flex;flex-direction:column;transform:translateX(102%);transition:transform .24s cubic-bezier(.4,0,.2,1);}
+.dwr.on{transform:none;}
+@media(prefers-reduced-motion:reduce){.dwr-v,.dwr{transition:none;}}
+.dwr-h{padding:18px 20px 14px;border-bottom:1px solid var(--border);flex:none;}
+.dwr-h .t{font-size:17px;font-weight:800;letter-spacing:-.4px;display:flex;align-items:center;gap:9px;}
+.dwr-h .c{font-size:11.5px;font-weight:700;color:var(--text3);margin-top:3px;}
+.dwr-x{margin-left:auto;background:var(--gray-bg);border:none;width:28px;height:28px;border-radius:8px;font-size:15px;color:var(--text2);cursor:pointer;font-family:inherit;line-height:1;flex:none;}
+.dwr-x:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+.dwr-f{margin-top:12px;width:100%;background:#F3FAFA;border:1.5px solid var(--border);border-radius:9px;padding:8px 12px;font-family:inherit;font-size:13px;color:var(--text);}
+.dwr-f:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(10,147,150,.14);}
+.dwr-b{flex:1;overflow-y:auto;padding:6px 12px 18px;}
+.dwr-row{display:flex;gap:11px;align-items:flex-start;padding:11px 8px;border-radius:10px;cursor:pointer;border-bottom:1px solid var(--border2);}
+.dwr-row:hover{background:var(--teal-l);}
+.dwr-row:last-child{border-bottom:none;}
+.dwr-row .nm{font-size:13.5px;font-weight:700;line-height:1.2;}
+.dwr-row .tel{font-size:11px;font-weight:600;color:var(--text3);margin-top:2px;font-variant-numeric:tabular-nums;}
+.dwr-onde{display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-size:10.5px;font-weight:700;background:var(--gray-bg);border-radius:99px;padding:3px 9px;color:var(--text2);}
+.dwr-onde i{width:6px;height:6px;border-radius:50%;flex:none;}
+.dwr-row .ctx{font-size:10.5px;font-weight:600;color:var(--text3);margin-top:4px;line-height:1.35;}
+.dwr-row .vlr{margin-left:auto;text-align:right;font-size:12.5px;font-weight:800;white-space:nowrap;color:var(--red);}
+.dwr-mais{width:100%;margin-top:12px;background:var(--gray-bg);border:none;border-radius:10px;padding:11px;font-family:inherit;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;}
+
 </style>
 </head>
 <body>
@@ -774,6 +911,15 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 </div>
 
 <div class="mo h" id="modal" onclick="fecharSeFundo(event)"><div class="mb" id="modalbox"></div></div>
+<div class="dwr-v" id="dwrv" onclick="dwrFechar()"></div>
+<aside class="dwr" id="dwr" role="dialog" aria-labelledby="dwrt">
+  <div class="dwr-h">
+    <div class="t"><span id="dwrt">—</span><button class="dwr-x" onclick="dwrFechar()" aria-label="Fechar">✕</button></div>
+    <div class="c" id="dwrc"></div>
+    <input class="dwr-f" id="dwrf" placeholder="Buscar nesta lista..." oninput="dwrPintar()"/>
+  </div>
+  <div class="dwr-b" id="dwrb"></div>
+</aside>
 <div id="toast"></div>
 
 <script>
@@ -827,7 +973,6 @@ const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agos
 let U=null,S=null,QPERM=[],ETQ=[],USUARIOS=[];
 let dragCardId=null,dragOrigLista=null;
 let CLI=[],REC=[],PARC=[],finCarregado=false;
-let dashMes=new Date();dashMes.setDate(1);
 let calMes=new Date();calMes.setDate(1);
 let rfiltro='todos';
 let fCliId=null,fTipo='i',fParcs=[],mparcId=null,mdiaData=null,preceberId=null;
@@ -984,7 +1129,12 @@ function mostrarApp(){
 }
 function temFinanceiro(){return QPERM.includes('financeiro');}
 function montarSidebar(){
-  let h='<div class="snl">Mensagens</div>';
+  /* O dashboard deixou de ser a tela de recebimentos e virou a visao
+     geral da operacao inteira — por isso subiu para o topo e saiu da
+     secao de dinheiro. So proprietario. */
+  let h='';
+  if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-dashboard" onclick="location.hash='#/dashboard'"><div class="nic">⊞</div>Dashboard</button>`;
+  h+='<div class="snl">Mensagens</div>';
   h+=`<button class="ni" id="nav-inbox" onclick="location.hash='#/inbox'"><div class="nic">💬</div>Caixa de Entrada</button>`;
   h+=`<button class="ni" id="nav-clientes" onclick="location.hash='#/clientes'"><div class="nic">◎</div>Contatos</button>`;
   h+='<div class="snl">Quadros</div>';
@@ -998,7 +1148,6 @@ function montarSidebar(){
     h+=`<button class="snlb ${fechado?'fechado':''}" onclick="navAlternarSecao('receb')">
           <span class="snlc">▾</span>Recebimentos</button>`;
     if(!fechado){
-      h+=`<button class="ni" id="nav-dashboard" onclick="location.hash='#/dashboard'"><div class="nic">⊞</div>Dashboard</button>`;
       h+=`<button class="ni" id="nav-recebimentos" onclick="location.hash='#/recebimentos'"><div class="nic">≡</div>Recebimentos</button>`;
       h+=`<button class="ni" id="nav-novorec" onclick="location.hash='#/recebimento/novo'"><div class="nic">＋</div>Novo recebimento</button>`;
     }
@@ -1064,13 +1213,19 @@ document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
   const mv=$('mvpop');
   if(mv&&!mv.classList.contains('h')){mv.classList.add('h');return;}
-  if($('modal')&&!$('modal').classList.contains('h'))fecharInteligente();
+  if($('modal')&&!$('modal').classList.contains('h')){fecharInteligente();return;}
+  /* O painel fecha por ultimo: com o cartao aberto por cima, Esc tem que
+     fechar o cartao e deixar a lista onde estava. */
+  const dw=$('dwr');
+  if(dw&&dw.classList.contains('on')){dwrFechar();return;}
 },true);
 function route(){
   if(!U)return;
   if(typeof pararInboxPoll==='function')pararInboxPoll();
   const r=(location.hash.slice(1)||'/').split('?')[0];
-  if(r==='/'){location.hash='#/quadro/'+(QPERM[0]||'comercial');return;}
+  /* Quem abre o CRM cai no dashboard, mas so o proprietario: para a
+     Naiarha a tela util e o quadro, nao o painel de gestao. */
+  if(r==='/'){location.hash=(U.nivel==='proprietario')?'#/dashboard':('#/quadro/'+(QPERM[0]||'comercial'));return;}
   let m;
   if(m=r.match(/^\/quadro\/(.+)$/))return pageQuadro(m[1]);
   if(r==='/cliente/novo')return pageCliente(null);
@@ -3138,59 +3293,401 @@ async function excluirCliente(id){
 }
 
 // ============================================================
-// DASHBOARD (recebimentos)
+// DASHBOARD
+//
+// Ate aqui esta tela era um resumo de recebimentos. Virou a visao geral
+// da operacao: onde as clientes estao, o que andou no periodo, o que
+// precisa de voce e o dinheiro.
+//
+// Tudo vem de UMA chamada a crm_dashboard(). A conta e feita no banco de
+// proposito: sao 37 mil clientes e o PostgREST corta em 1000 linhas sem
+// avisar. Somar no navegador daria um numero errado e silencioso — foi
+// exatamente assim que o seletor de Recebimentos quebrou.
+//
+// As linhas por tras de cada numero saem em outra chamada
+// (crm_dashboard_cards), e so quando voce clica. Se viessem junto, cada
+// abertura carregaria os 659 cartoes da base de reativacao a toa.
 // ============================================================
-function mudaMes(d){dashMes=new Date(dashMes.getFullYear(),dashMes.getMonth()+d,1);pageDash();}
+let DASH=null;
+let DASH_PER='dia';
+const DASH_PERIODOS=[['dia','Dia'],['semana','Semana'],['quinzena','Quinzena'],['mes','Mês']];
+const DASH_ROTULO_PER={dia:'hoje',semana:'esta semana',quinzena:'nos últimos 15 dias',mes:'neste mês'};
+
 async function pageDash(){
   const pc=$('pc');marcarNav('dashboard');
-  if(!temFinanceiro()){pc.innerHTML='<div class="emp"><div class="empt">Área restrita</div></div>';return;}
+  if(U.nivel!=='proprietario'){pc.innerHTML='<div class="emp"><div class="empt">Tela restrita a proprietários</div></div>';return;}
   pc.innerHTML='<div class="emp">Carregando...</div>';
-  await loadFin();
-  const ms=`${dashMes.getFullYear()}-${String(dashMes.getMonth()+1).padStart(2,'0')}`;
-  const pM=PARC.filter(p=>p.data_vencimento&&p.data_vencimento.startsWith(ms)&&p.status!=='cancelado');
-  const tot=pM.reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
-  const recM=pM.filter(p=>p.status==='recebido').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
-  const aRec=pM.filter(p=>stD(p)==='previsto').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
-  const atr=pM.filter(p=>stD(p)==='atrasado').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
-  const totR=PARC.filter(p=>p.status==='recebido').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
-  const pend=PARC.filter(p=>stD(p)==='previsto').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
-  const com=REC.reduce((s,r)=>s+parseFloat(r.indicador_comissao_total||0),0);
-  const atrs=PARC.filter(p=>stD(p)==='atrasado').sort((a,b)=>a.data_vencimento.localeCompare(b.data_vencimento));
-  const prox=PARC.filter(p=>stD(p)==='previsto'&&p.data_vencimento>=fISO(today())).sort((a,b)=>a.data_vencimento.localeCompare(b.data_vencimento)).slice(0,8);
+  await dashCarregar();
+}
+async function dashTrocarPeriodo(p){
+  DASH_PER=p;
+  await dashCarregar();
+}
+async function dashCarregar(){
+  const{data,error}=await sb.rpc('crm_dashboard',{p_periodo:DASH_PER});
+  if(error){
+    $('pc').innerHTML='<div class="emp"><div class="empt">Não consegui montar o dashboard</div><div class="emps">'+esc(error.message)+'</div></div>';
+    return;
+  }
+  DASH=data;
+  dashPintar();
+}
 
-  pc.innerHTML=`
+const dshK=v=>{const n=Number(v)||0;return n>=1000?'R$ '+(n/1000).toFixed(1).replace('.',',')+'k':'R$ '+n.toFixed(0);};
+function dshSaudacao(){
+  const h=new Date().getHours();
+  return h<12?'Bom dia':h<18?'Boa tarde':'Boa noite';
+}
+function dshHoraCurta(iso){
+  if(!iso)return'—';
+  return new Date(iso).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+
+function dashPintar(){
+  const d=DASH;if(!d)return;
+  const din=d.dinheiro||{},al=d.alertas||{},es=d.esteira||{},mo=d.motor||{};
+
+  /* Pulso do motor. Ele bate a cada poucos minutos; passando de 15 sem
+     sinal, alguma coisa parou e voce precisa saber antes da cliente. */
+  const pulsoMin=mo.ultimo_pulso?Math.floor((Date.now()-new Date(mo.ultimo_pulso).getTime())/60000):null;
+  const motorVivo=pulsoMin!==null&&pulsoMin<15;
+  const chipMotor=pulsoMin===null
+    ?`<div class="dsh-chip"><span class="dsh-dot off"></span>Motor <b>sem sinal</b></div>`
+    :`<div class="dsh-chip"><span class="dsh-dot ${motorVivo?'':'off'}"></span>Motor ${motorVivo?'vivo':'parado'} <b>há ${pulsoMin} min</b></div>`;
+
+  const falta=Math.max(0,(Number(din.mes_previsto)||0)-(Number(din.mes_recebido)||0));
+  const pct=Number(din.mes_previsto)>0?Math.min(100,Math.round((Number(din.mes_recebido)/Number(din.mes_previsto))*100)):0;
+  const difContratos=(Number(din.contratos_mes)||0)-(Number(din.contratos_ant)||0);
+
+  $('pc').innerHTML=`
     <div class="pgh">
-      <div><div class="pgt">Dashboard</div><div class="pgs">Visão geral dos recebimentos</div></div>
-      <div class="mn"><button class="mb2" onclick="mudaMes(-1)">‹</button><span class="ml">${fMes(dashMes)}</span><button class="mb2" onclick="mudaMes(1)">›</button></div>
+      <div><div class="pgt">${dshSaudacao()}, ${esc((U.nome||'').split(' ')[0])}</div>
+        <div class="pgs">${new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})} · atualizado às ${dshHoraCurta(d.gerado_em)}</div></div>
+      <div class="dsh-chips">
+        ${chipMotor}
+        <div class="dsh-chip">💬 <b>${mo.msgs_hoje||0}</b> mensagens hoje</div>
+        <div class="dsh-chip">⚡ <b>${mo.agendadas||0}</b> na fila</div>
+        <div class="dsh-chip"><button onclick="dashCarregar()">Atualizar</button></div>
+      </div>
     </div>
-    <div class="st" style="margin-top:0">Resumo de ${fMes(dashMes)}</div>
-    <div class="sgrid">
-      <div class="sc"><div class="scl">Total do mês</div><div class="scv">${R(tot)}</div><div class="scs">${pM.length} parcelas</div></div>
-      <div class="sc"><div class="scl" style="color:var(--teal)">Já recebido</div><div class="scv tl">${R(recM)}</div></div>
-      <div class="sc"><div class="scl" style="color:var(--yellow)">A receber</div><div class="scv yw">${R(aRec)}</div></div>
-      <div class="sc"><div class="scl" style="color:var(--red)">Atrasado</div><div class="scv rd">${R(atr)}</div></div>
+
+    <div class="dsh-est">
+      <div class="dsh-estt">
+        <div class="dsh-eyb">A esteira · onde as clientes estão agora</div>
+        <div class="tot">${(d.base&&d.base.cartoes_ativos)||0} cartões ativos · ${(es.reativacao||0)} na base fria de reativação</div>
+      </div>
+      <div class="dsh-esg">${dashEsteira(es,Number(din.honorario_medio)||0)}</div>
     </div>
-    <div class="st">Visão geral</div>
-    <div class="kgrid">
-      <div class="kpc" onclick="location.hash='#/recebimentos'"><div class="ki" style="background:var(--yellow-bg)">🕐</div><div class="kpl">Previsões pendentes</div><div class="kv" style="color:var(--yellow)">${R(pend)}</div><div class="kh">Clique para ver →</div></div>
-      <div class="kpc"><div class="ki" style="background:var(--green-bg)">📈</div><div class="kpl">Total recebido</div><div class="kv" style="color:var(--green)">${R(totR)}</div><div class="kh">Histórico completo</div></div>
-      <div class="kpc"><div class="ki" style="background:var(--rose-l)">💸</div><div class="kpl">Comissões pagas</div><div class="kv" style="color:var(--rose)">${R(com)}</div><div class="kh">Total de indicações</div></div>
-      <div class="kpc"><div class="ki" style="background:var(--teal-l)">💲</div><div class="kpl">Sobra líquida</div><div class="kv" style="color:var(--teal)">${R(totR-com)}</div><div class="kh">Recebido − comissões</div></div>
+
+    <div class="dsh-mov">
+      <div class="dsh-movt">
+        <div class="dsh-eyb">Movimento do período · o que andou</div>
+        <div class="dsh-seg" role="tablist">${DASH_PERIODOS.map(([k,r])=>
+          `<button role="tab" aria-selected="${k===DASH_PER}" onclick="dashTrocarPeriodo('${k}')">${r}</button>`).join('')}</div>
+      </div>
+      <div class="dsh-mvg">${dashMovimento(d.movimento||{})}</div>
+      <div class="dsh-nota">${dashNotaMovimento(d)}</div>
     </div>
-    ${atrs.length?`<div class="aw"><div class="at">⚠ Parcelas atrasadas (${atrs.length})</div><div class="card">${atrs.map(p=>`
-      <div class="lr" ${pCli(p)?`style="cursor:pointer" onclick="abrirCardCliente('${pCli(p)}')"`:''}><div class="av" style="background:${avC(p.cliente_nome)}">${avL(p.cliente_nome)}</div>
-      <div style="flex:1;min-width:0"><div class="rn">${esc(p.cliente_nome)}</div><div class="rm" style="color:var(--red)">Venceu em ${fD(p.data_vencimento)} — ${dAtr(p.data_vencimento)} dias atrás</div></div>
-      <div class="rr"><div class="rv rd">${R(p.valor_honorario)}</div>
-      <div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end"><button class="bic bg" onclick="event.stopPropagation();abreMRec('${p.id}')">✓</button><button class="bic bp2" onclick="event.stopPropagation();marcaInad('${p.id}')">⚑</button></div></div></div>`).join('')}</div></div>`:''}
-    <div class="st" style="display:flex;justify-content:space-between;align-items:center"><span>Próximos recebimentos</span>
-      <button style="background:none;border:none;font-size:11px;color:var(--teal);font-weight:700;cursor:pointer" onclick="location.hash='#/recebimentos'">Ver todos →</button></div>
-    <div class="card">${prox.length?prox.map(p=>{
-      const d=dVenc(p.data_vencimento);
-      const db=d===0?`<span class="dh">hoje</span>`:d<=3?`<span class="dh">em ${d}d</span>`:d<=7?`<span class="dw">em ${d}d</span>`:`<span class="dn">em ${d}d</span>`;
-      return`<div class="lr" ${pCli(p)?`style="cursor:pointer" onclick="abrirCardCliente('${pCli(p)}')"`:''}><div class="av" style="background:${avC(p.cliente_nome)}">${avL(p.cliente_nome)}</div>
-      <div style="flex:1;min-width:0"><div class="rn">${esc(p.cliente_nome)}</div><div class="rm">Parcela ${p.num_parcela}/${p.total_parcelas} — ${fD(p.data_vencimento)}${db}</div></div>
-      <div class="rr"><div class="rv">${R(p.valor_honorario)}</div>${bdg('previsto')}</div></div>`;
-    }).join(''):`<div class="emp"><div class="empi">✅</div><div class="empt">Tudo em dia!</div></div>`}</div>`;
+
+    ${dashAlertas(al)}
+
+    <div class="st">Dinheiro</div>
+    <div class="dsh-g2">
+      <div>
+        <div class="dsh-hero">
+          <div class="dsh-eyb">Recebido em ${new Date().toLocaleDateString('pt-BR',{month:'long'})}</div>
+          <div class="dsh-big dsh-num">${R(din.mes_recebido)}</div>
+          <div class="meta">${din.mes_parc_rec||0} de ${din.mes_parc_tot||0} parcelas do mês liquidadas</div>
+          <div class="dsh-bar"><i style="width:${pct}%"></i></div>
+          <div class="dsh-lg"><span>${pct}% da previsão</span><span>${falta>0?'faltam '+R(falta):'previsão batida'}</span></div>
+          <div class="dsh-sp">
+            <div><span>Recebido em ${new Date().getFullYear()}</span><b class="dsh-num">${R(din.ano_recebido)}</b></div>
+            <div><span>Contratado a receber</span><b class="dsh-num">${R(din.a_receber)}</b></div>
+          </div>
+        </div>
+        <div class="dsh-card" style="margin-top:16px">
+          <div class="dsh-eyb" style="margin-bottom:14px">Recebido por mês · previsão em diante</div>
+          ${dashGrafMeses(d.serie_meses||[])}
+          <div class="dsh-lgd">
+            <span><i style="background:var(--teal)"></i>Recebido</span>
+            <span><i style="background:var(--teal-m)"></i>Previsto</span>
+            <span><i style="background:var(--red)"></i>Inadimplente</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="dsh-mini">
+          <div class="dsh-mc"><div class="l">Contratos no mês</div><div class="v dsh-num">${din.contratos_mes||0}</div>
+            <div class="s" style="color:${difContratos<0?'var(--red)':'var(--green)'}">${difContratos===0?'igual ao mês passado':(difContratos>0?'▲ '+difContratos+' a mais':'▼ '+Math.abs(difContratos)+' a menos')+' que o mês passado'}</div></div>
+          <div class="dsh-mc"><div class="l">Honorário médio</div><div class="v dsh-num">${R(din.honorario_medio)}</div><div class="s">por contrato fechado</div></div>
+          <div class="dsh-mc"><div class="l">Benefício médio</div><div class="v dsh-num">${R(din.beneficio_medio)}</div><div class="s">recebido pela cliente</div></div>
+          <div class="dsh-mc"><div class="l">Inadimplente</div><div class="v dsh-num" style="color:var(--red)">${R(al.inadimplente_v)}</div><div class="s">${al.inadimplente||0} parcela(s)</div></div>
+        </div>
+        <div class="dsh-card" style="margin-top:10px">
+          <div class="dsh-eyb" style="margin-bottom:6px">Próximos vencimentos</div>
+          ${dashProximos(d.proximos||[])}
+        </div>
+      </div>
+    </div>
+
+    <div class="st">Conversas e Samara</div>
+    <div class="dsh-g2">
+      <div class="dsh-card">
+        <div class="dsh-eyb" style="margin-bottom:14px">Mensagens por dia · últimos 14 dias</div>
+        ${dashGrafMsgs(d.serie_msgs||[])}
+        <div class="dsh-lgd">
+          <span><i style="background:var(--teal2)"></i>Recebidas</span>
+          <span><i style="background:var(--teal)"></i>Enviadas pela Samara</span>
+          <span><i style="background:var(--rose)"></i>Enviadas por humano</span>
+        </div>
+      </div>
+      <div>
+        <div class="dsh-mini">
+          <div class="dsh-mc"><div class="l">Samara respondeu</div><div class="v dsh-num">${dashPctSamara(d.serie_msgs||[])}%</div><div class="s">das saídas nos 14 dias</div></div>
+          <div class="dsh-mc"><div class="l">Sem resposta</div><div class="v dsh-num" style="color:var(--yellow)">${al.sem_resposta||0}</div><div class="s">conversas aguardando</div></div>
+        </div>
+        <div class="dsh-card" style="margin-top:10px">
+          <div class="dsh-eyb" style="margin-bottom:8px">Últimos acontecimentos</div>
+          ${dashFeed(d.feed||[])}
+        </div>
+      </div>
+    </div>
+
+    <div class="st">Cartões por etapa</div>
+    <div class="dsh-card">${dashFunil(d.funil||[])}</div>
+  `;
+}
+
+/* Cada parada e um botao: o numero sozinho nao serve de nada se voce nao
+   consegue ver quem esta la dentro. */
+function dashEsteira(es,honMedio){
+  const paradas=[
+    {n:'Reativação',q:es.reativacao||0,cls:'frio',k:'reativacao',frio:true},
+    {n:'Lead novo',q:es.lead_novo||0,cls:'on',k:'lead_novo'},
+    {n:'Documentos',q:es.documentos||0,cls:'on',k:'documentos'},
+    {n:'Contrato',q:es.contrato||0,cls:'gold',k:'contrato'},
+    {n:'Gestação',q:es.gestacao||0,cls:'rose',k:'gestacao'},
+    {n:'No INSS',q:es.inss||0,cls:'on',k:'inss'},
+    {n:'Pagando',q:es.pagando||0,cls:'on',k:'pagando'}
+  ];
+  return paradas.map(p=>{
+    const clic=p.q>0;
+    return `<button class="dsh-et ${p.q?p.cls:'vazio'} ${clic?'dsh-clic':''}" ${clic?`onclick="dwrAbrir('${p.k}','${p.n}','Cartões parados aqui agora')"`:'disabled'}>
+      <div class="bola">${p.q}</div>
+      <div class="nm">${p.n}</div>
+      <div class="vl">${p.frio?'base fria':dshK(p.q*honMedio)}</div>
+    </button>`;
+  }).join('');
+}
+
+/* Os cinco da jornada em ordem, e o descarte separado por um divisor: e
+   a saida, nao uma etapa. */
+function dashMovimento(m){
+  const campos=[
+    ['direito','Com direito','mov_direito'],
+    ['contrato','Em fase de contrato','mov_contrato'],
+    ['fechado','Contratos fechados','mov_fechado'],
+    ['protocolado','Benefícios protocolados','mov_protocolado'],
+    ['concedido','Benefícios concedidos','mov_concedido']
+  ];
+  const cel=(k,rot,rec,extra)=>{
+    const v=m[k]||0;
+    return `<button class="dsh-mv ${extra||''} ${v?'dsh-clic':'zero'}" ${v?`onclick="dwrAbrir('${rec}','${rot}','Movimentação ${DASH_ROTULO_PER[DASH_PER]}')"`:'disabled'}>
+      <div class="n dsh-num">${v}</div><div class="l">${rot}</div></button>`;
+  };
+  return campos.map(([k,r,rec])=>cel(k,r,rec)).join('')
+    +'<div class="dsh-sep"></div>'
+    +cel('descartado','Descartados','mov_descartado','out');
+}
+
+/* O CRM so grava movimento de cartao desde 17/08/2026 — antes disso o
+   historico do Trello virou comentario. Sem este aviso, "mes" pareceria
+   um mes fraco em vez de um registro que ainda nao existe. */
+function dashNotaMovimento(d){
+  const base='Contando '+DASH_ROTULO_PER[DASH_PER]+'.';
+  if(!d.movimento_desde)return base;
+  const desde=new Date(d.movimento_desde);
+  const inicio=new Date(d.periodo&&d.periodo.de?d.periodo.de:Date.now());
+  if(desde<=inicio)return base;
+  return base+' O CRM só registra movimento de cartão desde '+desde.toLocaleDateString('pt-BR')+
+    ' — período maior que isso ainda mostra os mesmos dias.';
+}
+
+function dashAlertas(al){
+  const itens=[
+    {n:al.sem_dpp,l:'Gestantes sem data prevista de parto',h:'A fase PRÉ inteira depende dela',cls:'r',k:'sem_dpp'},
+    {n:al.inadimplente,l:'Parcelas inadimplentes',h:R(al.inadimplente_v)+' parados',cls:'r',k:'inadimplente'},
+    {n:al.exigencia,l:'Exigências abertas no INSS',h:'Prazo corre contra',cls:'y',k:'exigencia'},
+    {n:al.samara_pausada,l:'Clientes com a Samara pausada',h:'Esperando você responder',cls:'p',k:'samara_pausada'},
+    {n:al.automacao_erro,l:'Automações que falharam',h:'Mensagem não saiu',cls:'y',k:'automacao_erro'},
+    {n:al.sem_resposta,l:'Conversas sem resposta',h:'A cliente falou por último',cls:'t',k:'sem_resposta'}
+  ].filter(a=>Number(a.n)>0);
+  if(!itens.length)return'';
+  return '<div class="st">Precisa de você</div><div class="dsh-al">'+itens.map(a=>
+    `<button class="dsh-ac ${a.cls}" onclick="dwrAbrir('${a.k}','${a.l}','${esc(a.h)}')">
+      <div class="n dsh-num">${a.n}</div><div class="l">${a.l}</div><div class="h">${a.h}</div></button>`).join('')+'</div>';
+}
+
+function dashGrafMeses(serie){
+  if(!serie.length)return'<div class="emp"><div class="empt">Sem histórico</div></div>';
+  const W=640,H=190,pb=26,pt=16,pl=6,pr=6;
+  const tot=s=>(Number(s.recebido)||0)+(Number(s.previsto)||0)+(Number(s.inadimplente)||0);
+  const max=Math.max(...serie.map(tot),1)*1.12;
+  const bw=(W-pl-pr)/serie.length,bar=Math.min(38,bw*.56);
+  const y=v=>H-pb-(v/max)*(H-pb-pt);
+  const mesAtual=new Date().toISOString().slice(0,7);
+  let g='';
+  [0,.5,1].forEach(f=>{const yy=y(max*f);g+=`<line x1="${pl}" x2="${W-pr}" y1="${yy}" y2="${yy}" stroke="#E8F4F4" stroke-width="1"/>`;});
+  serie.forEach((s,i)=>{
+    const cx=pl+bw*i+bw/2,x=cx-bar/2;
+    const rec=Number(s.recebido)||0,pre=Number(s.previsto)||0,ina=Number(s.inadimplente)||0;
+    let acc=0;
+    [[rec,'#0A9396'],[pre,'#94D2BD'],[ina,'#C0392B']].forEach(([v,c])=>{
+      if(v<=0)return;acc+=v;
+      g+=`<rect x="${x}" y="${y(acc)}" width="${bar}" height="${H-pb-y(v)}" rx="4" fill="${c}"/>`;
+    });
+    const t=tot(s);
+    if(t>0)g+=`<text x="${cx}" y="${y(t)-6}" text-anchor="middle" font-size="9.5" font-weight="700" fill="#7FA8A8">${(t/1000).toFixed(1).replace('.',',')}k</text>`;
+    const atual=s.m===mesAtual;
+    g+=`<text x="${cx}" y="${H-9}" text-anchor="middle" font-size="10.5" font-weight="${atual?800:700}" fill="${atual?'#0D2B2B':'#7FA8A8'}">${MESES[parseInt(s.m.slice(5,7),10)-1].slice(0,3).toLowerCase()}</text>`;
+  });
+  return`<svg class="dsh-gr" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${g}</svg>`;
+}
+
+/* Par de barras por dia: recebidas de um lado, enviadas do outro, com a
+   parte da Samara empilhada dentro das enviadas. Da para ver de relance
+   quando ela assumiu e quando a conversa voltou para a mao. */
+function dashGrafMsgs(serie){
+  if(!serie.length)return'<div class="emp"><div class="empt">Sem mensagens</div></div>';
+  const W=640,H=170,pb=24,pt=12,pl=4,pr=4;
+  const max=Math.max(...serie.map(s=>Math.max(Number(s.entrada)||0,(Number(s.bot)||0)+(Number(s.humano)||0))),1)*1.15;
+  const gw=(W-pl-pr)/serie.length,bar=Math.min(11,gw*.3);
+  const y=v=>H-pb-(v/max)*(H-pb-pt);
+  let g='';
+  [0,.5,1].forEach(f=>{const yy=y(max*f);g+=`<line x1="${pl}" x2="${W-pr}" y1="${yy}" y2="${yy}" stroke="#E8F4F4" stroke-width="1"/>`;});
+  serie.forEach((s,i)=>{
+    const cx=pl+gw*i+gw/2;
+    const ent=Number(s.entrada)||0,bot=Number(s.bot)||0,hum=Number(s.humano)||0,env=bot+hum;
+    if(ent)g+=`<rect x="${cx-bar-1.5}" y="${y(ent)}" width="${bar}" height="${H-pb-y(ent)}" rx="3" fill="#00B4D8"/>`;
+    if(env){
+      g+=`<rect x="${cx+1.5}" y="${y(env)}" width="${bar}" height="${H-pb-y(env)}" rx="3" fill="#E87CA0"/>`;
+      if(bot)g+=`<rect x="${cx+1.5}" y="${y(bot)}" width="${bar}" height="${H-pb-y(bot)}" rx="3" fill="#0A9396"/>`;
+    }
+    g+=`<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="9.5" font-weight="700" fill="#7FA8A8">${String(s.d).slice(8,10)}</text>`;
+  });
+  return`<svg class="dsh-gr" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${g}</svg>`;
+}
+
+function dashPctSamara(serie){
+  let bot=0,hum=0;
+  serie.forEach(s=>{bot+=Number(s.bot)||0;hum+=Number(s.humano)||0;});
+  return bot+hum>0?Math.round(bot/(bot+hum)*100):0;
+}
+
+function dashProximos(lista){
+  if(!lista.length)return'<div class="emp"><div class="empi">✅</div><div class="empt">Nada vencendo</div></div>';
+  return lista.map(p=>{
+    const dv=dVenc(p.vence);
+    const quando=dv===0?'vence hoje':dv<0?'venceu':'vence em '+dv+'d';
+    return`<div class="lr" ${p.cliente_id?`style="cursor:pointer" onclick="abrirCardCliente('${p.cliente_id}')"`:''}>
+      <div class="av" style="background:${avC(p.nome)}">${avL(p.nome)}</div>
+      <div style="flex:1;min-width:0"><div class="rn">${esc(p.nome)}</div>
+      <div class="rm">Parcela ${p.n}/${p.de} · ${fD(p.vence)} (${quando})</div></div>
+      <div class="rv dsh-num">${R(p.valor)}</div></div>`;
+  }).join('');
+}
+
+function dashFeed(lista){
+  if(!lista.length)return'<div class="emp"><div class="empt">Nada registrado</div></div>';
+  return lista.map(f=>`<div class="dsh-fi">
+    <div class="h">${dshHoraCurta(f.criado_em)}</div>
+    <div><div class="mod">${esc(f.modulo||'')}</div><div class="m">${esc(f.mensagem||'')}</div></div></div>`).join('');
+}
+
+function dashFunil(listas){
+  const porQuadro={};
+  listas.forEach(l=>{(porQuadro[l.quadro]=porQuadro[l.quadro]||[]).push(l);});
+  const ordem=Object.keys(QUADROS);
+  return ordem.filter(q=>porQuadro[q]).map(q=>{
+    const ls=porQuadro[q];
+    const tot=ls.reduce((s,l)=>s+(Number(l.qtd)||0),0);
+    const mx=Math.max(...ls.map(l=>Number(l.qtd)||0),1);
+    return`<div><div class="dsh-qb"><span>${QUADROS[q].rotulo}</span><span class="dsh-num">${tot}</span></div>
+      ${ls.map(l=>{const v=Number(l.qtd)||0;return`<div class="dsh-li">
+        <div class="t"><span>${esc(l.lista)}</span><b class="dsh-num">${v}</b></div>
+        <div class="b"><i style="width:${v/mx*100}%;background:${l.cor||'#5A7070'};opacity:${v?.85:0}"></i></div></div>`;}).join('')}</div>`;
+  }).join('');
+}
+
+// ============================================================
+// PAINEL: OS CARTOES POR TRAS DO NUMERO
+//
+// Toda contagem da tela abre aqui e responde tres coisas: quem, onde a
+// cliente esta AGORA e por que ela entrou nesta conta.
+//
+// "Onde esta agora" nao e enfeite. Nos recortes de evento (concedidos na
+// semana, descartados no dia) ela ja pode ter andado desde entao: ver que
+// uma concedida ontem ja esta no Financeiro, ou que continua parada em
+// Em analise, e a informacao que faltava.
+// ============================================================
+let DWR_REC=null,DWR_LINHAS=[],DWR_TOTAL=0,DWR_OFFSET=0,DWR_CARREGANDO=false;
+const DWR_PAGINA=50;
+
+async function dwrAbrir(recorte,titulo,sub){
+  DWR_REC={recorte,titulo,sub};
+  DWR_LINHAS=[];DWR_TOTAL=0;DWR_OFFSET=0;
+  $('dwrf').value='';
+  $('dwrt').textContent=titulo;
+  $('dwrc').textContent=sub||'';
+  $('dwrb').innerHTML='<div class="emp">Carregando...</div>';
+  $('dwrv').classList.add('on');
+  $('dwr').classList.add('on');
+  await dwrBuscar();
+}
+function dwrFechar(){
+  $('dwrv').classList.remove('on');
+  $('dwr').classList.remove('on');
+}
+async function dwrBuscar(){
+  if(!DWR_REC||DWR_CARREGANDO)return;
+  DWR_CARREGANDO=true;
+  const{data,error}=await sb.rpc('crm_dashboard_cards',{
+    p_recorte:DWR_REC.recorte,p_periodo:DASH_PER,p_offset:DWR_OFFSET,p_limit:DWR_PAGINA
+  });
+  DWR_CARREGANDO=false;
+  if(error){$('dwrb').innerHTML='<div class="emp"><div class="empt">Erro ao carregar a lista</div><div class="emps">'+esc(error.message)+'</div></div>';return;}
+  const linhas=data||[];
+  DWR_TOTAL=linhas.length?Number(linhas[0].total)||0:DWR_TOTAL;
+  DWR_LINHAS=DWR_LINHAS.concat(linhas);
+  DWR_OFFSET+=linhas.length;
+  dwrPintar();
+}
+function dwrPintar(){
+  if(!DWR_REC)return;
+  const busca=($('dwrf').value||'').trim().toLowerCase();
+  const vis=DWR_LINHAS.filter(l=>!busca
+    ||String(l.nome||'').toLowerCase().includes(busca)
+    ||String(l.telefone||'').includes(busca));
+  $('dwrc').textContent=(DWR_REC.sub?DWR_REC.sub+' · ':'')
+    +DWR_TOTAL+(DWR_TOTAL===1?' cliente':' clientes')
+    +(DWR_LINHAS.length<DWR_TOTAL?' · '+DWR_LINHAS.length+' carregadas':'');
+  let h=vis.length?vis.map(l=>`
+    <div class="dwr-row" onclick="abrirCardCliente('${l.cliente_id}')">
+      <div class="av" style="background:${avC(l.nome)}">${avL(l.nome)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="nm">${esc(l.nome||'Sem nome')}</div>
+        <div class="tel">${esc(l.telefone||'sem telefone')}</div>
+        ${l.lista?`<div class="dwr-onde"><i style="background:${l.cor||'#5A7070'}"></i>${esc(QUADROS[l.quadro]?QUADROS[l.quadro].rotulo:(l.quadro||''))} › ${esc(l.lista)}</div>`:''}
+        ${l.contexto?`<div class="ctx">${esc(l.contexto)}</div>`:''}
+      </div>
+      ${l.valor?`<div class="vlr dsh-num">${R(l.valor)}</div>`:''}
+    </div>`).join('')
+    :'<div style="padding:40px 12px;text-align:center;color:var(--text3);font-size:12.5px;font-weight:600">Nenhuma cliente aqui.<br>Troque o período ou limpe a busca.</div>';
+  if(DWR_LINHAS.length<DWR_TOTAL){
+    const faltam=DWR_TOTAL-DWR_LINHAS.length;
+    h+=`<button class="dwr-mais" onclick="dwrBuscar()">Carregar mais ${Math.min(DWR_PAGINA,faltam)} de ${faltam}</button>`;
+  }
+  $('dwrb').innerHTML=h;
 }
 
 // ============================================================

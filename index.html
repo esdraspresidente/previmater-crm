@@ -596,11 +596,6 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .filabalao{margin:0 0 6px;font-size:14px;line-height:1.55;color:var(--text);}
 .filabalao:last-child{margin-bottom:0;}
 .filaacoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px;}
-.autoitem{display:flex;align-items:center;gap:16px;padding:14px 17px;border:1.5px solid var(--border);border-radius:12px;margin-bottom:9px;background:var(--white);flex-wrap:wrap;}
-.autoitem-nome{font-weight:700;font-size:14px;color:var(--text);min-width:190px;}
-.autoitem-info{flex:1;font-size:13px;color:var(--text2);min-width:160px;}
-.autoitem-tag{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px;border-radius:7px;background:var(--teal-l);color:var(--teal);margin-right:8px;}
-.autoitem-tag.off{background:#F3F4F6;color:#6B7280;}
 .mcquickwrap{position:relative;}
 .mcquick{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 22px;}
 .mvpop{position:fixed;background:var(--white);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shl);width:300px;max-height:65vh;overflow-y:auto;z-index:210;padding:16px;}
@@ -1155,7 +1150,6 @@ function montarSidebar(){
   }
   h+='<div class="snl">Configurações</div>';
   h+=`<button class="ni" id="nav-etiquetas" onclick="location.hash='#/etiquetas'"><div class="nic">◇</div>Etiquetas</button>`;
-  h+=`<button class="ni" id="nav-automacoes" onclick="location.hash='#/automacoes'"><div class="nic">⚡</div>Automações</button>`;
   if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-fila" onclick="location.hash='#/fila'"><div class="nic">☰</div>Fila de automações<span class="nidot h" id="nav-fila-dot"></span></button>`;
   if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-campanha" onclick="location.hash='#/campanha'"><div class="nic">◐</div>Campanha</button>`;
   if(U.nivel==='proprietario')h+=`<button class="ni" id="nav-logs" onclick="location.hash='#/logs'"><div class="nic">▤</div>Logs</button>`;
@@ -1232,7 +1226,6 @@ function route(){
   if(r==='/cliente/novo')return pageCliente(null);
   if(m=r.match(/^\/cliente\/(.+)$/))return pageCliente(m[1]);
   if(r==='/etiquetas')return pageEtiquetas();
-  if(r==='/automacoes')return pageAutomacoes();
   if(r==='/fila')return pageFila();
   if(r==='/campanha')return pageCampanha();
   if(r==='/dashboard')return pageDash();
@@ -2121,43 +2114,6 @@ async function registrarMovimentoLista(clienteId,origListaId,destListaId){
   ]);
   registrarAtividade(clienteId,`moveu o cartão de "${lo?lo.nome:'?'}" para "${ld?ld.nome:'?'}"`,undefined,
     {tipo:'movimento',lista_origem:lo?lo.nome:null,lista_destino:ld?ld.nome:null});
-  await checarAutomacaoMovimento(clienteId,destListaId);
-}
-async function checarAutomacaoMovimento(clienteId,destListaId){
-  const{data:auto}=await sb.from('crm_automacoes_config').select('*').eq('lista_id',destListaId).eq('ativo',true).maybeSingle();
-  if(!auto)return;
-  const{data:cli}=await sb.from('crm_clientes').select('nome_completo,canal_whatsapp,telefone_principal').eq('id',clienteId).single();
-  if(!cli)return;
-  const primeiroNome=(cli.nome_completo||'').split(' ')[0];
-  const msg=(auto.mensagem||'').replaceAll('{nome}',cli.nome_completo||'').replaceAll('{primeiro_nome}',primeiroNome);
-  const enviar=await mostrarConfirmAutomacao(auto.nome,msg,!!cli.canal_whatsapp);
-  if(enviar){
-    await sb.from('crm_mensagens').insert({
-      cliente_id:clienteId,telefone_bruto:cli.telefone_principal||null,canal:cli.canal_whatsapp,
-      direcao:'saida',autor_tipo:'bot',usuario_id:U.id,tipo:'texto',texto:msg,
-      status:'pendente_envio',enviada_em:new Date().toISOString()
-    });
-    registrarAtividade(clienteId,`enviou a automação "${auto.nome}"`);
-  }else{
-    registrarAtividade(clienteId,`não enviou a automação "${auto.nome}" (dispensada ao mover o cartão)`);
-  }
-}
-function mostrarConfirmAutomacao(nomeAuto,mensagem,temCanal){
-  return new Promise(resolve=>{
-    abrirModal(`
-      <div class="mbt">⚡ Automação da Samara</div>
-      <div class="mbs">Mover para esta lista dispara: <b>${esc(nomeAuto)}</b></div>
-      <div class="fld ff" style="margin-bottom:14px"><label>Mensagem que seria enviada</label>
-        <div style="background:#F3FAFA;border:1.5px solid var(--border);border-radius:11px;padding:12px 14px;font-size:14px;line-height:1.5;white-space:pre-wrap;color:var(--text)">${esc(mensagem)}</div>
-      </div>
-      ${temCanal?'':'<div class="fhint" style="margin-bottom:14px;color:var(--red);font-weight:700">Esta cliente não tem um Canal WhatsApp definido — não é possível enviar agora.</div>'}
-      <div class="brow" style="justify-content:flex-end;gap:9px">
-        <button class="btn btns" id="auto-nao">Não enviar</button>
-        <button class="btn btnp" id="auto-sim" ${temCanal?'':'disabled'}>Enviar agora</button>
-      </div>`);
-    $('auto-nao').onclick=()=>{fecharModal();resolve(false);};
-    $('auto-sim').onclick=()=>{fecharModal();resolve(true);};
-  });
 }
 function atualizarContadores(){
   document.querySelectorAll('.kl').forEach(l=>{
@@ -4399,68 +4355,6 @@ async function excluirEtiqueta(id){
   toast('Etiqueta excluída','ok');pageEtiquetas();
 }
 
-// ============================================================
-// AUTOMAÇÕES — mensagem da Samara disparada ao mover cartão pra uma lista
-// ============================================================
-async function pageAutomacoes(){
-  const pc=$('pc');marcarNav('automacoes');
-  pc.innerHTML='<div class="emp">Carregando...</div>';
-  const[{data:listas,error},{data:autos}]=await Promise.all([
-    sb.from('crm_listas').select('*').eq('arquivada',false).order('quadro').order('ordem'),
-    sb.from('crm_automacoes_config').select('*')
-  ]);
-  if(error){pc.innerHTML='<div class="emp"><div class="empt">Erro ao carregar</div></div>';return;}
-  const porLista={};(autos||[]).forEach(a=>porLista[a.lista_id]=a);
-  const porQuadro={};
-  (listas||[]).forEach(l=>{(porQuadro[l.quadro]=porQuadro[l.quadro]||[]).push(l);});
-  let html='<div class="pgh"><div><div class="pgt">Automações</div><div class="pgs">Mensagem da Samara disparada quando um cartão é movido para cada lista</div></div></div>';
-  Object.keys(porQuadro).filter(q=>QPERM.includes(q)).sort((a,b)=>QUADROS[a].ordem-QUADROS[b].ordem).forEach(q=>{
-    html+=`<div class="fst" style="margin-top:22px">${QUADROS[q].rotulo}</div>`;
-    html+=porQuadro[q].map(l=>{
-      const a=porLista[l.id];
-      return`<div class="autoitem">
-        <div class="autoitem-nome">${esc(l.nome)}</div>
-        ${a?`<div class="autoitem-info"><span class="autoitem-tag ${a.ativo?'':'off'}">${a.ativo?'Ativa':'Inativa'}</span>${esc(a.nome)}</div>`
-          :'<div class="autoitem-info fhint">Nenhuma automação configurada</div>'}
-        <button class="btn btns" style="padding:9px 16px" onclick="modalAutomacao('${l.id}','${a?a.id:''}')">${a?'Editar':'+ Configurar'}</button>
-      </div>`;
-    }).join('');
-  });
-  pc.innerHTML=html;
-}
-async function modalAutomacao(listaId,autoId){
-  let a=null;
-  if(autoId){const{data}=await sb.from('crm_automacoes_config').select('*').eq('id',autoId).single();a=data;}
-  const{data:lista}=await sb.from('crm_listas').select('nome').eq('id',listaId).single();
-  abrirModal(`
-    <div class="mbt">Automação — ${esc(lista?lista.nome:'')}</div>
-    <div class="mbs">Disparada quando um cartão é movido para esta lista</div>
-    <div class="fld" style="margin-bottom:13px"><label>Nome da automação</label><input type="text" id="am-nome" value="${escA(a?a.nome:'')}" placeholder="Ex: Aviso de protocolo enviado"/></div>
-    <div class="fld ff" style="margin-bottom:10px"><label>Mensagem</label><textarea id="am-msg" placeholder="Ex: Oi {nome}, passando pra avisar que seu pedido foi protocolado no INSS!">${esc(a?a.mensagem:'')}</textarea></div>
-    <div class="fhint" style="margin-bottom:16px">Use <b>{nome}</b> pro nome completo da cliente, ou <b>{primeiro_nome}</b> só pro primeiro nome.</div>
-    <label style="display:flex;align-items:center;gap:7px;margin-bottom:20px;cursor:pointer"><input type="checkbox" id="am-ativo" ${(!a||a.ativo)?'checked':''} style="width:auto"/><span style="font-size:13px;font-weight:600;color:var(--text2)">Automação ativa</span></label>
-    <div class="brow" style="justify-content:space-between">
-      ${a?`<button class="btnd" onclick="excluirAutomacao('${a.id}')">Excluir</button>`:'<span></span>'}
-      <div style="display:flex;gap:9px"><button class="btn btns" onclick="fecharModal()">Cancelar</button>
-      <button class="btn btnp" onclick="salvarAutomacao('${listaId}','${a?a.id:''}')">Salvar</button></div>
-    </div>`);
-}
-async function salvarAutomacao(listaId,autoId){
-  const nome=$('am-nome').value.trim(),mensagem=$('am-msg').value.trim(),ativo=$('am-ativo').checked;
-  if(!nome||!mensagem){toast('Preencha o nome e a mensagem','er');return;}
-  const payload={lista_id:listaId,nome,mensagem,ativo,atualizado_em:new Date().toISOString()};
-  const{error}=autoId?await sb.from('crm_automacoes_config').update(payload).eq('id',autoId):await sb.from('crm_automacoes_config').insert(payload);
-  if(error){toast('Erro ao salvar: '+error.message,'er');return;}
-  toast('Automação salva','ok');
-  fecharModal();pageAutomacoes();
-}
-async function excluirAutomacao(id){
-  if(!confirm('Excluir esta automação?'))return;
-  const{error}=await sb.from('crm_automacoes_config').delete().eq('id',id);
-  if(error){toast('Erro ao excluir','er');return;}
-  toast('Automação excluída','in');
-  fecharModal();pageAutomacoes();
-}
 
 
 // ============================================================

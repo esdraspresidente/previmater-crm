@@ -2389,7 +2389,7 @@ function renderCardClienteModal(c,etqSel,listas){
     <div class="mcond" id="mc-trilha"></div>
     <div class="st" style="margin:20px 0 9px">Sequências</div>
     <div id="mc-seqs"><div class="seqbox"><div class="seqvazio">Carregando...</div></div></div>
-    ${c.arquivado_em?`<div class="gb-arqbanner"><span>📦 Este cartão foi arquivado automaticamente (60 dias parado em Pago / encerrado)</span><button class="btn btns" style="padding:5px 12px;font-size:11.5px;flex-shrink:0" onclick="reativarCliente('${c.id}')">Reativar</button></div>`:''}
+    ${c.arquivado_em?`<div class="gb-arqbanner"><span>📦 Este cartão está arquivado — fora do quadro, mas nada foi apagado</span><button class="btn btns" style="padding:5px 12px;font-size:11.5px;flex-shrink:0" onclick="reativarCliente('${c.id}')">Reativar</button></div>`:''}
 
     <div class="mcetq" id="mc-etq-wrap">
       <div class="etp-sel" id="mc-etq-chips">${mcChipsHtml()}<button class="etp-add etq-trigger" onclick="mcTogEtqPicker(this)">+ Etiqueta</button></div>
@@ -2487,7 +2487,12 @@ function renderCardClienteModal(c,etqSel,listas){
         <input type="file" id="mc-anexo-input" multiple style="display:none" onchange="uploadAnexo(this,'${c.id}')"/>
 
         <div class="brow" style="justify-content:space-between;margin-top:18px">
-          <button class="btnd" onclick="excluirClienteModal('${c.id}')">Excluir cliente</button>
+          <div style="display:flex;align-items:center;gap:12px">
+            ${c.arquivado_em
+              ?`<button class="btn btns" onclick="reativarCliente('${c.id}')">📦 Desarquivar</button>`
+              :`<button class="btn btns" onclick="arquivarClienteCard('${c.id}')">📦 Arquivar</button>`}
+            <button class="btnd" onclick="excluirClienteModal('${c.id}')">Excluir cliente</button>
+          </div>
           <div style="display:flex;gap:9px">
             <button class="btn btns" onclick="fecharModal()">Fechar</button>
             <button class="btn btnp" id="mc-btn-salvar" onclick="salvarCardCliente('${c.id}')">Salvar</button>
@@ -2794,6 +2799,21 @@ async function executarBuscaGlobal(termo){
       <div class="gb-nome">${esc(c.nome_completo)}${c.arquivado_em?'<span class="gb-arq">Arquivado</span>':''}</div>
       <div class="gb-meta">${QUADROS[c.quadro]?QUADROS[c.quadro].rotulo:(c.quadro||'—')}${c.telefone_principal?' · '+esc(c.telefone_principal):''}</div>
     </div>`).join('');
+}
+/* Arquivar nao apaga nada: so preenche crm_clientes.arquivado_em. O quadro
+   carrega com .is('arquivado_em',null), entao o card some da coluna; o
+   contador 📦 do cabecalho da lista continua achando ele, e o desarquivar e
+   o mesmo reativarCliente que o arquivamento automatico de 60 dias ja usa.
+   Manual e automatico gravam no mesmo campo de proposito — uma porta so
+   para sair do quadro, uma so para voltar. */
+async function arquivarClienteCard(id){
+  if(!confirm('Arquivar este cartão?\n\nEle sai do quadro, mas nada é apagado: continua acessível pelo 📦 da lista e pela busca de contatos.'))return;
+  const{error}=await sb.from('crm_clientes').update({arquivado_em:new Date().toISOString()}).eq('id',id);
+  if(error){toast('Erro ao arquivar','er');return;}
+  await registrarAtividade(id,'arquivou o cartão',undefined);
+  toast('Cartão arquivado','ok');
+  fecharModal();
+  refrescarRotaAtual();
 }
 async function reativarCliente(id){
   if(!confirm('Reativar esta cliente? Ela volta a aparecer no quadro Financeiro.'))return;

@@ -105,6 +105,9 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 .fqtd{width:34px;text-align:right;font-size:14px;font-weight:800;}
 
 .linha7{font-size:11px;color:var(--text2);background:#F3FAFA;border-radius:8px;padding:8px 10px;margin-bottom:14px;}
+.btcsv{background:var(--white);border:1px solid var(--border);color:var(--teal);border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}
+.btcsv:active{background:var(--teal-l);}
+.ctopo{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
 .vazio{font-size:12px;color:var(--text3);padding:14px 0;text-align:center;}
 .rodape{text-align:center;font-size:11px;color:var(--text3);margin-top:18px;line-height:1.6;}
 </style>
@@ -162,7 +165,10 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
     </div>
 
     <div class="card">
-      <div class="ctit">Contatos novos por dia</div>
+      <div class="ctopo">
+        <div class="ctit">Contatos novos por dia</div>
+        <button class="btcsv" onclick="baixarDiario()">Exportar CSV</button>
+      </div>
       <div class="csub">Pessoa que mandou a primeira mensagem naquele dia. Um número por pessoa, não por mensagem.</div>
       <div class="linha7" id="linha7">—</div>
       <div class="bars" id="bars"></div>
@@ -198,7 +204,10 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
     </div>
 
     <div class="card">
-      <div class="ctit">Funil comercial agora</div>
+      <div class="ctopo">
+        <div class="ctit">Funil comercial agora</div>
+        <button class="btcsv" onclick="baixarFunil()">Exportar CSV</button>
+      </div>
       <div class="csub">Quantas pessoas estão paradas em cada etapa neste momento. É uma foto, não um acumulado do mês. "Chegaram e pararam" não é etapa: é um corte de quem está parado há mais de 24h nas três primeiras, então soma junto com elas.</div>
       <div class="fbotoes" id="fvariante" style="margin-bottom:14px;"></div>
       <div id="funil"></div>
@@ -451,6 +460,56 @@ function desenharInvestimento(j,contatos){
     ? (desde?('Sem gasto registrado neste período. O gasto é coletado desde '+desde+'.'):'Ainda não há dado do Meta.')
     : ('Gasto da conta PREVIMATER #01 no período selecionado · '+t.dias+' dia(s) com dado'
        +(desde?' · coletado desde '+desde:''));
+}
+
+// ------------------------------------------------------------
+// EXPORTAÇÃO
+//
+// Separador ponto e vírgula e decimal com vírgula: é o que o Excel em
+// português abre com as colunas já separadas. Com vírgula e ponto, ele
+// joga tudo numa coluna só e o arquivo vira trabalho em vez de atalho.
+// O BOM no começo é o que faz acento aparecer certo no Excel.
+// ------------------------------------------------------------
+function csvCampo(v){
+  const t=String(v==null?'':v);
+  return /[;"\n]/.test(t) ? '"'+t.replace(/"/g,'""')+'"' : t;
+}
+function num(v,casas){ return Number(v||0).toFixed(casas).replace('.',','); }
+
+function baixar(nome,linhas){
+  const texto='\uFEFF'+linhas.map(l=>l.map(csvCampo).join(';')).join('\r\n');
+  const url=URL.createObjectURL(new Blob([texto],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a');
+  a.href=url; a.download=nome; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
+/** Série diária do período selecionado, CRM e Meta na mesma linha. */
+function baixarDiario(){
+  const j=janela(PERIODO);
+  const meta={}; for(const m of META) meta[m.dia]=m;
+  const linhas=[['Dia','Contatos novos','Contratos enviados','Contratos assinados',
+                 'Investido (R$)','Alcance','Cliques','Conversas (Meta)',
+                 'Custo por conversa (R$)','Custo por contato (R$)']];
+  for(const l of LINHAS){
+    if(l.dia<j.ini||l.dia>j.fim) continue;
+    const m=meta[l.dia]||{gasto:0,alcance:0,cliques:0,conversas:0};
+    const g=Number(m.gasto||0), cv=Number(m.conversas||0), ct=Number(l.novos_contatos||0);
+    linhas.push([
+      l.dia.split('-').reverse().join('/'),
+      ct, l.contratos_enviados||0, l.contratos_assinados||0,
+      num(g,2), m.alcance||0, m.cliques||0, cv,
+      cv>0?num(g/cv,2):'', ct>0?num(g/ct,2):''
+    ]);
+  }
+  baixar('previmater-trafego-'+j.ini+'-a-'+j.fim+'.csv',linhas);
+}
+
+/** Foto do funil, com os três recortes na mesma planilha. */
+function baixarFunil(){
+  const linhas=[['Etapa','Geral','PRE','ADM']];
+  for(const l of ESTOQUE) linhas.push([l.lista,l.qtd||0,l.qtd_pre||0,l.qtd_adm||0]);
+  baixar('previmater-funil-'+hojeISO()+'.csv',linhas);
 }
 
 function desenharDias(quantos){

@@ -1150,6 +1150,10 @@ function montarSidebar(){
        aprovação, o que falhou e o que venceu. Enterrada no rodapé, só era
        vista quando alguém já tinha reclamado. */
     h+=`<button class="ni" id="nav-fila" onclick="location.hash='#/fila'"><div class="nic">☰</div>Fila de automações<span class="nidot h" id="nav-fila-dot"></span></button>`;
+    /* Tráfego. Só proprietário: é a mesma tela que o Rafael vê, e serve
+       para conferir o que ele está enxergando antes de cobrar resultado.
+       O Rafael entra direto em trafego.html — ele não passa por aqui. */
+    h+=`<button class="ni" id="nav-trafego" onclick="location.hash='#/trafego'"><div class="nic">◔</div>Tráfego</button>`;
   }
   h+='<div class="snl">Mensagens</div>';
   h+=`<button class="ni" id="nav-inbox" onclick="location.hash='#/inbox'"><div class="nic">💬</div>Caixa de Entrada</button>`;
@@ -1299,6 +1303,7 @@ function route(){
   if(m=r.match(/^\/cliente\/(.+)$/))return pageCliente(m[1]);
   if(r==='/etiquetas')return pageEtiquetas();
   if(r==='/fila')return pageFila();
+  if(r==='/trafego')return pageTrafego();
   if(r==='/dashboard')return pageDash();
   if(r==='/resumo')return pageResumoRec();
   if(r==='/recebimentos')return pageRec();
@@ -1311,6 +1316,33 @@ function route(){
   $('pc').innerHTML='<div class="emp"><div class="empt">Tela não encontrada</div></div>';
 }
 
+
+// ============================================================
+// TRÁFEGO
+//
+// A tela vive em trafego.html, arquivo proprio, e entra aqui dentro de
+// um iframe. NAO e preguica: e o unico jeito de voce e o Rafael verem
+// exatamente a mesma coisa. Copiar o codigo para ca criaria duas telas
+// que divergem no primeiro ajuste, e ai o numero que voce cobra dele
+// deixa de ser o numero que ele ve.
+//
+// O ?embed=1 esconde o cabecalho proprio da pagina — principalmente o
+// botao Sair, que sendo mesma origem derrubaria a sessao do CRM junto.
+// ============================================================
+
+function pageTrafego(){
+  marcarNav('trafego');
+  $('pc').innerHTML=`
+    <div class="pgh">
+      <div>
+        <div class="pgt">Tráfego</div>
+        <div class="pgs">A mesma tela que o Rafael enxerga — sem dado pessoal de cliente</div>
+      </div>
+    </div>
+    <iframe src="trafego.html?embed=1"
+            style="width:100%;height:calc(100vh - 150px);min-height:520px;border:none;background:transparent;"
+            title="Painel de tráfego"></iframe>`;
+}
 
 // ============================================================
 // LOGS DO SISTEMA

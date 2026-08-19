@@ -260,6 +260,16 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(10,147,150,.1);}
 .fld textarea{min-height:68px;resize:vertical;}
 .fhint{font-size:10px;color:var(--text3);line-height:1.4;}
+/* Seletor de quem indicou. A lista flutua sobre o campo seguinte, por
+   isso o z-index alto: sem ele as sugestoes ficam atras do proximo
+   input e viram inclicaveis. */
+.indsug{position:absolute;top:100%;left:0;right:0;z-index:40;background:var(--white);border:1.5px solid var(--border);border-radius:9px;box-shadow:0 10px 24px rgba(0,0,0,.13);margin-top:3px;overflow:hidden;display:none;}
+.indsug.on{display:block;}
+.indsug div{padding:10px 13px;cursor:pointer;font-size:14px;border-bottom:1px solid var(--border);}
+.indsug div:last-child{border-bottom:none;}
+.indsug div:hover{background:var(--teal-l);}
+.indsug .indsub{display:block;font-size:11px;color:var(--text3);margin-top:2px;}
+.indvinc{font-size:10px;font-weight:700;color:var(--teal);}
 .tg{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
 .to{border:2px solid var(--border);border-radius:11px;padding:13px 15px;cursor:pointer;transition:all .15s;}
 .to.s{border-color:var(--teal);background:var(--teal-l);}
@@ -3315,6 +3325,12 @@ async function pageCliente(id){
         <div class="fld"><label>Telefone / WhatsApp</label><input type="text" id="f-tel" value="${escA(c&&c.telefone_principal)}"/></div>
         <div class="fld"><label>Canal WhatsApp</label><select id="f-canal">${optCanal}</select></div>
         <div class="fld"><label>Origem</label><select id="f-origem"><option value="">— selecione —</option>${optOrig}</select></div>
+        <div class="fld ff" style="position:relative"><label>Indicada por</label>
+          <input type="text" id="f-indicanome" autocomplete="off" placeholder="nome de quem indicou esta cliente" value="${escA(c&&c.indicado_por_nome)}" oninput="buscarIndicadora(this.value)" onfocus="buscarIndicadora(this.value)" onblur="setTimeout(fecharSugIndicadora,200)"/>
+          <input type="hidden" id="f-indicaid" value="${escA(c&&c.indicado_por)}"/>
+          <div class="indsug" id="indsug"></div>
+          <div class="fhint" id="indhint"></div>
+        </div>
         <div class="fld"><label>Data de nascimento do bebê</label><input type="date" id="f-dn" value="${(c&&c.data_nascimento_bebe)||''}"/></div>
         <div class="fld"><label>Link do Trello</label><input type="url" id="f-trello" placeholder="https://trello.com/c/..." value="${escA(c&&c.trello_url)}"/></div>
       </div>
@@ -3356,6 +3372,7 @@ async function pageCliente(id){
       </div>
     </div>`;
   renderCaixaCliente();
+  atualizarHintIndicadora();
 }
 function recalcHonorariosCliente(){
   const vb=m2f($('f-vb'));
@@ -3375,6 +3392,59 @@ async function trocarQuadroForm(){
   const q=$('f-quadro').value;
   const{data:L}=await sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem');
   $('f-lista').innerHTML=(L||[]).map(l=>`<option value="${l.id}">${esc(l.nome)}</option>`).join('');
+}
+// ============================================================
+// QUEM INDICOU
+//
+// Dois campos num so: o NOME sempre vale (e o que entra na mensagem que
+// a Samara manda para a indicada), e o VINCULO com o card da indicadora
+// e opcional. Quem indicou pelo seu outro telefone, por ligacao ou
+// pessoalmente pode simplesmente nao ter card — travar o campo em "so
+// aceita card existente" deixaria voce parado justamente na hora de
+// andar.
+//
+// Com vinculo da para pagar os R$200 depois, porque existe rastro de
+// quem indicou quem. Sem vinculo, e so o nome no texto.
+//
+// A BUSCA VAI AO BANCO, nao filtra em memoria. Sao 37 mil clientes e o
+// PostgREST corta em 1000 linhas sem avisar — filtrar no navegador
+// acharia so quem estivesse no primeiro pedaco, e calado.
+// ============================================================
+let INDTIMER=null;
+function buscarIndicadora(v){
+  const t=(v||'').trim();
+  if(INDTIMER)clearTimeout(INDTIMER);
+  // Digitou por cima do que estava escolhido: o vinculo morre. Manter o
+  // id antigo com nome novo apontaria para a pessoa errada.
+  const cx=$('f-indicaid');
+  if(cx&&cx.getAttribute('data-nome')&&cx.getAttribute('data-nome')!==t)cx.value='';
+  atualizarHintIndicadora();
+  if(t.length<3){fecharSugIndicadora();return;}
+  INDTIMER=setTimeout(async()=>{
+    const busca=t.replace(/[%,()]/g,'');
+    const{data}=await sb.from('crm_clientes').select('id,nome_completo,telefone_principal').ilike('nome_completo','%'+busca+'%').order('nome_completo').limit(8);
+    const cx2=$('indsug');if(!cx2)return;
+    const atual=(location.hash.match(/cliente\/([^?&]+)/)||[])[1]||'';
+    const achados=(data||[]).filter(x=>x.id!==atual);
+    if(!achados.length){
+      cx2.innerHTML='<div style="cursor:default;color:var(--text3)">Ninguém com esse nome na base — vale como texto livre.</div>';
+      cx2.classList.add('on');return;
+    }
+    cx2.innerHTML=achados.map(x=>`<div onmousedown="escolherIndicadora('${x.id}',this.getAttribute('data-n'))" data-n="${escA(x.nome_completo)}">${esc(x.nome_completo)}<span class="indsub">${esc(x.telefone_principal||'sem telefone')}</span></div>`).join('');
+    cx2.classList.add('on');
+  },350);
+}
+function escolherIndicadora(id,nome){
+  $('f-indicanome').value=nome;
+  const cx=$('f-indicaid');cx.value=id;cx.setAttribute('data-nome',nome);
+  fecharSugIndicadora();atualizarHintIndicadora();
+}
+function fecharSugIndicadora(){const c=$('indsug');if(c)c.classList.remove('on');}
+function atualizarHintIndicadora(){
+  const h=$('indhint');if(!h)return;
+  const nome=($('f-indicanome')||{}).value||'',id=($('f-indicaid')||{}).value||'';
+  if(!nome.trim()){h.innerHTML='Obrigatório para o card sair da lista <b>Chamar indicada</b>: é este nome que a Samara usa no primeiro contato.';return;}
+  h.innerHTML=id?'<span class="indvinc">✓ vinculada ao card dela</span> — a indicação fica registrada para o pagamento dos R$200.':'Sem vínculo com card: o nome entra na mensagem, mas não gera rastro para o pagamento.';
 }
 async function salvarCliente(id){
   const btn=$('btn-salvar'),nome=$('f-nome').value.trim();
@@ -3398,8 +3468,11 @@ async function salvarCliente(id){
     valor_beneficio_esperado:m2f($('f-vb'))||null,
     valor_honorarios:m2f($('f-vh'))||null,
     observacoes:$('f-obs').value.trim()||null,
+    indicado_por_nome:$('f-indicanome')?($('f-indicanome').value.trim()||null):undefined,
+    indicado_por:$('f-indicaid')?($('f-indicaid').value||null):undefined,
     atualizado_em:new Date().toISOString()
   };
+  Object.keys(payload).forEach(k=>{if(payload[k]===undefined)delete payload[k];});
   const etqSel=[...document.querySelectorAll('#etp .ett.on')].map(e=>e.getAttribute('data-etq'));
   btn.disabled=true;btn.textContent='Salvando...';
   let cid=id,error,ehNovo=!id;

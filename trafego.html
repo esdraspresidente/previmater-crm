@@ -74,6 +74,17 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 .kpi .n{font-size:26px;font-weight:800;letter-spacing:-.8px;line-height:1.1;}
 .kpi .l{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-top:4px;}
 
+.inv{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+@media(max-width:640px){.inv{grid-template-columns:repeat(2,1fr);}}
+.iv{background:#F3FAFA;border-radius:var(--r);padding:12px;}
+.iv .n{font-size:20px;font-weight:800;letter-spacing:-.5px;}
+.iv .l{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-top:3px;}
+.dois{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
+@media(max-width:640px){.dois{grid-template-columns:1fr;}}
+.cpl{border:1px solid var(--border);border-radius:var(--r);padding:12px;}
+.cpl .n{font-size:22px;font-weight:800;letter-spacing:-.6px;}
+.cpl .l{font-size:11px;font-weight:700;color:var(--text2);margin-top:2px;}
+.cpl .e{font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5;}
 .card{background:var(--white);border:1px solid var(--border);border-radius:var(--rl);padding:18px;box-shadow:var(--sh);margin-bottom:16px;}
 .ctit{font-size:13px;font-weight:800;margin-bottom:2px;}
 .csub{font-size:11px;color:var(--text3);margin-bottom:16px;}
@@ -158,6 +169,34 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
     </div>
 
     <div class="card">
+      <div class="ctit">Investimento no Meta</div>
+      <div class="csub" id="invsub">—</div>
+      <div class="inv">
+        <div class="iv"><div class="n" id="i1">—</div><div class="l">Investido</div></div>
+        <div class="iv"><div class="n" id="i2">—</div><div class="l">Alcance</div></div>
+        <div class="iv"><div class="n" id="i3">—</div><div class="l">Cliques</div></div>
+        <div class="iv"><div class="n" id="i4">—</div><div class="l">Conversas (Meta)</div></div>
+      </div>
+      <div class="dois">
+        <div class="cpl">
+          <div class="n" id="cpl1">—</div>
+          <div class="l">Custo por conversa</div>
+          <div class="e">Divide o gasto pelas conversas que o <b>Meta</b> reconhece como vindas de anúncio.</div>
+        </div>
+        <div class="cpl">
+          <div class="n" id="cpl2">—</div>
+          <div class="l">Custo por contato novo</div>
+          <div class="e">Divide o mesmo gasto por <b>todo</b> contato novo do CRM — inclui orgânico e boca a boca.</div>
+        </div>
+      </div>
+      <div class="e" style="font-size:11px;color:var(--text3);margin-top:12px;line-height:1.5;">
+        Os dois estão certos e medem coisas diferentes. O custo real fica entre eles:
+        o Meta só conta quem ele consegue atribuir ao anúncio; o CRM conta todo mundo que apareceu.
+        Não existe como fechar essa diferença com o número de WhatsApp atual.
+      </div>
+    </div>
+
+    <div class="card">
       <div class="ctit">Funil comercial agora</div>
       <div class="csub">Quantas pessoas estão paradas em cada etapa neste momento. É uma foto, não um acumulado do mês. "Chegaram e pararam" não é etapa: é um corte de quem está parado há mais de 24h nas três primeiras, então soma junto com elas.</div>
       <div class="fbotoes" id="fvariante" style="margin-bottom:14px;"></div>
@@ -238,6 +277,7 @@ async function abrir(){
 // Supabase é cobrado por tráfego de saída.
 // ------------------------------------------------------------
 let LINHAS=[];           // uma linha por dia, direto da view
+let META=[];             // uma linha por dia, gasto do Meta
 let ESTOQUE=[];          // uma linha por etapa do funil
 let VARIANTE='qtd';      // qtd = geral | qtd_pre | qtd_adm
 let PERIODO='7';         // hoje | ontem | 7 | 15 | 30
@@ -247,10 +287,12 @@ const PERIODOS=[['hoje','Hoje'],['ontem','Ontem'],['7','7 dias'],['15','15 dias'
 const COMPARACOES=[['0','Não comparar'],['1','Dia anterior'],['7','Semana anterior'],['15','Quinzena anterior'],['30','Mês anterior']];
 
 async function carregar(){
-  const [dia,estoque]=await Promise.all([
+  const [dia,estoque,meta]=await Promise.all([
     sb.from('vw_trafego_dia').select('dia,novos_contatos,contratos_enviados,contratos_assinados').order('dia',{ascending:true}).limit(400),
-    sb.from('vw_trafego_estoque').select('ordem,lista,qtd,qtd_pre,qtd_adm').order('ordem',{ascending:true}).limit(30)
+    sb.from('vw_trafego_estoque').select('ordem,lista,qtd,qtd_pre,qtd_adm').order('ordem',{ascending:true}).limit(30),
+    sb.from('vw_trafego_meta_dia').select('dia,gasto,alcance,cliques,conversas').order('dia',{ascending:true}).limit(400)
   ]);
+  if(!meta.error && Array.isArray(meta.data)) META=meta.data;
 
   // A view devolve um dia por linha desde 12/08. Com 400 dias de teto o
   // array cabe inteiro na memoria, entao filtro e comparacao acontecem
@@ -343,6 +385,8 @@ function aplicar(){
   escreverComparacao('c3',a.enviados,b.enviados,jAnt,inicioDados);
   escreverComparacao('c4',a.assinados,b.assinados,jAnt,inicioDados);
 
+  desenharInvestimento(j,a.contatos);
+
   const periodoTxt=j.dias===1?fmtBR(j.ini):fmtBR(j.ini)+' a '+fmtBR(j.fim);
   const compTxt=COMPARAR==='0'?'':' · comparado com '+(jAnt.ini===jAnt.fim?fmtBR(jAnt.ini):fmtBR(jAnt.ini)+' a '+fmtBR(jAnt.fim));
   $('linha7').textContent='Período: '+periodoTxt+compTxt+'. Contatos são registrados desde '
@@ -352,6 +396,40 @@ function aplicar(){
   // uma barra sozinha não diz nada. Os KPIs seguem o filtro; o gráfico
   // dá o contexto em volta.
   desenharDias(Math.max(j.dias,7));
+}
+
+const brl=v=>'R$ '+Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const mil=v=>Number(v||0).toLocaleString('pt-BR');
+
+/**
+ * O gasto acompanha o mesmo filtro de período dos contatos. Somar gasto
+ * de uma janela e leads de outra daria um custo por lead inventado — e
+ * é o número que o Rafa vai levar para decidir onde põe dinheiro.
+ */
+function desenharInvestimento(j,contatos){
+  const t=META.reduce((a,l)=>{
+    if(l.dia<j.ini||l.dia>j.fim) return a;
+    a.gasto+=Number(l.gasto||0); a.alcance+=Number(l.alcance||0);
+    a.cliques+=Number(l.cliques||0); a.conversas+=Number(l.conversas||0);
+    a.dias++;
+    return a;
+  },{gasto:0,alcance:0,cliques:0,conversas:0,dias:0});
+
+  $('i1').textContent=brl(t.gasto);
+  $('i2').textContent=mil(t.alcance);
+  $('i3').textContent=mil(t.cliques);
+  $('i4').textContent=mil(t.conversas);
+
+  $('cpl1').textContent=t.conversas>0?brl(t.gasto/t.conversas):'—';
+  $('cpl2').textContent=contatos>0?brl(t.gasto/contatos):'—';
+
+  // Dizer desde quando existe número do Meta evita a leitura errada de
+  // "investimos zero" num período que é só anterior à coleta.
+  const desde=META.length?fmtBR(META[0].dia):null;
+  $('invsub').textContent=t.dias===0
+    ? (desde?('Sem gasto registrado neste período. O gasto é coletado desde '+desde+'.'):'Ainda não há dado do Meta.')
+    : ('Gasto da conta PREVIMATER #01 no período selecionado · '+t.dias+' dia(s) com dado'
+       +(desde?' · coletado desde '+desde:''));
 }
 
 function desenharDias(quantos){

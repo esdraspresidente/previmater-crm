@@ -40,6 +40,12 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .lerr{font-size:12px;color:var(--red);text-align:center;margin-top:10px;min-height:16px;line-height:1.4;}
 
 /* ---------- app ---------- */
+/* Dentro do CRM a pagina vira aba: o cabecalho proprio some. O botao
+   Sair era o risco real — mesma origem, mesma sessao, entao sair aqui
+   derrubaria o login do CRM inteiro sem avisar. */
+body.embed header{display:none;}
+body.embed #app{padding-top:4px;}
+body.embed .wrap{padding-top:0;}
 #app{display:none;min-height:100vh;padding:0 0 40px;}
 #app.v{display:block;}
 header{background:var(--white);border-bottom:1px solid var(--border);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
@@ -172,6 +178,8 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 const SUPABASE_URL='https://ggyngtqknonwnohbzkyj.supabase.co';
 const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdneW5ndHFrbm9ud25vaGJ6a3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5ODA4NzcsImV4cCI6MjA5NDU1Njg3N30.0zYn_V9gBtRNWivAHfps6u68akb0mTc7Ix8ZD38OD0I';
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const EMBUTIDO=new URLSearchParams(location.search).get('embed')==='1';
+if(EMBUTIDO) document.body.classList.add('embed');
 
 const $=id=>document.getElementById(id);
 

@@ -2970,20 +2970,88 @@ function mcPagamentosHtml(clienteId){
      justamente a busca que não achava todo mundo. */
   const totalCli=parc.reduce((s,p)=>s+(parseFloat(p.valor_cliente)||0),0);
   const linhaCli=totalCli>0?`<div style="font-size:12.5px;color:var(--green);font-weight:700;margin-bottom:9px">Cliente recebe ${R(totalCli)} · nossos honorários ${R(totalHon)}</div>`:'';
-  const resumo=linhaCli+`<div style="font-size:12.5px;color:var(--text2);margin-bottom:9px">${recebidas.length} de ${parc.length} parcelas recebidas · ${R(recHon)} de ${R(totalHon)}${proxima?' · Próxima: '+fD(proxima.data_vencimento):''}</div>`;
+  const pend=parc.filter(p=>p.status!=='recebido'&&p.status!=='inadimplente');
+  const aConsultar=pend.filter(p=>!p.data_confirmada).length;
+  const aComunicar=pend.filter(p=>p.data_confirmada&&!p.comunicada_em).length;
+  const pilha=[];
+  if(aConsultar)pilha.push(aConsultar+' a consultar no INSS');
+  if(aComunicar)pilha.push(aComunicar+' a avisar a cliente');
+  const linhaPend=pilha.length?`<div style="font-size:12px;color:var(--orange,#B06000);font-weight:700;margin-bottom:9px">⏳ ${pilha.join(' · ')}</div>`:'';
+  const resumo=linhaCli+linhaPend+`<div style="font-size:12.5px;color:var(--text2);margin-bottom:9px">${recebidas.length} de ${parc.length} parcelas recebidas · ${R(recHon)} de ${R(totalHon)}${proxima?' · Próxima: '+fD(proxima.data_vencimento):''}</div>`;
   const badgeCor={recebido:['var(--green-bg)','var(--green)'],inadimplente:['var(--red-bg)','var(--red)'],previsto:['var(--gray-bg)','var(--gray)']};
   const linhas=parc.map(p=>{
     const[bg,fg]=badgeCor[p.status]||badgeCor.previsto;
     const rotulo=p.status==='recebido'?'Recebido':p.status==='inadimplente'?'Inadimplente':'Previsto';
     const vc=parseFloat(p.valor_cliente)||0;
-    return`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid var(--border2);font-size:12.5px">
-      <span>Parcela ${p.num_parcela}/${p.total_parcelas} · ${fD(p.data_vencimento)}${vc>0?`<span style="color:var(--green);font-weight:600"> · cliente recebe ${R(vc)}</span>`:''}</span>
+    /* A data que o cadastro gerou e projecao: somou um mes e parou. So vira
+       data firme depois de conferida no Meu INSS, porque o INSS paga entre o
+       1o e o 5o dia util mas tambem solta na ultima semana. Sem essa
+       distincao a tela mostra chute com a mesma cara de certeza do que ja
+       caiu, e nao ha como saber quem falta consultar. */
+    const pendente=p.status!=='recebido'&&p.status!=='inadimplente';
+    const marcaData=pendente&&!p.data_confirmada
+      ?`<span style="color:var(--text3);font-weight:600"> (estimada)</span>`:'';
+    let acao='';
+    if(pendente&&!p.data_confirmada){
+      acao=`<button class="btn btns" style="padding:2px 9px;font-size:10.5px" onclick="confirmarDataINSS('${p.id}')">Confirmar no INSS</button>`;
+    }else if(pendente&&!p.comunicada_em){
+      acao=`<button class="btn btnp" style="padding:2px 9px;font-size:10.5px" onclick="marcarComunicada('${p.id}')">Avisar cliente</button>`;
+    }else if(p.comunicada_em){
+      acao=`<span style="color:var(--green);font-size:10.5px;font-weight:700">avisada ${fD(String(p.comunicada_em).slice(0,10))}</span>`;
+    }
+    return`<div style="padding:6px 0;border-top:1px solid var(--border2);font-size:12.5px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+      <span>Parcela ${p.num_parcela}/${p.total_parcelas} · ${fD(p.data_vencimento)}${marcaData}${vc>0?`<span style="color:var(--green);font-weight:600"> · cliente recebe ${R(vc)}</span>`:''}</span>
       <span style="display:flex;align-items:center;gap:8px">${R(p.valor_honorario)}<span style="background:${bg};color:${fg};padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700">${rotulo}</span></span>
+      </div>
+      ${acao?`<div style="margin-top:5px">${acao}</div>`:''}
     </div>`;
   }).join('');
   return{temParc:true,html:resumo+linhas};
 }
 
+/* CONFIRMAR NO INSS e AVISAR CLIENTE.
+   Sao as duas metades do trabalho que voce faz entre os dias 15 e 20 e que
+   ate agora nao existia em lugar nenhum: descobrir quando e quanto o INSS vai
+   pagar, e contar isso para a mae. Separadas de proposito — uma e consulta,
+   a outra e conversa, e misturar as duas na mesma pilha obriga a separar de
+   novo na cabeca toda vez. */
+async function confirmarDataINSS(parcelaId){
+  const p=(PARC||[]).find(x=>String(x.id)===String(parcelaId));
+  if(!p){toast('Parcela não encontrada','er');return;}
+  const dt=prompt('Data do pagamento conforme o Meu INSS (dd/mm/aaaa):',fD(p.data_vencimento));
+  if(dt===null)return;
+  const m=(dt||'').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if(!m){toast('Data inválida. Use dd/mm/aaaa','er');return;}
+  const iso=m[3]+'-'+m[2]+'-'+m[1];
+  const vlTxt=prompt('Valor que a cliente recebe nesta parcela (R$):',floatToMoney(parseFloat(p.valor_cliente)||0));
+  if(vlTxt===null)return;
+  const vl=moneyToFloat(vlTxt);
+  const{error}=await sb.from('pm_parcelas')
+    .update({data_vencimento:iso,valor_cliente:vl,data_confirmada:true}).eq('id',p.id);
+  if(error){toast('Erro ao confirmar: '+error.message,'er');return;}
+  await registrarAtividade(pCli(p),'confirmou no INSS a parcela '+p.num_parcela+'/'+p.total_parcelas+': '+fD(iso)+', cliente recebe '+R(vl),null);
+  toast('Data confirmada','ok');
+  await loadFin(true);
+  await abrirCardCliente(pCli(p));
+}
+async function marcarComunicada(parcelaId){
+  const p=(PARC||[]).find(x=>String(x.id)===String(parcelaId));
+  if(!p){toast('Parcela não encontrada','er');return;}
+  const vc=parseFloat(p.valor_cliente)||0;
+  const texto='Oi! Saiu o pagamento da sua parcela '+p.num_parcela+'/'+p.total_parcelas+'. '
+    +'Cai no dia '+fD(p.data_vencimento)+', no valor de '+R(vc)+'. '
+    +'Os nossos honorários dessa parcela ficam em '+R(p.valor_honorario||0)+'.';
+  if(!confirm('Marcar como avisada e copiar a mensagem?\n\n'+texto))return;
+  try{await navigator.clipboard.writeText(texto);}catch(e){}
+  const{error}=await sb.from('pm_parcelas')
+    .update({comunicada_em:new Date().toISOString()}).eq('id',p.id);
+  if(error){toast('Erro ao marcar: '+error.message,'er');return;}
+  await registrarAtividade(pCli(p),'avisou a cliente sobre a parcela '+p.num_parcela+'/'+p.total_parcelas+' ('+fD(p.data_vencimento)+')',null);
+  toast('Marcada como avisada · mensagem copiada','ok');
+  await loadFin(true);
+  await abrirCardCliente(pCli(p));
+}
 function mcTogSenha(btn){
   const inp=$('mc-senha-inss');
   if(inp.type==='password'){inp.type='text';btn.textContent='🙈';}

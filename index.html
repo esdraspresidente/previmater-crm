@@ -2737,12 +2737,24 @@ function chatJanelaHtml(msgs,canal){
   if(resta<=4)return'<div class="chatjanela warn">⚠ Janela de 24h fechando — faltam '+(resta<1?Math.round(resta*60)+' min':Math.floor(resta)+'h')+' para responder livremente.</div>';
   return'<div class="chatjanela ok">✔ Janela de 24h aberta — faltam '+Math.floor(resta)+'h para responder livremente.</div>';
 }
+/* COLUNAS DO CHAT — tudo menos 'bruto'.
+   'bruto' e o payload cru que o WhatsApp mandou, guardado so para
+   diagnostico. Nunca aparece na tela, mas viajava junto em todo
+   carregamento e responde por metade do peso da tabela.
+
+   E o limite caiu de 300 para 40 mensagens, lidas da mais nova para a
+   mais velha (antes vinha ascending, o que num limite baixo devolveria
+   as 40 MAIS ANTIGAS e a conversa apareceria congelada no passado).
+   A ordem e invertida no JS, entao a tela continua igual: mais antiga
+   em cima, mais nova embaixo. Historico completo, quando precisar, e no
+   proprio WhatsApp do celular. */
+const COLS_CHAT='id,cliente_id,telefone_chave,telefone_bruto,canal,instancia_numero,direcao,autor_tipo,usuario_id,tipo,texto,midia_caminho,midia_nome,midia_mime,midia_tamanho,id_externo,status,enviada_em,criado_em';
 async function carregarChat(clienteId,silencioso){
   const feed=$('mc-chat-feed');
   if(!feed||!clienteId)return;
-  const{data,error}=await sb.from('crm_mensagens').select('*').eq('cliente_id',clienteId).order('criado_em',{ascending:true}).limit(300);
+  const{data,error}=await sb.from('crm_mensagens').select(COLS_CHAT).eq('cliente_id',clienteId).order('criado_em',{ascending:false}).limit(40);
   if(error){if(!silencioso)feed.innerHTML='<div class="fhint" style="text-align:center;padding:14px 0">Erro ao carregar a conversa: '+esc(error.message)+'</div>';return;}
-  const msgs=data||[];
+  const msgs=(data||[]).slice().reverse();
   const assinatura=msgs.length+'|'+(msgs.length?(msgs[msgs.length-1].id||''):'');
   const jan=$('mc-chat-janela');
   if(jan)jan.innerHTML=chatJanelaHtml(msgs,mcChatCanal);
@@ -5524,11 +5536,11 @@ async function ibCarregarChat(c,silencioso){
   }
   const filtro=c.clienteId?{coluna:'cliente_id',valor:c.clienteId}:{coluna:'telefone_chave',valor:c.telefoneChave};
   if(!filtro.valor)return;
-  const{data,error}=await sb.from('crm_mensagens').select('*').eq(filtro.coluna,filtro.valor).order('criado_em',{ascending:true}).limit(300);
+  const{data,error}=await sb.from('crm_mensagens').select(COLS_CHAT).eq(filtro.coluna,filtro.valor).order('criado_em',{ascending:false}).limit(40);
   const feed=$('ib-chat-feed');
   if(!feed)return;
   if(error){feed.innerHTML='<div class="fhint" style="text-align:center;padding:20px 0">Erro ao carregar a conversa: '+esc(error.message)+'</div>';return;}
-  const msgs=data||[];
+  const msgs=(data||[]).slice().reverse();
   const assinatura=msgs.length+'|'+(msgs.length?(msgs[msgs.length-1].id||''):'');
   const jan=$('ib-chat-janela');
   if(jan)jan.innerHTML=chatJanelaHtml(msgs,c.canal);

@@ -189,6 +189,7 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
           <div class="e">Divide o mesmo gasto por <b>todo</b> contato novo do CRM — inclui orgânico e boca a boca.</div>
         </div>
       </div>
+      <div class="e" id="avisohoje" style="font-size:11px;margin-top:12px;line-height:1.5;background:var(--yellow-bg);border:1px solid #F0D9AE;border-radius:10px;padding:10px 12px;color:#7A4400;display:none;"></div>
       <div class="e" style="font-size:11px;color:var(--text3);margin-top:12px;line-height:1.5;">
         Os dois estão certos e medem coisas diferentes. O custo real fica entre eles:
         o Meta só conta quem ele consegue atribuir ao anúncio; o CRM conta todo mundo que apareceu.
@@ -422,6 +423,26 @@ function desenharInvestimento(j,contatos){
 
   $('cpl1').textContent=t.conversas>0?brl(t.gasto/t.conversas):'—';
   $('cpl2').textContent=contatos>0?brl(t.gasto/contatos):'—';
+
+  // POR QUE O NÚMERO NÃO BATE COM O GERENCIADOR DE ANÚNCIOS.
+  //
+  // "Últimos 7 dias" no Gerenciador NÃO inclui o dia corrente: ele vai de
+  // D-7 até ontem. Aqui a janela vai até hoje, porque quem olha o painel
+  // de manhã quer ver o dia andando. As duas contas estão certas e vão
+  // divergir todo santo dia — então a tela diz de quanto é a diferença,
+  // em vez de deixar alguém achar que um dos dois está quebrado.
+  const hoje=hojeISO();
+  const doHoje=META.find(l=>l.dia===hoje);
+  const incluiHoje=j.fim>=hoje && j.dias>1 && doHoje;
+  const av=$('avisohoje');
+  if(incluiHoje){
+    const semHoje=t.gasto-Number(doHoje.gasto||0);
+    const cvSemHoje=t.conversas-Number(doHoje.conversas||0);
+    av.style.display='block';
+    av.innerHTML='<b>Comparando com o Gerenciador de Anúncios?</b> Lá, "últimos 7 dias" não inclui o dia de hoje. '
+      +'Tirando hoje ('+brl(doHoje.gasto)+' e '+doHoje.conversas+' conversa(s)), este período dá '
+      +'<b>'+brl(semHoje)+'</b> e <b>'+cvSemHoje+'</b> conversa(s) — que é o número que aparece no Meta.';
+  } else { av.style.display='none'; }
 
   // Dizer desde quando existe número do Meta evita a leitura errada de
   // "investimos zero" num período que é só anterior à coleta.

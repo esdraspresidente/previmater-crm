@@ -51,6 +51,17 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 .aviso{background:var(--yellow-bg);border:1px solid #F0D9AE;border-radius:var(--r);padding:12px 14px;font-size:12px;color:#7A4400;line-height:1.55;margin-bottom:18px;}
 .aviso b{font-weight:700;}
 
+.filtros{display:flex;flex-direction:column;gap:10px;margin-bottom:16px;}
+.fgrupo{display:flex;flex-direction:column;gap:5px;}
+.flabel{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;}
+.fbotoes{display:flex;flex-wrap:wrap;gap:6px;}
+.fb{background:var(--white);border:1px solid var(--border);color:var(--text2);border-radius:99px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}
+.fb.on{background:var(--teal);border-color:var(--teal);color:#fff;}
+.kpi .cmp{font-size:11px;font-weight:700;margin-top:3px;}
+.cmp.sobe{color:var(--green);}
+.cmp.desce{color:var(--red);}
+.cmp.igual{color:var(--text3);}
+.cmp.sembase{color:var(--text3);font-weight:600;}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;}
 @media(max-width:640px){.kpis{grid-template-columns:repeat(2,1fr);}}
 .kpi{background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:14px;box-shadow:var(--sh);}
@@ -115,11 +126,22 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
       mês não mede campanha — mede quando o sistema entrou no ar.
     </div>
 
+    <div class="filtros">
+      <div class="fgrupo">
+        <div class="flabel">Período</div>
+        <div class="fbotoes" id="fperiodo"></div>
+      </div>
+      <div class="fgrupo">
+        <div class="flabel">Comparar com</div>
+        <div class="fbotoes" id="fcomparar"></div>
+      </div>
+    </div>
+
     <div class="kpis">
-      <div class="kpi"><div class="n" id="k1">—</div><div class="l">Contatos hoje</div></div>
-      <div class="kpi"><div class="n" id="k2">—</div><div class="l">Últimos 7 dias</div></div>
-      <div class="kpi"><div class="n" id="k3">—</div><div class="l">Média por dia</div></div>
-      <div class="kpi"><div class="n" id="k4">—</div><div class="l">Contratos assinados</div></div>
+      <div class="kpi"><div class="n" id="k1">—</div><div class="l">Contatos novos</div><div class="cmp" id="c1"></div></div>
+      <div class="kpi"><div class="n" id="k2">—</div><div class="l">Média por dia</div><div class="cmp" id="c2"></div></div>
+      <div class="kpi"><div class="n" id="k3">—</div><div class="l">Contratos enviados</div><div class="cmp" id="c3"></div></div>
+      <div class="kpi"><div class="n" id="k4">—</div><div class="l">Contratos assinados</div><div class="cmp" id="c4"></div></div>
     </div>
 
     <div class="card">
@@ -206,42 +228,130 @@ async function abrir(){
 // Nunca select('*') — a base tem 37 mil clientes e o plano do
 // Supabase é cobrado por tráfego de saída.
 // ------------------------------------------------------------
+let LINHAS=[];           // uma linha por dia, direto da view
+let PERIODO='7';         // hoje | ontem | 7 | 15 | 30
+let COMPARAR='0';        // 0 = sem comparacao; 1,7,15,30 = deslocamento em dias
+
+const PERIODOS=[['hoje','Hoje'],['ontem','Ontem'],['7','7 dias'],['15','15 dias'],['30','30 dias']];
+const COMPARACOES=[['0','Não comparar'],['1','Dia anterior'],['7','Semana anterior'],['15','Quinzena anterior'],['30','Mês anterior']];
+
 async function carregar(){
   const [dia,estoque]=await Promise.all([
-    sb.from('vw_trafego_dia').select('dia,novos_contatos,contratos_enviados,contratos_assinados').order('dia',{ascending:true}).limit(60),
+    sb.from('vw_trafego_dia').select('dia,novos_contatos,contratos_enviados,contratos_assinados').order('dia',{ascending:true}).limit(400),
     sb.from('vw_trafego_estoque').select('ordem,lista,qtd').order('ordem',{ascending:true}).limit(30)
   ]);
 
-  if(!dia.error && Array.isArray(dia.data)) desenharDias(dia.data);
+  // A view devolve um dia por linha desde 12/08. Com 400 dias de teto o
+  // array cabe inteiro na memoria, entao filtro e comparacao acontecem
+  // aqui — nenhum clique no filtro volta ao banco.
+  if(!dia.error && Array.isArray(dia.data)){ LINHAS=dia.data; montarFiltros(); aplicar(); }
   if(!estoque.error && Array.isArray(estoque.data)) desenharFunil(estoque.data);
 }
 
-function desenharDias(linhas){
-  const hoje=new Date().toISOString().slice(0,10);
-  const doDia=linhas.find(l=>l.dia===hoje);
-  $('k1').textContent=doDia?doDia.novos_contatos:0;
+// ---------- datas ----------
+function iso(d){ return d.toISOString().slice(0,10); }
+function hojeISO(){ return iso(new Date()); }
+function menos(dataISO,n){ const d=new Date(dataISO+'T12:00:00Z'); d.setUTCDate(d.getUTCDate()-n); return iso(d); }
+function fmtBR(dataISO){ return dataISO.slice(8,10)+'/'+dataISO.slice(5,7); }
 
-  const ult=linhas.slice(-7);
-  const soma=ult.reduce((s,l)=>s+(l.novos_contatos||0),0);
-  $('k2').textContent=soma;
-  $('k3').textContent=ult.length?(soma/ult.length).toFixed(1).replace('.',','):'0';
-  const env=ult.reduce((s,l)=>s+(l.contratos_enviados||0),0);
-  const ass=ult.reduce((s,l)=>s+(l.contratos_assinados||0),0);
-  $('k4').textContent=ass;
-  // Enviado x assinado lado a lado: a diferenca entre os dois e contrato
-  // parado esperando assinatura, que e onde da pra agir.
-  $('linha7').textContent='Últimos 7 dias: '+env+' contrato(s) enviado(s) · '+ass+' assinado(s).'
-    +' Assinatura passou a ser registrada em 17/08 — antes disso não há histórico.';
+/** Início e fim (inclusivos) da janela escolhida. */
+function janela(periodo){
+  const hoje=hojeISO();
+  if(periodo==='hoje')  return {ini:hoje,fim:hoje,dias:1};
+  if(periodo==='ontem'){ const o=menos(hoje,1); return {ini:o,fim:o,dias:1}; }
+  const n=Number(periodo);
+  return {ini:menos(hoje,n-1),fim:hoje,dias:n};
+}
 
-  const mostra=linhas.slice(-14);
+function somar(ini,fim){
+  const t={contatos:0,enviados:0,assinados:0,diasComDado:0};
+  for(const l of LINHAS){
+    if(l.dia<ini||l.dia>fim) continue;
+    t.contatos+=l.novos_contatos||0;
+    t.enviados+=l.contratos_enviados||0;
+    t.assinados+=l.contratos_assinados||0;
+    t.diasComDado++;
+  }
+  return t;
+}
+
+// ---------- filtros ----------
+function montarFiltros(){
+  $('fperiodo').innerHTML=PERIODOS.map(([v,r])=>
+    '<button class="fb'+(v===PERIODO?' on':'')+'" data-v="'+v+'">'+r+'</button>').join('');
+  $('fcomparar').innerHTML=COMPARACOES.map(([v,r])=>
+    '<button class="fb'+(v===COMPARAR?' on':'')+'" data-v="'+v+'">'+r+'</button>').join('');
+  $('fperiodo').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{PERIODO=b.dataset.v;montarFiltros();aplicar();});
+  $('fcomparar').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{COMPARAR=b.dataset.v;montarFiltros();aplicar();});
+}
+
+/**
+ * Escreve a variação de um KPI.
+ *
+ * O CRM só registra desde 12/08/2026. Comparar contra um período que é
+ * anterior a isso não dá "queda de 100%" — dá nada. Sem essa checagem o
+ * painel diria que a campanha despencou justamente porque o sistema não
+ * existia, que é o erro mais caro que este painel poderia cometer.
+ */
+function escreverComparacao(idCmp,atual,anterior,janelaAnt,inicioDados){
+  const el=$(idCmp);
+  if(COMPARAR==='0'){ el.textContent=''; el.className='cmp'; return; }
+  if(janelaAnt.fim<inicioDados){
+    el.textContent='sem base de comparação'; el.className='cmp sembase'; return;
+  }
+  const parcial=janelaAnt.ini<inicioDados;
+  if(anterior===0&&atual===0){ el.textContent='sem movimento nos dois'; el.className='cmp igual'; return; }
+  if(anterior===0){ el.textContent='antes era 0'+(parcial?' · base parcial':''); el.className='cmp sobe'; return; }
+  const pct=Math.round(((atual-anterior)/anterior)*100);
+  const sinal=pct>0?'+':'';
+  el.textContent=sinal+pct+'% ('+anterior+' antes)'+(parcial?' · base parcial':'');
+  el.className='cmp '+(pct>0?'sobe':pct<0?'desce':'igual');
+}
+
+function aplicar(){
+  if(LINHAS.length===0) return;
+  const inicioDados=LINHAS[0].dia;
+
+  const j=janela(PERIODO);
+  const a=somar(j.ini,j.fim);
+
+  const desloc=Number(COMPARAR)||0;
+  const jAnt={ini:menos(j.ini,desloc),fim:menos(j.fim,desloc)};
+  const b=somar(jAnt.ini,jAnt.fim);
+
+  const medAtual=j.dias?(a.contatos/j.dias):0;
+  const medAnt=j.dias?(b.contatos/j.dias):0;
+
+  $('k1').textContent=a.contatos;
+  $('k2').textContent=medAtual.toFixed(1).replace('.',',');
+  $('k3').textContent=a.enviados;
+  $('k4').textContent=a.assinados;
+
+  escreverComparacao('c1',a.contatos,b.contatos,jAnt,inicioDados);
+  escreverComparacao('c2',Math.round(medAtual*10),Math.round(medAnt*10),jAnt,inicioDados);
+  escreverComparacao('c3',a.enviados,b.enviados,jAnt,inicioDados);
+  escreverComparacao('c4',a.assinados,b.assinados,jAnt,inicioDados);
+
+  const periodoTxt=j.dias===1?fmtBR(j.ini):fmtBR(j.ini)+' a '+fmtBR(j.fim);
+  const compTxt=COMPARAR==='0'?'':' · comparado com '+(jAnt.ini===jAnt.fim?fmtBR(jAnt.ini):fmtBR(jAnt.ini)+' a '+fmtBR(jAnt.fim));
+  $('linha7').textContent='Período: '+periodoTxt+compTxt+'. Contatos são registrados desde '
+    +fmtBR(inicioDados)+'/'+inicioDados.slice(0,4)+'; assinatura, desde 17/08.';
+
+  // O gráfico nunca mostra menos de 7 barras: com "Hoje" selecionado,
+  // uma barra sozinha não diz nada. Os KPIs seguem o filtro; o gráfico
+  // dá o contexto em volta.
+  desenharDias(Math.max(j.dias,7));
+}
+
+function desenharDias(quantos){
+  const mostra=LINHAS.slice(-Math.min(quantos,30));
   const teto=Math.max(1,...mostra.map(l=>l.novos_contatos||0));
   $('bars').innerHTML=mostra.map(l=>{
     const v=l.novos_contatos||0;
     const alt=Math.round((v/teto)*105);
-    const d=l.dia.slice(8,10)+'/'+l.dia.slice(5,7);
     return '<div class="bcol"><div class="bval">'+v+'</div>'
          + '<div class="bbar" style="height:'+alt+'px"></div>'
-         + '<div class="blab">'+d+'</div></div>';
+         + '<div class="blab">'+fmtBR(l.dia)+'</div></div>';
   }).join('');
 }
 

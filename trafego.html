@@ -159,7 +159,8 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 
     <div class="card">
       <div class="ctit">Funil comercial agora</div>
-      <div class="csub">Quantas pessoas estão paradas em cada etapa neste momento. É uma foto, não um acumulado do mês.</div>
+      <div class="csub">Quantas pessoas estão paradas em cada etapa neste momento. É uma foto, não um acumulado do mês. "Chegaram e pararam" não é etapa: é um corte de quem está parado há mais de 24h nas três primeiras, então soma junto com elas.</div>
+      <div class="fbotoes" id="fvariante" style="margin-bottom:14px;"></div>
       <div id="funil"></div>
     </div>
 
@@ -237,6 +238,8 @@ async function abrir(){
 // Supabase é cobrado por tráfego de saída.
 // ------------------------------------------------------------
 let LINHAS=[];           // uma linha por dia, direto da view
+let ESTOQUE=[];          // uma linha por etapa do funil
+let VARIANTE='qtd';      // qtd = geral | qtd_pre | qtd_adm
 let PERIODO='7';         // hoje | ontem | 7 | 15 | 30
 let COMPARAR='0';        // 0 = sem comparacao; 1,7,15,30 = deslocamento em dias
 
@@ -246,14 +249,14 @@ const COMPARACOES=[['0','Não comparar'],['1','Dia anterior'],['7','Semana anter
 async function carregar(){
   const [dia,estoque]=await Promise.all([
     sb.from('vw_trafego_dia').select('dia,novos_contatos,contratos_enviados,contratos_assinados').order('dia',{ascending:true}).limit(400),
-    sb.from('vw_trafego_estoque').select('ordem,lista,qtd').order('ordem',{ascending:true}).limit(30)
+    sb.from('vw_trafego_estoque').select('ordem,lista,qtd,qtd_pre,qtd_adm').order('ordem',{ascending:true}).limit(30)
   ]);
 
   // A view devolve um dia por linha desde 12/08. Com 400 dias de teto o
   // array cabe inteiro na memoria, entao filtro e comparacao acontecem
   // aqui — nenhum clique no filtro volta ao banco.
   if(!dia.error && Array.isArray(dia.data)){ LINHAS=dia.data; montarFiltros(); aplicar(); }
-  if(!estoque.error && Array.isArray(estoque.data)) desenharFunil(estoque.data);
+  if(!estoque.error && Array.isArray(estoque.data)){ ESTOQUE=estoque.data; montarVariantes(); desenharFunil(); }
 }
 
 // ---------- datas ----------
@@ -363,15 +366,33 @@ function desenharDias(quantos){
   }).join('');
 }
 
-function desenharFunil(linhas){
-  if(!linhas.length){ $('funil').innerHTML='<div class="vazio">Sem dados.</div>'; return; }
-  const teto=Math.max(1,...linhas.map(l=>l.qtd||0));
-  $('funil').innerHTML=linhas.map(l=>{
-    const pct=Math.round(((l.qtd||0)/teto)*100);
+const VARIANTES=[['qtd','Geral'],['qtd_pre','PRÉ'],['qtd_adm','ADM']];
+
+function montarVariantes(){
+  $('fvariante').innerHTML=VARIANTES.map(([v,r])=>
+    '<button class="fb'+(v===VARIANTE?' on':'')+'" data-v="'+v+'">'+r+'</button>').join('');
+  $('fvariante').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{VARIANTE=b.dataset.v;montarVariantes();desenharFunil();});
+}
+
+function desenharFunil(){
+  if(!ESTOQUE.length){ $('funil').innerHTML='<div class="vazio">Sem dados.</div>'; return; }
+  const val=l=>l[VARIANTE]||0;
+  const teto=Math.max(1,...ESTOQUE.map(val));
+  let h=ESTOQUE.map(l=>{
+    const pct=Math.round((val(l)/teto)*100);
     return '<div class="fl"><div class="fnome">'+l.lista+'</div>'
          + '<div class="fbar"><i style="width:'+pct+'%"></i></div>'
-         + '<div class="fqtd">'+(l.qtd||0)+'</div></div>';
+         + '<div class="fqtd">'+val(l)+'</div></div>';
   }).join('');
+  // PRÉ e ADM vêm da etiqueta que o motor cola quando decide o caminho
+  // do caso. Card antigo, de antes dessa regra, não tem etiqueta e some
+  // dos dois recortes — dizer isso é melhor que mostrar zero calado.
+  if(VARIANTE!=='qtd'){
+    const soma=ESTOQUE.reduce((a,l)=>a+val(l),0);
+    const total=ESTOQUE.reduce((a,l)=>a+(l.qtd||0),0);
+    if(soma<total) h+='<div class="vazio">'+(total-soma)+' de '+total+' cards ainda não têm etiqueta PRÉ ou ADM e não aparecem neste recorte.</div>';
+  }
+  $('funil').innerHTML=h;
 }
 
 // Sessão já aberta: entra direto.

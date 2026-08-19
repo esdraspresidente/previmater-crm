@@ -3089,9 +3089,17 @@ async function marcarComunicada(parcelaId){
   const p=(PARC||[]).find(x=>String(x.id)===String(parcelaId));
   if(!p){toast('Parcela não encontrada','er');return;}
   const vc=parseFloat(p.valor_cliente)||0;
-  const texto='Oi! Saiu o pagamento da sua parcela '+p.num_parcela+'/'+p.total_parcelas+'. '
-    +'Cai no dia '+fD(p.data_vencimento)+', no valor de '+R(vc)+'. '
-    +'Os nossos honorários dessa parcela ficam em '+R(p.valor_honorario||0)+'.';
+  /* O texto sai por copiar-e-colar: o que estiver escrito aqui e literalmente
+     o que a mae le no WhatsApp, quebra de linha e asterisco inclusos. Os '*'
+     em data, valor e honorario viram negrito no WhatsApp — sao os tres numeros
+     que ela precisa achar sem ler a mensagem inteira.
+     O numero da parcela saiu de proposito: a mae nao precisa saber quantas sao,
+     e a Samara ja tem a regra de nunca prometer numero de parcelas. */
+  const nome=(p.cliente_nome||'').trim().split(/\s+/)[0];
+  const texto='Oi'+(nome?' '+nome:'')+'. Tudo bem?\n'
+    +'Passando pra avisar que saiu data e valor do seu próximo recebimento.\n'
+    +'Será no dia *'+fD(p.data_vencimento)+'*, no valor de *'+R(vc)+'*.\n'
+    +'Os nossos honorários dessa parcela ficam em *'+R(p.valor_honorario||0)+'* ☺️';
   if(!confirm('Marcar como avisada e copiar a mensagem?\n\n'+texto))return;
   try{await navigator.clipboard.writeText(texto);}catch(e){}
   const{error}=await sb.from('pm_parcelas')

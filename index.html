@@ -5196,15 +5196,29 @@ function ibIniciarListaPoll(){
   pararInboxPoll();
   ibListTimer=setInterval(()=>{if(location.hash.slice(1)!=='/inbox'){pararInboxPoll();return;}ibCarregarLista(true);},20000);
 }
+/* A LISTA DE CONVERSAS VEM DA VIEW, NAO DA TABELA.
+   A versao anterior puxava as ultimas 500 mensagens com select('*') e
+   agrupava por conversa aqui no navegador. Duas coisas davam errado nisso:
+   o '*' trazia a coluna bruto (payload cru do WhatsApp) e o texto inteiro
+   — e em mensagem de midia o texto guarda o arquivo em base64. Dava 12 MB
+   por carga, a cada 20 segundos, para exibir uma linha de previa por
+   conversa. Foram esses 12 MB que estouraram a cota de banda do Supabase.
+
+   vw_inbox_lista ja devolve uma linha por conversa (a mais recente) com o
+   texto cortado em 200 caracteres. Mesma tela, 12 KB no lugar de 12 MB.
+   A view tem security_invoker, entao continua valendo a mesma regra de
+   acesso da tabela — quem nao pode ler mensagem tambem nao le a view. */
 async function ibCarregarLista(silencioso){
   const cont=$('ib-items');
   if(!cont)return;
-  const{data,error}=await sb.from('crm_mensagens').select('*').order('criado_em',{ascending:false}).limit(500);
+  const{data,error}=await sb.from('vw_inbox_lista').select('*').order('criado_em',{ascending:false}).limit(200);
   if(error){if(!silencioso)cont.innerHTML='<div class="fhint" style="text-align:center;padding:20px 0">Erro ao carregar: '+esc(error.message)+'</div>';return;}
-  const msgs=data||[];
+  /* A view entrega previa; o resto do codigo espera texto. Renomeia aqui
+     para nao ter que mexer em ibPrevia e ibRenderLista. */
+  const msgs=(data||[]).map(m=>({...m,texto:m.previa}));
   const porChave={},ordem=[];
   msgs.forEach(m=>{
-    const chave=m.cliente_id?('c:'+m.cliente_id):('l:'+(m.telefone_chave||m.telefone_bruto||'sem-numero'));
+    const chave=m.chave||(m.cliente_id?('c:'+m.cliente_id):('l:'+(m.telefone_chave||m.telefone_bruto||'sem-numero')));
     if(!porChave[chave]){porChave[chave]=m;ordem.push(chave);}
   });
   const idsClientes=[...new Set(msgs.filter(m=>m.cliente_id).map(m=>m.cliente_id))];

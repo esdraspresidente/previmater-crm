@@ -368,6 +368,11 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .acti-head{display:flex;align-items:baseline;gap:8px;margin-bottom:4px;}
 .acti-nome{font-size:13.5px;font-weight:700;color:var(--text);}
 .acti-time{font-size:11px;color:var(--text3);}
+/* So aparece no hover: o feed e de leitura, e um X fixo em cada balao
+   convida ao clique errado num painel que nao tem desfazer. */
+.acti-del{margin-left:auto;background:none;border:none;color:var(--text3);font-size:13px;line-height:1;cursor:pointer;padding:0 2px;opacity:0;transition:opacity .12s;font-family:inherit;}
+.acti-c:hover .acti-del{opacity:1;}
+.acti-del:hover{color:var(--red);}
 .acti-a{font-size:13px;color:var(--text3);font-style:italic;padding-top:4px;}
 .acti-a .acti-head{margin-bottom:0;display:inline;}
 .mention-tag{color:var(--teal);font-weight:700;}
@@ -415,11 +420,9 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .mcrsec{font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;}
 
 /* ABAS DO PAINEL DIREITO DO CARD */
-/* Salvar do topo. O de baixo continua existindo: em card longo o rodape
-   fica a duas rolagens de distancia, e quem edita um campo la em cima
-   nao deveria ter que procurar o botao. Os dois chamam a mesma funcao. */
-.mcsalvartopo{display:flex;justify-content:flex-end;margin-bottom:12px;}
-.mcsalvartopo .btn{padding:9px 22px;}
+/* O Salvar do topo esta na linha da trilha (ver .mcsalvartopo-btn). O de
+   baixo continua existindo: em card longo o rodape fica a duas rolagens
+   de distancia. Os dois chamam a mesma funcao. */
 .mctabs{display:flex;gap:5px;background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:5px;margin-bottom:16px;}
 .mctab{flex:1;background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:var(--text3);padding:10px 4px;border-radius:9px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:5px;}
 .mctab:hover{color:var(--teal);}
@@ -499,6 +502,13 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .ib-fechar-painel{display:none;width:100%;margin-bottom:14px;border:1.5px solid var(--border);background:var(--white);color:var(--text2);border-radius:9px;padding:8px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;}
 /* Trilha e sequencias no topo do cartao. */
 .mcond{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px;}
+/* O Salvar do topo mora AQUI, ao lado da trilha, e nao mais no painel
+   direito. No painel direito ele ficava colado nas abas Anexos/
+   Comentarios/Chat, que sao de outro assunto — clicar em Salvar parecia
+   salvar o comentario. Aqui ele fica na mesma linha do nome do cartao,
+   que e onde a edicao acontece. */
+.mctrilha{display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-width:0;}
+.mcsalvartopo-btn{margin-left:auto;padding:9px 22px;flex-shrink:0;}
 .trilha{display:inline-flex;align-items:center;gap:7px;background:var(--teal-l);border:1.5px solid var(--teal-m);border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:800;color:#0A6F72;cursor:pointer;font-family:inherit;}
 .trilha:hover{background:#D2EEEF;}
 .trilha .sep{color:var(--teal-m);font-weight:700;}
@@ -1281,6 +1291,18 @@ document.addEventListener('click',e=>{
   if(mv&&!mv.classList.contains('h')&&!e.target.closest('.mcquickwrap')&&!e.target.closest('.mv-trigger'))mv.classList.add('h');
 });
 document.addEventListener('keydown',e=>{
+  /* Setas so navegam quando o foco NAO esta num campo: dentro de um
+     input a seta e do cursor, e roubar isso torna impossivel corrigir
+     uma letra no meio do nome. */
+  if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+    const m=$('modal');
+    if(!m||m.classList.contains('h')||!mcClienteId)return;
+    const a=document.activeElement;
+    if(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'||a.isContentEditable))return;
+    e.preventDefault();
+    mcNavegar(e.key==='ArrowLeft'?-1:1);
+    return;
+  }
   if(e.key!=='Escape')return;
   const mv=$('mvpop');
   if(mv&&!mv.classList.contains('h')){mv.classList.add('h');return;}
@@ -1685,7 +1707,7 @@ async function renderAtividadeFeed(clienteId){
       return`<div class="acti acti-c">
         <div class="av" style="background:${avC(nm)}">${avL(nm)}</div>
         <div class="acti-body">
-          <div class="acti-head"><span class="acti-nome">${esc(nm)}</span><span class="acti-time">${tempoRel(c.criado_em)}</span></div>
+          <div class="acti-head"><span class="acti-nome">${esc(nm)}</span><span class="acti-time">${tempoRel(c.criado_em)}</span>${c.autor_usuario_id===U.id?`<button class="acti-del" title="Apagar este comentário" onclick="excluirComentario('${c.id}','${clienteId}')">✕</button>`:''}</div>
           <div class="acti-bubble">${renderMencoesTexto(c.texto)}</div>
         </div></div>`;
     }else{
@@ -1695,6 +1717,21 @@ async function renderAtividadeFeed(clienteId){
         <div class="acti-body"><span class="acti-head"><span class="acti-nome" style="font-weight:700">${esc(nm)}</span> ${esc(a.descricao)} · <span class="acti-time">${tempoRel(a.criado_em)}</span></span></div></div>`;
     }
   }).join('');
+}
+/* APAGAR COMENTARIO.
+   So o proprio autor ve o X. A trava vale para a tela: no banco a policy
+   de crm_comentarios libera qualquer usuario autenticado, entao o
+   .eq('autor_usuario_id') do delete e a segunda tranca — sem ele, um
+   id trocado na mao apagaria comentario alheio.
+   O historico automatico (moveu, anexou, renomeou) nao tem X de
+   proposito: e registro do que aconteceu, nao recado de ninguem.
+   A notificacao de mencao vai junto, por cascade da FK. */
+async function excluirComentario(id,clienteId){
+  if(!confirm('Apagar este comentário? Não dá para desfazer.'))return;
+  const{error}=await sb.from('crm_comentarios').delete().eq('id',id).eq('autor_usuario_id',U.id);
+  if(error){toast('Erro ao apagar: '+error.message,'er');return;}
+  toast('Comentário apagado','ok');
+  renderAtividadeFeed(clienteId);
 }
 function actInputHandler(el){
   const v=el.value;
@@ -2489,7 +2526,10 @@ function renderCardClienteModal(c,etqSel,listas){
       <div>
     <input type="text" id="mc-nome" class="mctit" value="${escA(c.nome_completo)}"/>
     <div class="mbs">Cliente desde ${fD(c.criado_em?c.criado_em.slice(0,10):null)}</div>
-    <div class="mcond" id="mc-trilha"></div>
+    <div class="mcond">
+      <div class="mctrilha" id="mc-trilha"></div>
+      <button class="btn btnp mcsalvartopo-btn" id="mc-btn-salvar-topo" onclick="salvarCardCliente('${c.id}')">Salvar</button>
+    </div>
     <div class="st" style="margin:20px 0 9px">Sequências</div>
     <div id="mc-seqs"><div class="seqbox"><div class="seqvazio">Carregando...</div></div></div>
     ${c.arquivado_em?`<div class="gb-arqbanner"><span>📦 Este cartão está arquivado — fora do quadro, mas nada foi apagado</span><button class="btn btns" style="padding:5px 12px;font-size:11.5px;flex-shrink:0" onclick="reativarCliente('${c.id}')">Reativar</button></div>`:''}
@@ -2604,9 +2644,6 @@ function renderCardClienteModal(c,etqSel,listas){
       </div>
 
       <div class="mcright">
-        <div class="mcsalvartopo">
-          <button class="btn btnp" id="mc-btn-salvar-topo" onclick="salvarCardCliente('${c.id}')">Salvar</button>
-        </div>
         <div class="mctabs">
           <button class="mctab" id="mctab-anexos" onclick="mcAba('anexos')">📎 Anexos<span class="mctab-n h" id="mctab-n-anexos"></span></button>
           <button class="mctab a" id="mctab-coment" onclick="mcAba('coment')">💬 Comentários</button>
@@ -2642,7 +2679,7 @@ function renderCardClienteModal(c,etqSel,listas){
           <div class="chatsend">
             <div class="ib-grav" id="mc-grav"></div>
             <div id="mc-escrever">
-              <textarea id="mc-chat-input" placeholder="Escreva uma mensagem para a cliente..."></textarea>
+              <textarea id="mc-chat-input" placeholder="Escreva uma mensagem para a cliente... (Enter envia, Shift+Enter pula linha)" onkeydown="if(chatEnviarComEnter(event))enviarMensagemChat('${c.id}')"></textarea>
               <div class="ib-send-linha">
                 <button class="ib-mic" onclick="gravMicClique('card')" title="Gravar audio">🎤</button>
                 <button class="btn btnp" id="mc-chat-btn" onclick="enviarMensagemChat('${c.id}')">Enviar</button>
@@ -2665,6 +2702,44 @@ function renderCardClienteModal(c,etqSel,listas){
   mcAba('coment');
   carregarAnexos(c.id);
   renderAtividadeFeed(c.id);
+  mcSnapshot=mcFotoCampos();
+}
+/* FOTO DOS CAMPOS.
+   Navegar entre cartoes com as setas troca o conteudo do modal inteiro.
+   Sem isso, quem digitou o link do contrato e apertou a seta perde o que
+   digitou sem nem ver — foi exatamente o que ja aconteceu com o balao de
+   mover. A foto e tirada quando o cartao abre e refeita a cada Salvar;
+   se ela mudou, a saida pergunta antes. */
+let mcSnapshot='';
+function mcFotoCampos(){
+  const box=$('modalbox');
+  if(!box)return'';
+  return [...box.querySelectorAll('.mcinner input,.mcinner select,.mcinner textarea')]
+    .filter(el=>el.id&&el.type!=='file')
+    .map(el=>el.id+'='+(el.type==='checkbox'?el.checked:el.value)).join('|');
+}
+function mcTemAlteracaoNaoSalva(){
+  return !!mcSnapshot&&mcFotoCampos()!==mcSnapshot;
+}
+/* SETAS ← → ANDAM ENTRE OS CARTOES.
+   A ordem e a do quadro que ficou atras do modal, lida do proprio DOM —
+   nao ha copia em memoria que possa divergir do que esta na tela, e o
+   limite de 1.000 linhas do PostgREST nao entra na conta porque nada
+   aqui vai ao banco buscar lista. Fora do quadro (Financeiro, Caixa de
+   Entrada) nao ha cartoes na tela e a seta simplesmente avisa. */
+function mcIrmaosNaTela(){
+  return [...document.querySelectorAll('.kc[data-card]')].map(el=>el.getAttribute('data-card'));
+}
+function mcNavegar(passo){
+  if(!mcClienteId)return;
+  const ids=mcIrmaosNaTela();
+  const i=ids.indexOf(mcClienteId);
+  if(i<0){toast('As setas só andam entre os cartões do quadro','er');return;}
+  const j=i+passo;
+  if(j<0){toast('Este já é o primeiro cartão','er');return;}
+  if(j>=ids.length){toast('Este já é o último cartão','er');return;}
+  if(mcTemAlteracaoNaoSalva()&&!confirm('Há alterações não salvas neste cartão.\n\nSair sem salvar?'))return;
+  abrirCardCliente(ids[j]);
 }
 function mcCanalChange(){
   mcChatCanal=$('mc-canal').value||null;
@@ -2832,6 +2907,18 @@ async function carregarChat(clienteId,silencioso){
   });
   feed.innerHTML=html;
   feed.scrollTop=feed.scrollHeight;
+}
+/* ENTER MANDA, SHIFT+ENTER PULA LINHA.
+   Vale para os dois chats (cartao e Caixa de Entrada), que sao conversa
+   de WhatsApp: ninguem escreve paragrafo ali, e o caminho ate o botao
+   Enviar era o passo mais repetido do dia.
+   isComposing e o teclado de acento ainda montando a letra (ã, ç): se
+   o Enter for capturado no meio, a palavra sai quebrada. */
+function chatEnviarComEnter(e){
+  if(e.key!=='Enter'||e.shiftKey||e.ctrlKey||e.metaKey||e.altKey)return false;
+  if(e.isComposing||e.keyCode===229)return false;
+  e.preventDefault();
+  return true;
 }
 async function enviarMensagemChat(clienteId){
   const inp=$('mc-chat-input');
@@ -3203,8 +3290,24 @@ async function salvarCardCliente(id){
     }
   }
 
-  fecharModal();toast('Cliente atualizado','ok');
+  /* O CARTAO FICA ABERTO.
+     Ate aqui o Salvar fechava o modal, o que obrigava a reabrir o cartao
+     para conferir o que acabou de ser gravado — e reabrir custa uma
+     consulta e a aba escolhida. Repintamos so o topo (nome, quadro e
+     lista, que sao o que o Salvar pode ter mudado ali) e o quadro atras;
+     o resto da tela ja esta com os valores certos, porque foram eles que
+     acabaram de ser enviados. */
+  mcOriginal={nome_completo:nome,quadro:quadro,lista_id:listaId};
+  btnEstado('Salvar',false);
+  toast('Cliente atualizado','ok');
   refrescarRotaAtual();
+  const{data:cAt}=await sb.from('crm_clientes')
+    .select('id,nome_completo,quadro,lista_id,lista_desde,arquivado_em').eq('id',id).single();
+  if(mcClienteId!==id)return; // trocou de cartao enquanto gravava
+  const hn=document.querySelector('#mchead-sticky .mchs-nome');
+  if(hn)hn.textContent=nome;
+  if(cAt)await mcPintarTrilha(cAt);
+  mcSnapshot=mcFotoCampos();
 }
 async function excluirClienteModal(id){
   if(!confirm('Excluir esta cliente? Essa ação não pode ser desfeita.'))return;
@@ -5793,7 +5896,7 @@ async function ibCarregarChat(c,silencioso){
       <div class="inb-chat-send">
         <div class="ib-grav" id="ib-grav"></div>
         <div id="ib-escrever">
-          <textarea id="ib-chat-input" placeholder="Escreva uma mensagem..."></textarea>
+          <textarea id="ib-chat-input" placeholder="Escreva uma mensagem... (Enter envia, Shift+Enter pula linha)" onkeydown="if(chatEnviarComEnter(event))ibEnviarMensagem()"></textarea>
           <div class="ib-send-linha">
             <button class="ib-mic" onclick="gravMicClique('inbox')" title="Gravar audio">🎤</button>
             <button class="btn btnp" id="ib-chat-btn" onclick="ibEnviarMensagem()">Enviar</button>
@@ -6063,9 +6166,17 @@ async function mcPintarTrilha(c){
     desde=dias<=0?'entrou hoje nesta lista':(dias===1?'há 1 dia nesta lista':'há '+dias+' dias nesta lista');
   }
   const arq=c.arquivado_em?'<span class="mcdesde">· arquivado</span>':'';
-  box.innerHTML=`<button class="trilha" onclick="fecharModal();location.hash='#/quadro/${escA(c.quadro||'comercial')}'">
+  /* Antes isto fechava o cartao e ia para o quadro. Clicar em "onde o
+     cartao esta" para ser expulso do cartao nao ajuda ninguem: quem
+     clica ali quer MUDAR onde ele esta. Agora abre o mesmo balao do
+     botao "⇄ Mover cartao". */
+  box.innerHTML=`<button class="trilha mv-trigger" onclick="abrirMoverPopover(this)" title="Mover cartão">
       <span class="qd">${esc(quadro)}</span><span class="sep">›</span><span>${esc(lista)}</span></button>
     ${desde?`<span class="mcdesde">${esc(desde)}</span>`:''}${arq}`;
+  // A pilula do cabecalho grudento diz a mesma coisa: repintada aqui
+  // para nao ficar mostrando a lista antiga depois de um Salvar.
+  const pill=document.querySelector('#mchead-sticky .mchs-lista');
+  if(pill)pill.textContent=quadro+' · '+lista;
 }
 
 /* Todas as sequencias em que esta cliente esta inscrita.

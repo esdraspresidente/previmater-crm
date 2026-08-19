@@ -970,6 +970,7 @@ let CLI=[],REC=[],PARC=[],finCarregado=false;
 let calMes=new Date();calMes.setDate(1);
 let rfiltro='todos';
 let fCliId=null,fTipo='i',fParcs=[],mparcId=null,mdiaData=null,preceberId=null;
+let fModelo='progressivo'; /* contrato vigente desde 17/08/2026 */
 let NOTIF=[],notifPollTimer=null;
 let mcOriginal=null,mcClienteId=null,mcMencoes=[],mcEtqSelAtual=[];
 
@@ -4217,7 +4218,7 @@ async function pageNovoRec(cidInicial){
   if(!temFinanceiro()){pc.innerHTML='<div class="emp"><div class="empt">Área restrita</div></div>';return;}
   pc.innerHTML='<div class="emp">Carregando...</div>';
   await loadFin();
-  fCliId=null;fTipo='i';fParcs=[];
+  fCliId=null;fTipo='i';fParcs=[];fModelo='progressivo';
   pc.innerHTML=`
     <div style="display:flex;align-items:center;gap:11px;margin-bottom:20px">
       <button class="bbk" onclick="location.hash='#/recebimentos'">‹ Voltar</button>
@@ -4253,6 +4254,12 @@ async function pageNovoRec(cidInicial){
           <select id="fnp" onchange="geraParcs()"><option value="1">1 parcela</option><option value="2" selected>2 parcelas</option><option value="3">3 parcelas</option><option value="4">4 parcelas</option><option value="5">5 parcelas</option></select></div>
         <div class="fld"><label>Percentual honorários (%)</label><input type="number" id="ffp" value="30" step="0.5" onchange="recalc()"/></div>
       </div>
+      <div class="fld" style="margin-top:13px"><label>Modelo de honorários</label>
+        <select id="fmod" onchange="setModelo(this.value)">
+          <option value="progressivo">Progressivo — contratos de 17/08/2026 em diante</option>
+          <option value="percentual">Percentual — 30% de cada parcela (contratos antigos)</option>
+        </select>
+        <span class="fhint" id="fmodhint"></span></div>
       <div class="fld" id="ffd-wrap" style="margin-top:13px"><label>Desconto honorários (R$)</label><input type="text" id="ffd" data-money="" inputmode="decimal" placeholder="0,00" onchange="recalc()"/></div>
       <div class="cb" id="cb-resumo"><div class="cr2"><span>Honorários brutos</span><span id="cbruto" style="font-weight:700">R$ 0,00</span></div>
         <div class="cr2"><span>Desconto</span><span id="cdesc" style="color:var(--red)">- R$ 0,00</span></div>
@@ -4373,16 +4380,62 @@ function geraParcs(){
   }
   recalcParcs();
 }
+/* HONORARIOS PROGRESSIVOS — contrato vigente desde 17/08/2026.
+   O total continua limitado a 30% do liquido, igual ao modelo antigo. O que
+   muda e o ritmo: o primeiro deposito define quanto entra de cara, por faixa,
+   e os seguintes sao R$ 500 ate quitar.
+
+   Por que o 3o recebimento absorve o saldo: o contrato exige quitacao ate ele.
+   A alternativa seria manter R$ 500 e cobrar o resto avulso 5 dias depois do
+   3o deposito — uma cobranca caindo num dia em que a cliente nao recebeu nada,
+   que e o desenho mais provavel de virar inadimplencia. */
+const FAIXAS_PROG=[{ate:1000,paga:500},{ate:1500,paga:800},{ate:2000,paga:1200},{ate:2999.99,paga:1500}];
+const PARCELA_PROG=500;
+function honorariosProgressivos(valores,pctTeto){
+  const total=valores.reduce((s,v)=>s+(parseFloat(v)||0),0);
+  let saldo=Math.round(total*(pctTeto/100)*100)/100;
+  return valores.map((v,i)=>{
+    v=parseFloat(v)||0;
+    if(saldo<=0)return 0;
+    let paga;
+    if(i===0){
+      if(v>=3000)paga=saldo;
+      else{const f=FAIXAS_PROG.find(f=>v<=f.ate);paga=f?f.paga:PARCELA_PROG;}
+    }else if(i===2)paga=saldo;      /* quitacao obrigatoria ate o 3o */
+    else paga=PARCELA_PROG;
+    /* Nunca cobrar mais do que ela recebeu naquele mes, nem furar o teto. */
+    paga=Math.min(paga,saldo,v);
+    paga=Math.round(paga*100)/100;
+    saldo=Math.round((saldo-paga)*100)/100;
+    return paga;
+  });
+}
+function setModelo(v){
+  fModelo=v;
+  const h=$('fmodhint');
+  if(h)h.textContent=v==='progressivo'
+    ? 'Faixa pelo 1º depósito, R$ 500 nos seguintes, quitação até o 3º. Teto de 30%.'
+    : '30% de cada parcela até o fim, como nos contratos anteriores a 17/08/2026.';
+  recalcParcs();
+}
 function recalcParcs(){
   const n=fParcs.length,vcTotal=m2f($('fvc')),fp=parseFloat($('ffp').value)||30;
   if(n>1){
     const soma=fParcs.slice(0,n-1).reduce((s,p)=>s+(parseFloat(p.cli)||0),0);
     fParcs[n-1].cli=Math.max(0,vcTotal-soma);
   }else if(n===1)fParcs[0].cli=vcTotal;
-  fParcs.forEach(p=>{
-    const cli=parseFloat(p.cli)||0,fd=parseFloat(p.fd)||0;
-    p.hon=Math.max(0,cli*(fp/100)-fd);
-  });
+  if(fModelo==='progressivo'){
+    const hons=honorariosProgressivos(fParcs.map(p=>p.cli),fp);
+    fParcs.forEach((p,i)=>{
+      const fd=parseFloat(p.fd)||0;
+      p.hon=Math.max(0,hons[i]-fd);
+    });
+  }else{
+    fParcs.forEach(p=>{
+      const cli=parseFloat(p.cli)||0,fd=parseFloat(p.fd)||0;
+      p.hon=Math.max(0,cli*(fp/100)-fd);
+    });
+  }
   renderParcsForm();
 }
 function renderParcsForm(){
@@ -4402,7 +4455,7 @@ function renderParcsForm(){
         <input type="text" id="fpfd${i}" value="${floatToMoney(p.fd)}" placeholder="0,00" data-money="" inputmode="decimal" onchange="upP(${i},'fd',this.value)"/></div>
       <div class="fld"><label>Valor honorário (R$)</label>
         <input type="text" id="fph${i}" data-money="" inputmode="decimal" value="${floatToMoney(p.hon)}" onchange="upP(${i},'h',this.value)"/>
-        <span class="fhint">${fp}% do valor da cliente${p.fd?` − ${R(p.fd)}`:''}</span></div>
+        <span class="fhint">${fModelo==='progressivo'?(i===0?'faixa do 1º depósito':(i===2?'quita o saldo':'parcela fixa'))+' (teto '+fp+'%)':fp+'% do valor da cliente'}${p.fd?` − ${R(p.fd)}`:''}</span></div>
     </div></div>`).join('');
 }
 function upP(i,c,v){
@@ -4442,7 +4495,7 @@ async function submitRec(){
 
   const rid=Date.now();
   const rd={id:rid,crm_cliente_id:fCliId,cliente_nome:cli.nome,valor_cliente:vc,num_parcelas:n,
-    fee_percent:fp,fee_bruto:feeBr,fee_desconto:fd,fee_liquido:feeLiq,
+    fee_percent:fp,fee_bruto:feeBr,fee_desconto:fd,fee_liquido:feeLiq,modelo_honorarios:fModelo,
     indicador_nome:indNm||null,indicador_comissao_tipo:temInd?'fixed':null,
     indicador_comissao_valor:indVl,indicador_comissao_total:indVl,
     sobra_liquida:Math.max(0,feeLiq-indVl),metodo_pagamento:'PIX',notas:$('fnotas').value||null};

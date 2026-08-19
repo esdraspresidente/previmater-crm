@@ -405,6 +405,11 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .mcrsec{font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;}
 
 /* ABAS DO PAINEL DIREITO DO CARD */
+/* Salvar do topo. O de baixo continua existindo: em card longo o rodape
+   fica a duas rolagens de distancia, e quem edita um campo la em cima
+   nao deveria ter que procurar o botao. Os dois chamam a mesma funcao. */
+.mcsalvartopo{display:flex;justify-content:flex-end;margin-bottom:12px;}
+.mcsalvartopo .btn{padding:9px 22px;}
 .mctabs{display:flex;gap:5px;background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:5px;margin-bottom:16px;}
 .mctab{flex:1;background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:var(--text3);padding:10px 4px;border-radius:9px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:5px;}
 .mctab:hover{color:var(--teal);}
@@ -2557,6 +2562,9 @@ function renderCardClienteModal(c,etqSel,listas){
       </div>
 
       <div class="mcright">
+        <div class="mcsalvartopo">
+          <button class="btn btnp" id="mc-btn-salvar-topo" onclick="salvarCardCliente('${c.id}')">Salvar</button>
+        </div>
         <div class="mctabs">
           <button class="mctab" id="mctab-anexos" onclick="mcAba('anexos')">📎 Anexos<span class="mctab-n h" id="mctab-n-anexos"></span></button>
           <button class="mctab a" id="mctab-coment" onclick="mcAba('coment')">💬 Comentários</button>
@@ -3124,9 +3132,15 @@ async function salvarCardCliente(id){
     atualizado_em:new Date().toISOString()
   };
   const etqSel=mcEtqSelAtual.slice();
-  const btn=$('mc-btn-salvar');btn.disabled=true;btn.textContent='Salvando...';
+  // Sao dois botoes Salvar (topo e rodape) e a mesma funcao atende os
+  // dois. Mexer so no de baixo deixaria o de cima dizendo "Salvar"
+  // enquanto o gravamento acontece — e o clique repetido gravaria duas
+  // vezes.
+  const btns=['mc-btn-salvar','mc-btn-salvar-topo'].map(x=>$(x)).filter(Boolean);
+  const btnEstado=(txt,off)=>btns.forEach(b=>{b.disabled=off;b.textContent=txt;});
+  btnEstado('Salvando...',true);
   const{error}=await sb.from('crm_clientes').update(payload).eq('id',id);
-  if(error){toast('Erro ao salvar: '+error.message,'er');btn.disabled=false;btn.textContent='Salvar';return;}
+  if(error){toast('Erro ao salvar: '+error.message,'er');btnEstado('Salvar',false);return;}
   await sb.from('crm_clientes_etiquetas').delete().eq('cliente_id',id);
   if(etqSel.length)await sb.from('crm_clientes_etiquetas').insert(etqSel.map(e=>({cliente_id:id,etiqueta_id:e})));
   finCarregado=false;

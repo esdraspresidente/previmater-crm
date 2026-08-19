@@ -4578,9 +4578,10 @@ function geraParcs(){
    que e o desenho mais provavel de virar inadimplencia. */
 const FAIXAS_PROG=[{ate:1000,paga:500},{ate:1500,paga:800},{ate:2000,paga:1200},{ate:2999.99,paga:1500}];
 const PARCELA_PROG=500;
-function honorariosProgressivos(valores,pctTeto){
+function honorariosProgressivos(valores,pctTeto,descontoGlobal){
   const total=valores.reduce((s,v)=>s+(parseFloat(v)||0),0);
-  let saldo=Math.round(total*(pctTeto/100)*100)/100;
+  let saldo=Math.round((total*(pctTeto/100)-(parseFloat(descontoGlobal)||0))*100)/100;
+  if(saldo<0)saldo=0;
   return valores.map((v,i)=>{
     v=parseFloat(v)||0;
     if(saldo<=0)return 0;
@@ -4611,16 +4612,35 @@ function recalcParcs(){
     const soma=fParcs.slice(0,n-1).reduce((s,p)=>s+(parseFloat(p.cli)||0),0);
     fParcs[n-1].cli=Math.max(0,vcTotal-soma);
   }else if(n===1)fParcs[0].cli=vcTotal;
+  /* DESCONTO GLOBAL (Promo 500) — sai do FINAL, nunca da primeira parcela.
+     Ele reduz o total devido, e as parcelas sao consumidas do comeco para
+     tras: os primeiros recebimentos mantem o valor de tabela e o desconto
+     come o rabo do parcelamento. Antes este campo so aparecia no resumo e
+     nao entrava no calculo — a tela mostrava liquido de R$ 1.300 e logo
+     abaixo parcelas somando R$ 1.800, na mesma pagina.
+     E separado do desconto por parcela (p.fd), que continua servindo para
+     ajuste pontual de uma parcela especifica. */
+  const descGlobal=m2f($('ffd'))||0;
   if(fModelo==='progressivo'){
-    const hons=honorariosProgressivos(fParcs.map(p=>p.cli),fp);
+    const hons=honorariosProgressivos(fParcs.map(p=>p.cli),fp,descGlobal);
     fParcs.forEach((p,i)=>{
       const fd=parseFloat(p.fd)||0;
       p.hon=Math.max(0,hons[i]-fd);
     });
   }else{
-    fParcs.forEach(p=>{
-      const cli=parseFloat(p.cli)||0,fd=parseFloat(p.fd)||0;
-      p.hon=Math.max(0,cli*(fp/100)-fd);
+    /* No percentual o desconto tambem sai do fim: percorre de tras para
+       frente abatendo o que ainda falta, para que as primeiras parcelas
+       fiquem intactas. */
+    let restante=descGlobal;
+    const brutos=fParcs.map(p=>Math.max(0,(parseFloat(p.cli)||0)*(fp/100)));
+    for(let i=brutos.length-1;i>=0&&restante>0;i--){
+      const abate=Math.min(brutos[i],restante);
+      brutos[i]=Math.round((brutos[i]-abate)*100)/100;
+      restante=Math.round((restante-abate)*100)/100;
+    }
+    fParcs.forEach((p,i)=>{
+      const fd=parseFloat(p.fd)||0;
+      p.hon=Math.max(0,brutos[i]-fd);
     });
   }
   renderParcsForm();

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>PreviMater · Tráfego</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --teal:#0A9396;--teal2:#00B4D8;--teal-l:#E0F4F5;
+  --bg:#EFF7F7;--white:#FFFFFF;
+  --text:#0D2B2B;--text2:#3D6060;--text3:#7FA8A8;
+  --border:#D4EBEB;
+  --green:#0A7A5C;--green-bg:#E0F5EE;
+  --yellow:#B06000;--yellow-bg:#FEF3E0;
+  --red:#C0392B;
+  --r:12px;--rl:16px;
+  --sh:0 1px 4px rgba(10,147,150,.08);
+  --shl:0 8px 40px rgba(10,147,150,.18);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased;}
+
+/* ---------- login ---------- */
+#ln{position:fixed;inset:0;background:linear-gradient(135deg,#0A9396 0%,#00B4D8 60%,#94D2BD 100%);display:flex;align-items:center;justify-content:center;z-index:998;padding:24px;}
+#ln.h{display:none;}
+.lbox{background:var(--white);border-radius:22px;padding:40px 36px;width:100%;max-width:370px;box-shadow:var(--shl);}
+.llogo{display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:26px;}
+.ltitle{font-size:22px;font-weight:800;letter-spacing:-.4px;}
+.lsub{font-size:12px;color:var(--text3);}
+.lf{display:flex;flex-direction:column;gap:5px;margin-bottom:13px;}
+.lf label{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;}
+.lf input{background:#F3FAFA;border:1.5px solid var(--border);border-radius:9px;padding:11px 14px;color:var(--text);font-size:14px;font-family:inherit;width:100%;}
+.lf input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(10,147,150,.14);}
+.lbtn{width:100%;background:linear-gradient(135deg,#0A9396,#00B4D8);color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit;margin-top:6px;}
+.lbtn:disabled{opacity:.6;cursor:default;}
+.lerr{font-size:12px;color:var(--red);text-align:center;margin-top:10px;min-height:16px;line-height:1.4;}
+
+/* ---------- app ---------- */
+#app{display:none;min-height:100vh;padding:0 0 40px;}
+#app.v{display:block;}
+header{background:var(--white);border-bottom:1px solid var(--border);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
+.htit{font-size:16px;font-weight:800;letter-spacing:-.3px;}
+.hsub{font-size:11px;color:var(--text3);margin-top:1px;}
+.hout{background:none;border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}
+.wrap{max-width:820px;margin:0 auto;padding:18px 16px 0;}
+
+.aviso{background:var(--yellow-bg);border:1px solid #F0D9AE;border-radius:var(--r);padding:12px 14px;font-size:12px;color:#7A4400;line-height:1.55;margin-bottom:18px;}
+.aviso b{font-weight:700;}
+
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;}
+@media(max-width:640px){.kpis{grid-template-columns:repeat(2,1fr);}}
+.kpi{background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:14px;box-shadow:var(--sh);}
+.kpi .n{font-size:26px;font-weight:800;letter-spacing:-.8px;line-height:1.1;}
+.kpi .l{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-top:4px;}
+
+.card{background:var(--white);border:1px solid var(--border);border-radius:var(--rl);padding:18px;box-shadow:var(--sh);margin-bottom:16px;}
+.ctit{font-size:13px;font-weight:800;margin-bottom:2px;}
+.csub{font-size:11px;color:var(--text3);margin-bottom:16px;}
+
+/* barras */
+.bars{display:flex;align-items:flex-end;gap:6px;height:150px;}
+.bcol{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end;}
+.bval{font-size:11px;font-weight:700;color:var(--text2);}
+.bbar{width:100%;max-width:34px;background:linear-gradient(180deg,#00B4D8,#0A9396);border-radius:5px 5px 0 0;min-height:3px;}
+.blab{font-size:9px;color:var(--text3);font-weight:600;}
+
+/* funil */
+.fl{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #F0F7F7;}
+.fl:last-child{border-bottom:none;}
+.fnome{flex:1;font-size:13px;font-weight:600;}
+.fbar{width:120px;height:7px;background:#F0F7F7;border-radius:4px;overflow:hidden;}
+.fbar i{display:block;height:100%;background:var(--teal);border-radius:4px;}
+.fqtd{width:34px;text-align:right;font-size:14px;font-weight:800;}
+
+.linha7{font-size:11px;color:var(--text2);background:#F3FAFA;border-radius:8px;padding:8px 10px;margin-bottom:14px;}
+.vazio{font-size:12px;color:var(--text3);padding:14px 0;text-align:center;}
+.rodape{text-align:center;font-size:11px;color:var(--text3);margin-top:18px;line-height:1.6;}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="ln">
+  <div class="lbox">
+    <div class="llogo">
+      <div class="ltitle">PreviMater</div>
+      <div class="lsub">Painel de Tráfego</div>
+    </div>
+    <div class="lf"><label>E-mail</label><input id="em" type="email" autocomplete="username"></div>
+    <div class="lf"><label>Senha</label><input id="pw" type="password" autocomplete="current-password"></div>
+    <button class="lbtn" id="bt">Entrar</button>
+    <div class="lerr" id="er"></div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app">
+  <header>
+    <div>
+      <div class="htit">Painel de Tráfego</div>
+      <div class="hsub" id="quem">—</div>
+    </div>
+    <button class="hout" id="sair">Sair</button>
+  </header>
+
+  <div class="wrap">
+    <div class="aviso">
+      <b>Leia antes de comparar:</b> o CRM começou a registrar conversas em
+      <b>12/08/2026</b>. Não existe histórico anterior a essa data, e os primeiros
+      dias ainda pegaram só parte do movimento. Queda ou subida contra o começo do
+      mês não mede campanha — mede quando o sistema entrou no ar.
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="n" id="k1">—</div><div class="l">Contatos hoje</div></div>
+      <div class="kpi"><div class="n" id="k2">—</div><div class="l">Últimos 7 dias</div></div>
+      <div class="kpi"><div class="n" id="k3">—</div><div class="l">Média por dia</div></div>
+      <div class="kpi"><div class="n" id="k4">—</div><div class="l">Contratos assinados</div></div>
+    </div>
+
+    <div class="card">
+      <div class="ctit">Contatos novos por dia</div>
+      <div class="csub">Pessoa que mandou a primeira mensagem naquele dia. Um número por pessoa, não por mensagem.</div>
+      <div class="linha7" id="linha7">—</div>
+      <div class="bars" id="bars"></div>
+    </div>
+
+    <div class="card">
+      <div class="ctit">Funil comercial agora</div>
+      <div class="csub">Quantas pessoas estão paradas em cada etapa neste momento. É uma foto, não um acumulado do mês.</div>
+      <div id="funil"></div>
+    </div>
+
+    <div class="rodape">
+      Atualizado ao abrir a página · Somente leitura<br>
+      Este painel não mostra nome, telefone, CPF nem conversa de cliente.
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG — mesma URL e chave anon do CRM. A chave anon sozinha não
+// abre nada: quem libera leitura é a sessão do usuário logado.
+// ============================================================
+const SUPABASE_URL='https://ggyngtqknonwnohbzkyj.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdneW5ndHFrbm9ud25vaGJ6a3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5ODA4NzcsImV4cCI6MjA5NDU1Njg3N30.0zYn_V9gBtRNWivAHfps6u68akb0mTc7Ix8ZD38OD0I';
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+const $=id=>document.getElementById(id);
+
+// ------------------------------------------------------------
+// Login
+// ------------------------------------------------------------
+async function entrar(){
+  const email=$('em').value.trim(), senha=$('pw').value;
+  if(!email||!senha){ $('er').textContent='Preencha e-mail e senha.'; return; }
+  $('bt').disabled=true; $('er').textContent='';
+  const {error}=await sb.auth.signInWithPassword({email,password:senha});
+  $('bt').disabled=false;
+  if(error){ $('er').textContent='E-mail ou senha incorretos.'; return; }
+  abrir();
+}
+$('bt').addEventListener('click',entrar);
+$('pw').addEventListener('keydown',e=>{ if(e.key==='Enter') entrar(); });
+
+$('sair').addEventListener('click',async()=>{
+  await sb.auth.signOut();
+  location.reload();
+});
+
+// ------------------------------------------------------------
+// Abertura: confirma que o usuário está cadastrado e ativo.
+// A tela conferir o nível é conveniência, não segurança — quem
+// realmente impede o acesso ao dado pessoal são as políticas do
+// banco. Se um dia esta checagem for removida por engano, o Rafa
+// continua sem enxergar crm_clientes.
+// ------------------------------------------------------------
+async function abrir(){
+  const {data:{user}}=await sb.auth.getUser();
+  if(!user) return;
+
+  const {data:u,error}=await sb.from('crm_usuarios')
+    .select('nome,nivel,ativo')
+    .eq('auth_user_id',user.id)
+    .maybeSingle();
+
+  if(error||!u||!u.ativo){
+    $('er').textContent='Este acesso não está liberado. Fale com o Esdras.';
+    await sb.auth.signOut();
+    return;
+  }
+
+  $('quem').textContent=(u.nome||user.email)+' · acesso de leitura';
+  $('ln').classList.add('h');
+  $('app').classList.add('v');
+  carregar();
+}
+
+// ------------------------------------------------------------
+// Dados: só as duas views agregadas, com colunas explícitas.
+// Nunca select('*') — a base tem 37 mil clientes e o plano do
+// Supabase é cobrado por tráfego de saída.
+// ------------------------------------------------------------
+async function carregar(){
+  const [dia,estoque]=await Promise.all([
+    sb.from('vw_trafego_dia').select('dia,novos_contatos,contratos_enviados,contratos_assinados').order('dia',{ascending:true}).limit(60),
+    sb.from('vw_trafego_estoque').select('ordem,lista,qtd').order('ordem',{ascending:true}).limit(30)
+  ]);
+
+  if(!dia.error && Array.isArray(dia.data)) desenharDias(dia.data);
+  if(!estoque.error && Array.isArray(estoque.data)) desenharFunil(estoque.data);
+}
+
+function desenharDias(linhas){
+  const hoje=new Date().toISOString().slice(0,10);
+  const doDia=linhas.find(l=>l.dia===hoje);
+  $('k1').textContent=doDia?doDia.novos_contatos:0;
+
+  const ult=linhas.slice(-7);
+  const soma=ult.reduce((s,l)=>s+(l.novos_contatos||0),0);
+  $('k2').textContent=soma;
+  $('k3').textContent=ult.length?(soma/ult.length).toFixed(1).replace('.',','):'0';
+  const env=ult.reduce((s,l)=>s+(l.contratos_enviados||0),0);
+  const ass=ult.reduce((s,l)=>s+(l.contratos_assinados||0),0);
+  $('k4').textContent=ass;
+  // Enviado x assinado lado a lado: a diferenca entre os dois e contrato
+  // parado esperando assinatura, que e onde da pra agir.
+  $('linha7').textContent='Últimos 7 dias: '+env+' contrato(s) enviado(s) · '+ass+' assinado(s).'
+    +' Assinatura passou a ser registrada em 17/08 — antes disso não há histórico.';
+
+  const mostra=linhas.slice(-14);
+  const teto=Math.max(1,...mostra.map(l=>l.novos_contatos||0));
+  $('bars').innerHTML=mostra.map(l=>{
+    const v=l.novos_contatos||0;
+    const alt=Math.round((v/teto)*105);
+    const d=l.dia.slice(8,10)+'/'+l.dia.slice(5,7);
+    return '<div class="bcol"><div class="bval">'+v+'</div>'
+         + '<div class="bbar" style="height:'+alt+'px"></div>'
+         + '<div class="blab">'+d+'</div></div>';
+  }).join('');
+}
+
+function desenharFunil(linhas){
+  if(!linhas.length){ $('funil').innerHTML='<div class="vazio">Sem dados.</div>'; return; }
+  const teto=Math.max(1,...linhas.map(l=>l.qtd||0));
+  $('funil').innerHTML=linhas.map(l=>{
+    const pct=Math.round(((l.qtd||0)/teto)*100);
+    return '<div class="fl"><div class="fnome">'+l.lista+'</div>'
+         + '<div class="fbar"><i style="width:'+pct+'%"></i></div>'
+         + '<div class="fqtd">'+(l.qtd||0)+'</div></div>';
+  }).join('');
+}
+
+// Sessão já aberta: entra direto.
+sb.auth.getSession().then(({data})=>{ if(data.session) abrir(); });
+</script>
+</body>
+</html>

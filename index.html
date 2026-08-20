@@ -2386,7 +2386,12 @@ async function registrarMovimentoLista(clienteId,origListaId,destListaId){
   const saiu   = lo && lo.nome==='Descartado' && !entrou;
   if(entrou){
     await sb.from('crm_clientes').update({descartado_em:new Date().toISOString()}).eq('id',clienteId);
-    perguntarMotivoDescarte(clienteId);
+    /* Arrastado no quadro, com o cartao fechado: nao ha onde mostrar o
+       campo, e abrir um balao por cima do quadro atrapalha quem esta
+       arrastando varios. Um aviso resolve — o campo espera dentro do
+       cartao. Movido de dentro do cartao, o campo ja estava a vista e
+       o motivo foi junto no mesmo Salvar. */
+    if(!mcClienteId||mcClienteId!==clienteId) toast('Descartada. Abra o cartão para registrar o motivo','ok');
   }else if(saiu){
     /* Saiu de Descartado = foi requalificada. O motivo antigo tem que
        ir junto: deixá-lo ali faz ela continuar contando como descarte
@@ -2615,6 +2620,7 @@ async function abrirCardCliente(id){
   await loadFin();
   const etqSel=(c.crm_clientes_etiquetas||[]).map(e=>e.etiqueta_id);
   const{data:listas}=await sb.from('crm_listas').select('*').eq('quadro',c.quadro).eq('arquivada',false).order('ordem');
+  await carregarMotivosDescarte();  // cacheado: so vai ao banco na primeira vez
   renderCardClienteModal(c,etqSel,listas||[]);
 }
 /* O que a Samara apurou na triagem mora em crm_clientes.samara_dados,
@@ -2692,6 +2698,13 @@ function renderCardClienteModal(c,etqSel,listas){
   const verInss=mcVerSecao(ETAPA_INSS,etapa,temInss);
   const verPag=mcVerSecao(ETAPA_PAGAMENTOS,etapa,pagHtml.temParc);
   const ocultas=[!verContrato&&'Contrato',!verInss&&'Acesso INSS',!verPag&&'Pagamentos'].filter(Boolean);
+  /* O motivo do descarte e campo comum do cartao, nao balao de uma vez
+     so. O balao dependia de voce estar olhando na hora do movimento: se
+     piscasse fora da tela, ou se o cartao ja estivesse em Descartado de
+     antes, nao havia segunda chance de registrar. */
+  const ehDescartado=!!(listaAtual&&listaAtual.nome==='Descartado');
+  const optMotivo='<option value="">— escolher —</option>'+(MOTIVOS_DESC||[]).map(m=>
+    `<option value="${escA(m.codigo)}" ${c.motivo_descarte===m.codigo?'selected':''}>${esc(m.rotulo)}</option>`).join('');
   abrirModalCard(`
     <div class="mchead-sticky" id="mchead-sticky">
       <div class="mchs-nome">${esc(c.nome_completo)}</div>
@@ -2789,7 +2802,12 @@ function renderCardClienteModal(c,etqSel,listas){
         ${!(mcMostrarTudo)?'':`<button class="mcsecmais" onclick="mcAlternarSecoes()">− esconder de novo o que ainda não é desta etapa</button>`}
         <div class="fg" style="margin-bottom:13px">
           <div class="fld"><label>Quadro</label><select id="mc-quadro" onchange="mcTrocarQuadro()">${optQ}</select></div>
-          <div class="fld"><label>Lista</label><select id="mc-lista">${optL}</select></div>
+          <div class="fld"><label>Lista</label><select id="mc-lista" onchange="mcListaChange()">${optL}</select></div>
+          <div class="fld" id="mc-motivo-wrap" style="${ehDescartado?'':'display:none'}">
+            <label>Motivo do descarte</label>
+            <select id="mc-motivo">${optMotivo}</select>
+            <div class="fhint">Aparece sozinho quando a lista vira Descartado. É o que vira barra no painel do tráfego — sem ele a lead conta como "sem motivo".</div>
+          </div>
         </div>
         <div class="fg" style="margin-bottom:13px">
           <div class="fld"><label>Telefone</label><input type="text" id="mc-tel" value="${escA(c.telefone_principal)}"/></div>
@@ -3420,6 +3438,15 @@ async function mcCopiarSenha(btn){
   setTimeout(()=>{btn.textContent=antes;},1200);
   toast('Senha copiada');
 }
+/* O campo aparece no instante em que a lista vira Descartado, e nao
+   depois de salvar. Assim o movimento e o motivo vao no MESMO Salvar,
+   em vez de exigir salvar, esperar a tela voltar e salvar de novo. */
+function mcListaChange(){
+  const sel=$('mc-lista'), wrap=$('mc-motivo-wrap');
+  if(!sel||!wrap)return;
+  const nome=(sel.options[sel.selectedIndex]||{}).text||'';
+  wrap.style.display=(nome.trim()==='Descartado')?'':'none';
+}
 async function mcTrocarQuadro(){
   const q=$('mc-quadro').value;
   const{data:L}=await sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem');
@@ -3477,6 +3504,17 @@ async function salvarCardCliente(id){
     observacoes:$('mc-obs').value.trim()||null,
     atualizado_em:new Date().toISOString()
   };
+  /* MOTIVO SO VIAJA QUANDO O DESTINO E DESCARTADO.
+     Fora dali o campo esta escondido, mas continua no DOM com o valor
+     antigo — mandar isso gravaria motivo de descarte em cliente que
+     acabou de ser requalificada. Quando o destino NAO e Descartado a
+     chave nem entra no payload; quem limpa e o registrarMovimentoLista,
+     que ja zera motivo e data ao sair da lista. */
+  {
+    const selL=$('mc-lista');
+    const nomeDestino=selL?((selL.options[selL.selectedIndex]||{}).text||'').trim():'';
+    if(nomeDestino==='Descartado') payload.motivo_descarte=vCampo('mc-motivo');
+  }
   const etqSel=mcEtqSelAtual.slice();
   // Sao dois botoes Salvar (topo e rodape) e a mesma funcao atende os
   // dois. Mexer so no de baixo deixaria o de cima dizendo "Salvar"

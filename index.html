@@ -3237,6 +3237,19 @@ async function confirmarDataINSS(parcelaId){
   await loadFin(true);
   await abrirCardCliente(pCli(p));
 }
+/* O PRIMEIRO NOME, EM CAIXA DE GENTE.
+   O cadastro vem do contrato e da migracao, e boa parte esta em CAIXA
+   ALTA: "JHENNIFER APARECIDA" viraria "Oi JHENNIFER." na mensagem, que
+   parece grito ou robo. So arruma quando NAO HA nenhuma minuscula no
+   nome — se a pessoa digitou com capitalizacao propria, ela sabe o que
+   fez e nao cabe a nos corrigir. Nomes com acento passam certo: o
+   toLowerCase/toUpperCase do JS trata acentuacao. */
+function primeiroNomeBonito(completo){
+  const n=(completo||'').trim().split(/\s+/)[0]||'';
+  if(!n) return '';
+  if(/[a-zà-ÿ]/.test(n)) return n;          // ja tem minuscula: nao mexe
+  return n.charAt(0).toUpperCase()+n.slice(1).toLowerCase();
+}
 async function marcarComunicada(parcelaId){
   const p=(PARC||[]).find(x=>String(x.id)===String(parcelaId));
   if(!p){toast('Parcela não encontrada','er');return;}
@@ -3247,7 +3260,7 @@ async function marcarComunicada(parcelaId){
      que ela precisa achar sem ler a mensagem inteira.
      O numero da parcela saiu de proposito: a mae nao precisa saber quantas sao,
      e a Samara ja tem a regra de nunca prometer numero de parcelas. */
-  const nome=(p.cliente_nome||'').trim().split(/\s+/)[0];
+  const nome=primeiroNomeBonito(p.cliente_nome);
   const texto='Oi'+(nome?' '+nome:'')+'. Tudo bem?\n'
     +'Passando pra avisar que saiu data e valor do seu próximo recebimento.\n'
     +'Será no dia *'+fD(p.data_vencimento)+'*, no valor de *'+R(vc)+'*.\n'

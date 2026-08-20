@@ -340,7 +340,15 @@ async function carregar(){
 
 // ---------- datas ----------
 function iso(d){ return d.toISOString().slice(0,10); }
-function hojeISO(){ return iso(new Date()); }
+/* HOJE E O HOJE DE BRASILIA, NAO O DE GREENWICH.
+   toISOString() devolve a data em UTC, e 21h em Brasilia ja e o dia
+   seguinte la. O painel virava o dia as 21h: o filtro "Hoje" ficava
+   vazio e o de "Ontem" mostrava o dia que ainda estava acontecendo.
+   en-CA formata como AAAA-MM-DD, que e o mesmo formato que a view
+   devolve — comparar texto com texto sem converter nada no meio. */
+function hojeISO(){
+  return new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'});
+}
 function menos(dataISO,n){ const d=new Date(dataISO+'T12:00:00Z'); d.setUTCDate(d.getUTCDate()-n); return iso(d); }
 function fmtBR(dataISO){ return dataISO.slice(8,10)+'/'+dataISO.slice(5,7); }
 

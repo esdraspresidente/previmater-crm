@@ -115,6 +115,14 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 .fbar{width:120px;height:7px;background:#F0F7F7;border-radius:4px;overflow:hidden;}
 .fbar i{display:block;height:100%;background:var(--teal);border-radius:4px;}
 .fqtd{width:34px;text-align:right;font-size:14px;font-weight:800;}
+/* Descarte usa a mesma barra do funil, em vermelho. Verde e o que
+   avanca, vermelho e o que se perde — ler os dois blocos lado a lado
+   nao pode exigir conferir a legenda. O cinza e o "sem motivo": ele
+   precisa aparecer, porque um grafico so com os motivos conhecidos
+   mente sobre o tamanho do que nao se sabe. */
+.dbar i{background:var(--red);}
+.dbar-cinza i{background:#C7D3D3;}
+.dpct{width:44px;text-align:right;font-size:11px;color:var(--text3);}
 
 .linha7{font-size:11px;color:var(--text2);background:#F3FAFA;border-radius:8px;padding:8px 10px;margin-bottom:14px;}
 .btcsv{background:var(--white);border:1px solid var(--border);color:var(--teal);border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}
@@ -228,6 +236,14 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
       <div id="funil"></div>
     </div>
 
+    <div class="card">
+      <div class="ctopo">
+        <div class="ctit">Por que as leads foram descartadas</div>
+      </div>
+      <div class="csub">Segue o período escolhido lá em cima. Serve para separar duas coisas que exigem decisões opostas: descarte por <b>filho com 5 anos ou mais</b> e por <b>sem registro</b> é público errado — mexe no anúncio. Descarte por <b>fora da qualidade</b> é público certo com caso ruim — mexe no atendimento.</div>
+      <div id="descartes"></div>
+    </div>
+
     <div class="rodape">
       Atualizado ao abrir a página · Somente leitura<br>
       Este painel não mostra nome, telefone, CPF nem conversa de cliente.
@@ -316,6 +332,7 @@ async function abrir(){
 let LINHAS=[];           // uma linha por dia, direto da view
 let META=[];             // uma linha por dia, gasto do Meta
 let ESTOQUE=[];          // uma linha por etapa do funil
+let DESCARTES=[];        // uma linha por dia e por motivo de descarte
 let VARIANTE='qtd';      // qtd = geral | qtd_pre | qtd_adm
 let PERIODO='7';         // hoje | ontem | 7 | 15 | 30
 let COMPARAR='0';        // 0 = sem comparacao; 1,7,15,30 = deslocamento em dias
@@ -324,11 +341,13 @@ const PERIODOS=[['hoje','Hoje'],['ontem','Ontem'],['7','7 dias'],['15','15 dias'
 const COMPARACOES=[['0','Não comparar'],['1','Dia anterior'],['7','Semana anterior'],['15','Quinzena anterior'],['30','Mês anterior']];
 
 async function carregar(){
-  const [dia,estoque,meta]=await Promise.all([
+  const [dia,estoque,meta,desc]=await Promise.all([
     sb.from('vw_trafego_dia').select('dia,novos_contatos,contratos_enviados,contratos_assinados').order('dia',{ascending:true}).limit(400),
     sb.from('vw_trafego_estoque').select('ordem,lista,qtd,qtd_pre,qtd_adm').order('ordem',{ascending:true}).limit(30),
-    sb.from('vw_trafego_meta_dia').select('dia,gasto,alcance,cliques,conversas').order('dia',{ascending:true}).limit(400)
+    sb.from('vw_trafego_meta_dia').select('dia,gasto,alcance,cliques,conversas').order('dia',{ascending:true}).limit(400),
+    sb.from('vw_trafego_descartes').select('dia,codigo,rotulo,ordem,qtd').order('dia',{ascending:true}).limit(900)
   ]);
+  if(!desc.error && Array.isArray(desc.data)) DESCARTES=desc.data;
   if(!meta.error && Array.isArray(meta.data)) META=meta.data;
 
   // A view devolve um dia por linha desde 12/08. Com 400 dias de teto o
@@ -441,6 +460,11 @@ function aplicar(){
   // uma barra sozinha não diz nada. Os KPIs seguem o filtro; o gráfico
   // dá o contexto em volta.
   desenharDias(Math.max(j.dias,7));
+
+  // Descartes seguem o mesmo filtro. Entram aqui, e não no carregar(),
+  // porque têm que se redesenhar a cada clique no período — igual aos
+  // KPIs de cima.
+  desenharDescartes();
 }
 
 const brl=v=>'R$ '+Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -586,6 +610,35 @@ function desenharFunil(){
     if(soma<total) h+='<div class="vazio">'+(total-soma)+' de '+total+' cards ainda não têm etiqueta PRÉ ou ADM e não aparecem neste recorte.</div>';
   }
   $('funil').innerHTML=h;
+}
+
+/* Descartes do periodo escolhido.
+   Soma em memoria igual ao resto da tela, e cabe: a view devolve uma
+   linha por dia e por motivo — sao quatro motivos, entao mesmo um ano
+   inteiro nao chega perto do teto de 1.000 linhas do PostgREST. Se um
+   dia passar disso, tem que virar soma no banco. */
+function desenharDescartes(){
+  const j=janela(PERIODO);
+  const soma={};
+  let total=0;
+  for(const l of DESCARTES){
+    if(l.dia<j.ini||l.dia>j.fim) continue;
+    if(!soma[l.codigo]) soma[l.codigo]={rotulo:l.rotulo,ordem:l.ordem,qtd:0};
+    soma[l.codigo].qtd+=l.qtd||0;
+    total+=l.qtd||0;
+  }
+  if(!total){ $('descartes').innerHTML='<div class="vazio">Nenhum descarte no período.</div>'; return; }
+  const linhas=Object.entries(soma).sort((a,b)=>b[1].qtd-a[1].qtd);
+  const teto=Math.max(1,...linhas.map(([,v])=>v.qtd));
+  $('descartes').innerHTML=linhas.map(([cod,v])=>{
+    const pct=Math.round((v.qtd/teto)*100);
+    const share=Math.round((v.qtd/total)*100);
+    const cinza=cod==='NAO_INFORMADO'?' dbar-cinza':'';
+    return '<div class="fl"><div class="fnome">'+v.rotulo+'</div>'
+         + '<div class="fbar dbar'+cinza+'"><i style="width:'+pct+'%"></i></div>'
+         + '<div class="fqtd">'+v.qtd+'</div><div class="dpct">'+share+'%</div></div>';
+  }).join('')
+  + '<div class="vazio" style="margin-top:10px">'+total+' no período. Cliente que sair de Descartado deixa de contar aqui.</div>';
 }
 
 // ------------------------------------------------------------

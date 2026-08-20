@@ -2054,7 +2054,7 @@ async function pageQuadro(q){
   }
   const[{data:listas},{data:clientes,error}]=await Promise.all([
     sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem'),
-    sb.from('crm_clientes').select('id,nome_completo,lista_id,posicao,telefone_principal,data_nascimento_bebe,data_prevista_parto,data_entrega,data_desbloqueio_inss,valor_beneficio_esperado,valor_honorarios,crm_clientes_etiquetas(etiqueta_id)').eq('quadro',q).is('arquivado_em',null).order('posicao')
+    sb.from('crm_clientes').select('id,nome_completo,lista_id,posicao,telefone_principal,data_nascimento_bebe,data_entrega,data_desbloqueio_inss,valor_beneficio_esperado,valor_honorarios,crm_clientes_etiquetas(etiqueta_id)').eq('quadro',q).is('arquivado_em',null).order('posicao')
   ]);
   if(error){pc.innerHTML=`<div class="emp"><div class="empt">Erro ao carregar</div>${esc(error.message)}</div>`;return;}
   const L=listas||[],C=clientes||[];
@@ -2139,7 +2139,7 @@ function listaHtml(l,cards,semAcoes,arqCount){
     </div>`;
 }
 /* Card de gravida: a etiqueta PRE e o que diz que o acompanhamento
-   gestacional se aplica. Sem DPP ele nao dispara — por isso a falta
+   gestacional se aplica. Sem a data ele nao dispara — por isso a falta
    aparece em vermelho na face do card, e nao escondida no formulario. */
 function temEtiquetaPre(c){
   return (c.crm_clientes_etiquetas||[]).some(e=>{
@@ -2154,12 +2154,16 @@ function cardHtml(c){
   }).join('');
   const meta=[];
   if(c.telefone_principal)meta.push(esc(c.telefone_principal));
+  /* UMA DATA SO PARA O BEBE.
+     DN e DPP sao a mesma informacao em dois momentos: enquanto nao
+     nasceu a data e prevista, quando nasce e real e voce corrige o mesmo
+     campo. Duas colunas obrigavam a olhar em dois lugares e decidir qual
+     valia. Quem manda na conta de elegibilidade e no acompanhamento
+     gestacional e o samara_dados, que nunca leu coluna nenhuma.
+     Card com etiqueta PRE e sem data nao dispara acompanhamento — por
+     isso a falta grita em vermelho em vez de ficar campo vazio calado. */
   if(c.data_nascimento_bebe)meta.push('DN '+fD(c.data_nascimento_bebe));
-  // A DPP na face do card. Sem ela o acompanhamento gestacional nao tem
-  // como saber em que mes a cliente esta — por isso a ausencia aparece
-  // como aviso, e nao como campo vazio silencioso.
-  if(c.data_prevista_parto)meta.push('DPP '+fD(c.data_prevista_parto));
-  else if(temEtiquetaPre(c))meta.push('<span style="color:var(--red);font-weight:700">sem DPP</span>');
+  else if(temEtiquetaPre(c))meta.push('<span style="color:var(--red);font-weight:700">sem DN</span>');
   if(c.anexosCount)meta.push(`<span class="kc-anexo">${clipeSvg()}${c.anexosCount}</span>`);
   let finHtml='';
   if(c.finResumo){
@@ -2612,9 +2616,9 @@ function renderCardClienteModal(c,etqSel,listas){
           <div class="fld"><label>Telefone</label><input type="text" id="mc-tel" value="${escA(c.telefone_principal)}"/></div>
           <div class="fld"><label>Canal WhatsApp</label><select id="mc-canal" onchange="mcCanalChange()">${optCanal}</select></div>
           <div class="fld"><label>Origem</label><select id="mc-origem">${optOrig}</select></div>
-          <div class="fld"><label>DN do bebê</label><input type="date" id="mc-dn" value="${c.data_nascimento_bebe||''}"/></div>
+          <div class="fld"><label>DN do bebê</label><input type="date" id="mc-dn" value="${c.data_nascimento_bebe||''}"/>
+            <div class="fhint">Enquanto não nasceu, a data prevista vai aqui mesmo. Quando nascer, corrija neste campo.</div></div>
           <div class="fld"><label>DS (saída do último emprego)</label><input type="date" id="mc-ds" value="${c.data_saida_emprego||''}"/></div>
-          <div class="fld"><label>DPP (data prevista do parto)</label><input type="date" id="mc-dpp" value="${c.data_prevista_parto||''}"/></div>
           <div class="fld"><label>Bloqueio INSS até</label><input type="date" id="mc-bloqueio" value="${c.data_desbloqueio_inss||''}" onchange="mcBloqueioChange()"/>
             <div id="mc-bloqueio-top" style="margin-top:6px">${bloqueioBadgeHtml(c.data_desbloqueio_inss)}</div></div>
           <div class="fld"><label>Documento pedido pelo INSS</label><input type="text" id="mc-docpend" placeholder="ex: certidão de nascimento" value="${escA(c.documento_pendente)}"/>
@@ -3259,7 +3263,6 @@ async function salvarCardCliente(id){
     lista_id:listaId,
     data_entrega:$('mc-entrega').value||null,
     data_nascimento_bebe:$('mc-dn').value||null,
-    data_prevista_parto:$('mc-dpp').value||null,
     data_saida_emprego:$('mc-ds').value||null,
     data_desbloqueio_inss:$('mc-bloqueio').value||null,
     documento_pendente:$('mc-docpend').value.trim()||null,
@@ -3474,7 +3477,8 @@ async function pageCliente(id){
           <div class="indsug" id="indsug"></div>
           <div class="fhint" id="indhint"></div>
         </div>
-        <div class="fld"><label>Data de nascimento do bebê</label><input type="date" id="f-dn" value="${(c&&c.data_nascimento_bebe)||''}"/></div>
+        <div class="fld"><label>Data de nascimento do bebê (DN)</label><input type="date" id="f-dn" value="${(c&&c.data_nascimento_bebe)||''}"/>
+          <div class="fhint">Grávida: ponha aqui a data prevista. Quando nascer, corrija neste mesmo campo — não existe outro.</div></div>
         <div class="fld"><label>Link do Trello</label><input type="url" id="f-trello" placeholder="https://trello.com/c/..." value="${escA(c&&c.trello_url)}"/></div>
       </div>
     </div>
@@ -3490,7 +3494,6 @@ async function pageCliente(id){
     <div class="fs"><div class="fst">3. Benefício e honorários</div>
       <div class="fg">
         <div class="fld"><label>Data de saída do emprego (DS)</label><input type="date" id="f-ds" value="${(c&&c.data_saida_emprego)||''}"/></div>
-        <div class="fld"><label>Data prevista do parto (DPP)</label><input type="date" id="f-dpp" value="${(c&&c.data_prevista_parto)||''}"/></div>
         <div class="fld"><label>Data de entrega</label><input type="date" id="f-entrega" value="${(c&&c.data_entrega)||''}"/>
           <div class="fhint">Aparece no card e fica em destaque quando estiver perto ou vencida.</div></div>
         <div class="fld"><label>Bloqueio INSS até</label><input type="date" id="f-bloqueio" value="${(c&&c.data_desbloqueio_inss)||''}"/>
@@ -3603,7 +3606,6 @@ async function salvarCliente(id){
     quadro:quadro,
     lista_id:$('f-lista').value||null,
     data_nascimento_bebe:$('f-dn').value||null,
-    data_prevista_parto:$('f-dpp').value||null,
     data_saida_emprego:$('f-ds').value||null,
     data_entrega:$('f-entrega').value||null,
     data_desbloqueio_inss:$('f-bloqueio').value||null,

@@ -97,6 +97,11 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 
 /* KANBAN */
 .kb{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding-bottom:14px;height:calc(100vh - 172px);}
+/* Arrastar o fundo do quadro empurra a tela para os lados. O cursor so
+   muda quando o arrasto comeca de verdade: se mudasse no mousedown,
+   cada clique num cartao piscaria a mãozinha sem motivo. */
+.kb.arrastando{cursor:grabbing;user-select:none;}
+.kb.arrastando *{cursor:grabbing !important;}
 @media(max-width:900px){.kb{height:calc(100vh - 226px);}}
 .kl{flex:0 0 262px;width:262px;background:var(--white);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--sh);display:flex;flex-direction:column;max-height:calc(100vh - 188px);transition:flex-basis .15s,width .15s;}
 @media(max-width:900px){.kl{max-height:calc(100vh - 242px);}}
@@ -523,6 +528,11 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
    que e onde a edicao acontece. */
 .mctrilha{display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-width:0;}
 .mcsalvartopo-btn{margin-left:auto;padding:9px 22px;flex-shrink:0;}
+/* Discreto de proposito: e uma saida de emergencia, nao um convite.
+   Quem precisa do link do contrato antes da hora clica; quem nao
+   precisa nem repara. */
+.mcsecmais{background:none;border:none;color:var(--text3);font-size:11.5px;cursor:pointer;font-family:inherit;text-decoration:underline;padding:0 0 13px;display:block;}
+.mcsecmais:hover{color:var(--teal);}
 .trilha{display:inline-flex;align-items:center;gap:7px;background:var(--teal-l);border:1.5px solid var(--teal-m);border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:800;color:#0A6F72;cursor:pointer;font-family:inherit;}
 .trilha:hover{background:#D2EEEF;}
 .trilha .sep{color:var(--teal-m);font-weight:700;}
@@ -2128,6 +2138,7 @@ async function pageQuadro(q){
       <button class="bnew" onclick="location.hash='#/cliente/novo'">+ Novo cliente</button>
     </div><div class="kb" id="kb">${kb}</div>`;
   ligarDragDrop();
+  ligarArrastoDoQuadro();
 }
 function listaColapsada(id){try{return localStorage.getItem('kl_col_'+id)==='1';}catch(_){return false;}}
 function toggleColapsarLista(id){
@@ -2249,6 +2260,100 @@ function ligarDragDrop(){
       await salvarOrdemLista(lid,body);
       if(cid&&origLista&&origLista!==lid)await registrarMovimentoLista(cid,origLista,lid);
     });
+  });
+}
+/* ARRASTAR O FUNDO PARA ANDAR ENTRE AS LISTAS.
+   Com nove listas no comercial, chegar na ultima exigia achar a barra
+   de rolagem ou girar a roda com shift. Agora: segurar o botao esquerdo
+   em qualquer lugar que NAO seja um cartao e puxar.
+
+   Tres cuidados que fazem a diferenca entre util e irritante:
+
+   1. So comeca fora de .kc — se comecasse em cima do cartao, brigaria
+      com o arrastar-para-outra-lista, que e a funcao principal daqui.
+   2. So comeca fora de campo, botao e link: dentro de um input o
+      arrasto e para selecionar texto, e roubar isso impede editar.
+   3. So vira arrasto depois de 5 pixels. Abaixo disso continua sendo
+      clique — senao um clique tremido no botao de recolher a lista
+      viraria arrasto e o botao nunca funcionaria. */
+/* SECOES QUE APARECEM CONFORME O CASO ANDA.
+   Um card em "Lead novo" mostrava CPF, senha do INSS, link de contrato,
+   referencias e pagamentos — cinco blocos vazios que nao tem nada a ver
+   com uma lead que acabou de chegar. O olho tinha que pular por cima
+   deles toda vez para achar telefone e DN.
+
+   Cada lista tem uma ETAPA, e cada bloco aparece a partir de uma etapa:
+     0  antes do contrato ....... nada extra
+     1  Montar Contrato ......... aparece Contrato
+     2  contrato enviado adiante  aparece tambem Acesso INSS
+     3  beneficio concedido ..... aparece tambem Pagamentos
+
+   O Acesso INSS entra ja em "Contrato enviado", e nao depois: e ali que
+   a sequencia pedir_senha roda e a senha chega. Se so aparecesse em
+   Montar Processo, o campo estaria escondido justamente no dia em que
+   e usado.
+
+   Lista que nao esta no mapa mostra TUDO. Lista nova nasce mostrando
+   demais, que e chato; nasceria escondendo campo, que e perda de
+   trabalho. */
+const ETAPA_LISTA={
+  'Chamar indicada':0,'Lead novo':0,'Em triagem':0,'Aguardando documentos':0,
+  'Reativação Trello':0,'Descartado':0,
+  'Montar Contrato':1,
+  'Contrato enviado':2,'Contrato Cancelado':2,
+  'Aguardando nascimento':2,'Reta final':2,'Aguardando adoção':2,
+  'Montar Processo':2,'Protocolar':2,'Em análise':2,'Exigência':2,'Benefício negado':2,
+  'Benefício concedido':3,
+  'Em pagamento INSS':3,'Pago / encerrado':3,'Inadimplente':3
+};
+const ETAPA_CONTRATO=1, ETAPA_INSS=2, ETAPA_PAGAMENTOS=3;
+let mcMostrarTudo=false;   // o "mostrar assim mesmo" do rodape do card
+
+function etapaDaLista(nome){
+  const e=ETAPA_LISTA[(nome||'').trim()];
+  return e===undefined?99:e;   // desconhecida = mostra tudo
+}
+/* CAMPO COM CONTEUDO NUNCA SOME.
+   Esconder um bloco que ja tem dado seria pior que a poluicao que isto
+   veio resolver: o dado sumiria da tela sem sumir do banco, e alguem
+   concluiria que esta vazio. Por isso a visibilidade e "chegou na
+   etapa OU ja tem coisa dentro". */
+function mcVerSecao(minimo, etapa, temDado){
+  return mcMostrarTudo || temDado || etapa>=minimo;
+}
+function mcAlternarSecoes(){
+  mcMostrarTudo=!mcMostrarTudo;
+  if(mcClienteId)abrirCardCliente(mcClienteId);
+}
+function ligarArrastoDoQuadro(){
+  const kb=$('kb');
+  if(!kb)return;
+  let ativo=false,puxando=false,x0=0,scroll0=0;
+  kb.addEventListener('mousedown',e=>{
+    if(e.button!==0)return;
+    if(e.target.closest('.kc'))return;
+    if(e.target.closest('input,textarea,select,button,a,label'))return;
+    ativo=true;puxando=false;x0=e.clientX;scroll0=kb.scrollLeft;
+  });
+  window.addEventListener('mousemove',e=>{
+    if(!ativo)return;
+    const d=e.clientX-x0;
+    if(!puxando){
+      if(Math.abs(d)<5)return;
+      puxando=true;kb.classList.add('arrastando');
+    }
+    kb.scrollLeft=scroll0-d;
+    e.preventDefault();
+  });
+  window.addEventListener('mouseup',()=>{
+    if(puxando)kb.classList.remove('arrastando');
+    ativo=false;puxando=false;
+  });
+  // Sair da janela no meio do arrasto deixava o quadro presente no
+  // estado "arrastando" ate o proximo clique.
+  window.addEventListener('mouseleave',()=>{
+    if(puxando)kb.classList.remove('arrastando');
+    ativo=false;puxando=false;
   });
 }
 function cardDepoisDe(cont,y){
@@ -2576,6 +2681,17 @@ function renderCardClienteModal(c,etqSel,listas){
   const optOrig=`<option value="">—</option>`+Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
   const etqPicker=ETQ.map(t=>`<label class="etp-row" data-nome="${escA((t.nome||'').toLowerCase())}"><input type="checkbox" ${etqSel.includes(t.id)?'checked':''} onchange="mcToggleEtq('${t.id}')"/><span class="etp-bar" style="background:${escA(t.cor)}">${esc(t.nome)}</span></label>`).join('')||'<div class="fhint" style="padding:6px 2px">Nenhuma etiqueta criada ainda.</div>';
   const pagHtml=mcPagamentosHtml(c.id);
+  /* Etapa do caso, para decidir quais blocos aparecem. O "tem dado" e
+     conferido campo a campo: basta um preenchido para o bloco inteiro
+     ficar visivel, porque esconder dado gravado e pior que mostrar
+     campo vazio. */
+  const etapa=etapaDaLista(listaAtual?listaAtual.nome:'');
+  const temContrato=!!(c.link_contrato||c.referencia1_nome||c.referencia1_telefone||c.referencia2_nome||c.referencia2_telefone);
+  const temInss=!!(c.cpf||c.senha_inss);
+  const verContrato=mcVerSecao(ETAPA_CONTRATO,etapa,temContrato);
+  const verInss=mcVerSecao(ETAPA_INSS,etapa,temInss);
+  const verPag=mcVerSecao(ETAPA_PAGAMENTOS,etapa,pagHtml.temParc);
+  const ocultas=[!verContrato&&'Contrato',!verInss&&'Acesso INSS',!verPag&&'Pagamentos'].filter(Boolean);
   abrirModalCard(`
     <div class="mchead-sticky" id="mchead-sticky">
       <div class="mchs-nome">${esc(c.nome_completo)}</div>
@@ -2633,7 +2749,7 @@ function renderCardClienteModal(c,etqSel,listas){
 
     ${mcTriagemHtml(c.samara_dados)}
 
-    <div class="mcsens" style="background:var(--teal-l);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
+    ${!verInss?'':`<div class="mcsens" style="background:var(--teal-l);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
           <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">🔐 Acesso INSS</div>
           <div class="fg">
             <div class="fld"><label>CPF</label><input type="text" id="mc-cpf" value="${escA(c.cpf)}" oninput="cpfMask(this)"/></div>
@@ -2645,8 +2761,8 @@ function renderCardClienteModal(c,etqSel,listas){
               </div>
             </div>
           </div>
-        </div>
-        <div class="mcsens" style="background:var(--rose-l);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
+        </div>`}
+        ${!verContrato?'':`<div class="mcsens" style="background:var(--rose-l);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
           <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">📄 Contrato</div>
           <div class="fld ff" style="margin-bottom:11px"><label>Link do contrato (Autentica Online)</label>
             <input type="url" id="mc-link-contrato" placeholder="https://..." value="${escA(c.link_contrato)}"/>
@@ -2658,8 +2774,8 @@ function renderCardClienteModal(c,etqSel,listas){
             <div class="fld"><label>Referência 2 · nome</label><input type="text" id="mc-ref2-nome" value="${escA(c.referencia2_nome)}"/></div>
             <div class="fld"><label>Referência 2 · telefone</label><input type="text" id="mc-ref2-tel" value="${escA(c.referencia2_telefone)}"/></div>
           </div>
-        </div>
-        <div class="mcsens" style="background:var(--yellow-bg);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
+        </div>`}
+        ${!verPag?'':`<div class="mcsens" style="background:var(--yellow-bg);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${pagHtml.temParc?'10px':'0'}">
             <div style="font-size:12px;font-weight:700;color:var(--text2)">💰 Pagamentos</div>
             <div style="display:flex;gap:6px">
@@ -2668,7 +2784,9 @@ function renderCardClienteModal(c,etqSel,listas){
             </div>
           </div>
           ${pagHtml.html}
-        </div>
+        </div>`}
+        ${!ocultas.length?'':`<button class="mcsecmais" onclick="mcAlternarSecoes()">+ mostrar ${ocultas.join(', ')} assim mesmo</button>`}
+        ${!(mcMostrarTudo)?'':`<button class="mcsecmais" onclick="mcAlternarSecoes()">− esconder de novo o que ainda não é desta etapa</button>`}
         <div class="fg" style="margin-bottom:13px">
           <div class="fld"><label>Quadro</label><select id="mc-quadro" onchange="mcTrocarQuadro()">${optQ}</select></div>
           <div class="fld"><label>Lista</label><select id="mc-lista">${optL}</select></div>
@@ -3307,6 +3425,20 @@ async function mcTrocarQuadro(){
   const{data:L}=await sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem');
   $('mc-lista').innerHTML=(L||[]).map(l=>`<option value="${l.id}">${esc(l.nome)}</option>`).join('');
 }
+/* CAMPO QUE PODE NAO ESTAR NA TELA.
+   Com as secoes aparecendo por etapa, CPF, senha e referencias nao
+   existem no DOM enquanto o caso nao chega la. Ler .value de null
+   derruba o Salvar inteiro — o cartao pareceria travado e ninguem
+   ligaria a causa a uma secao escondida.
+   O truque esta no `undefined`: uma chave com undefined some do JSON
+   antes de virar requisicao, entao o Supabase nao recebe o campo e NAO
+   sobrescreve o que ja estava gravado. Se devolvesse null, salvar uma
+   lead nova apagaria o CPF de quem ja tinha. */
+function vCampo(id){
+  const el=$(id);
+  if(!el)return undefined;
+  return el.value.trim()||null;
+}
 async function salvarCardCliente(id){
   const nome=$('mc-nome').value.trim();
   if(!nome){toast('Preencha o nome','er');return;}
@@ -3323,13 +3455,13 @@ async function salvarCardCliente(id){
   const payload={
     nome_completo:nome,
     telefone_principal:$('mc-tel').value.trim()||null,
-    cpf:$('mc-cpf').value.trim()||null,
-    senha_inss:$('mc-senha-inss').value.trim()||null,
+    cpf:vCampo('mc-cpf'),
+    senha_inss:vCampo('mc-senha-inss'),
     link_contrato:linkContrato||null,
-    referencia1_nome:$('mc-ref1-nome').value.trim()||null,
-    referencia1_telefone:$('mc-ref1-tel').value.trim()||null,
-    referencia2_nome:$('mc-ref2-nome').value.trim()||null,
-    referencia2_telefone:$('mc-ref2-tel').value.trim()||null,
+    referencia1_nome:vCampo('mc-ref1-nome'),
+    referencia1_telefone:vCampo('mc-ref1-tel'),
+    referencia2_nome:vCampo('mc-ref2-nome'),
+    referencia2_telefone:vCampo('mc-ref2-tel'),
     canal_ativo:$('mc-canal').value||'whatsgw',
     origem:$('mc-origem').value||null,
     trello_url:$('mc-trello').value.trim()||null,

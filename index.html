@@ -5147,6 +5147,18 @@ let FILA_CAD={};                 // cadencia_id  -> {ordem, braco}
 let FILA_NPASSOS={};             // sequencia_id -> quantos passos distintos
 let FILA_BRACOS={};              // "sequencia_id|ordem" -> quantos bracos
 let FILA_SEMRESP=[];             // conversas em que a cliente falou por ultimo
+/* O telefone vem do banco em formatos diferentes: uns ja formatados, uns
+   so digitos com 55 na frente. Lido as pressas, 5579999451651 e uma
+   parede de numeros e da para ler o DDD errado. */
+function foneLegivel(bruto){
+  const d=String(bruto||'').replace(/\D/g,'');
+  if(d.length<10)return String(bruto||'').trim();
+  const sp=(d.startsWith('55')&&d.length>=12)?d.slice(2):d;
+  const ddd=sp.slice(0,2),r=sp.slice(2);
+  if(r.length===9)return '('+ddd+') '+r.slice(0,5)+'-'+r.slice(5);
+  if(r.length===8)return '('+ddd+') '+r.slice(0,4)+'-'+r.slice(4);
+  return sp;
+}
 let FILA_FREIOS={motor_ligado:'sim',samara_ligada:'sim'};
 /* Filtros da fila. Ficam fora do render para sobreviver à troca de aba:
    quem filtrou por "Hoje" não quer perder o filtro ao ir ver as com
@@ -5209,16 +5221,21 @@ async function pageFila(){
   FILA_SEMRESP=[];
   if(espIds.length){
     const{data:cliEsp}=await sb.from('crm_clientes')
-      .select('id,nome_completo,telefone_principal,samara_pausada')
+      .select('id,nome_completo,telefone_principal,samara_pausada,alerta_ignorado_em')
       .in('id',espIds).is('arquivado_em',null).limit(1000);
     (cliEsp||[]).forEach(c=>{
       const m=ultimaDe.get(c.id);
       const min=Math.floor((Date.now()-new Date(m.criado_em).getTime())/60000);
-      // Mesmos prazos do motor: 15 min com a Samara ativa, 60 quando um
-      // humano assumiu — gente almoca, robo nao.
-      if(min < (c.samara_pausada?60:15))return;
+      // SO O QUE A SAMARA DEVERIA TER RESPONDIDO. Conversa pausada tem
+      // dono humano e outro ritmo — misturar as duas enche a lista de
+      // coisa que nao e falha de sistema e faz o alerta virar ruido.
+      if(c.samara_pausada)return;
+      if(min<15)return;
+      // Dispensada na mao continua fora ATE ELA ESCREVER DE NOVO: a
+      // dispensa vale para aquela mensagem, nao para a pessoa.
+      if(c.alerta_ignorado_em && new Date(c.alerta_ignorado_em) > new Date(m.criado_em))return;
       FILA_SEMRESP.push({id:c.id,nome:c.nome_completo||'(sem nome)',
-        fone:c.telefone_principal||'',pausada:!!c.samara_pausada,min:min,
+        fone:foneLegivel(c.telefone_principal),pausada:!!c.samara_pausada,min:min,
         texto:String(m.texto||'').replace(/\s+/g,' ').slice(0,120)});
     });
     FILA_SEMRESP.sort((a,b)=>b.min-a.min);
@@ -5279,27 +5296,25 @@ function renderFila(){
          '<div class="emps">Toda conversa dos últimos 3 dias teve resposta.</div></div>';
     }else{
       h+='<div class="filabox" style="margin-bottom:12px"><div class="filaboxl">O que é esta lista</div>'+
-         '<div class="fhint">A última mensagem da conversa é da cliente e ninguém respondeu. '+
-         'Aparece depois de 15 min com a Samara ativa, ou 60 min quando alguém assumiu a conversa. '+
-         'Sai daqui sozinho quando uma mensagem for enviada para ela.</div></div>';
+         '<div class="fhint">Conversas que <b>a Samara deveria ter respondido</b> e não respondeu há mais de 15 min. '+
+         'Conversa que alguém assumiu na mão não entra aqui. '+
+         'Sai daqui sozinho assim que qualquer mensagem for enviada para ela — pela Samara, por você ou pela Naiarha.</div></div>';
       h+=FILA_SEMRESP.map(c=>{
         const horas=c.min>=60?Math.floor(c.min/60)+'h'+String(c.min%60).padStart(2,'0'):c.min+' min';
-        const dono=c.pausada
-          ?'<span class="filapill yellow">Você ou a Naiarha</span>'
-          :'<span class="filapill red">Samara travou</span>';
         return `<div class="filacard">
           <div class="filahead">
             <div style="min-width:0">
               <div class="filanome">${esc(c.nome)}</div>
               <div class="filameta">${esc(c.fone)} · esperando há ${horas}</div>
             </div>
-            ${dono}
+            <span class="filapill red">Samara travou</span>
           </div>
           <div class="filaboxl" style="margin:10px 0 5px">Última mensagem dela</div>
           <div class="filamsg"><p class="filabalao">${esc(c.texto)||'<i>(mídia)</i>'}</p></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
             <button class="btn btnp" style="padding:8px 15px;font-size:12px" onclick="destravarConversa('${c.id}')">🔓 Destravar e responder</button>
-            <button class="btn btns" style="padding:8px 15px;font-size:12px;margin-left:auto" onclick="location.hash='#/cliente/${c.id}'">Abrir cartão →</button>
+            <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="abrirCardCliente('${c.id}')">Abrir cartão →</button>
+            <button class="btn btns" style="padding:8px 15px;font-size:12px;margin-left:auto" onclick="dispensarAlerta('${c.id}')">Cancelar alerta</button>
           </div>
         </div>`;
       }).join('');
@@ -5507,6 +5522,21 @@ async function filaConfirmarLote(){
    diagnostico de QUAL delas travou custa mais caro do que aplicar as
    tres. Cancelar sequencia pendente tambem e seguro: se a lead seguir
    sem responder, o motor reagenda pelo fluxo normal. */
+/* CANCELAR ALERTA: tira da lista sem mandar mensagem nenhuma.
+   Para o caso de eu ter posto ali coisa que nao e problema — conversa que
+   ja acabou, mae que so mandou um emoji de agradecimento, teste seu.
+   A dispensa vale para AQUELA MENSAGEM, nao para a pessoa: se ela
+   escrever de novo, volta para a lista. Silenciar alguem para sempre e
+   como o alerta some sem ninguem perceber, que e o problema original. */
+async function dispensarAlerta(clienteId){
+  if(!confirm('Tirar esta conversa da lista?\n\nNenhuma mensagem é enviada. Se a cliente escrever de novo, ela volta a aparecer.'))return;
+  const{error}=await sb.from('crm_clientes')
+    .update({alerta_ignorado_em:new Date().toISOString()}).eq('id',clienteId);
+  if(error){toast('Erro: '+error.message,'er');return;}
+  toast('Tirada da lista.','ok');
+  await pageFila();
+}
+
 async function destravarConversa(clienteId){
   if(!confirm('Destravar esta conversa?\n\n• cancela sequência pendente que esteja bloqueando\n• religa a Samara nesta conversa\n• manda ela responder ignorando a janela de 30 min'))return;
   const{error:e1}=await sb.from('crm_automacoes')

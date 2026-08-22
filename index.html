@@ -5138,6 +5138,14 @@ async function excluirEtiqueta(id){
 let FILA_ABA='aprovar';
 let FILA_CACHE=[];
 let FILA_SEL=new Set();          // vencidas marcadas para reenvio em lote
+// Mapas de apoio do cartao da fila: qual sequencia, qual passo, qual braco.
+// Carregados junto com a fila em vez de virem por join aninhado, porque
+// a crm_cadencia tem a coluna texto e um join traria o texto de todos os
+// passos junto — sao duas tabelas de dezenas de linhas, o custo e zero.
+let FILA_SEQ={};                 // sequencia_id -> {codigo, nome}
+let FILA_CAD={};                 // cadencia_id  -> {ordem, braco}
+let FILA_NPASSOS={};             // sequencia_id -> quantos passos distintos
+let FILA_BRACOS={};              // "sequencia_id|ordem" -> quantos bracos
 let FILA_FREIOS={motor_ligado:'sim',samara_ligada:'sim'};
 /* Filtros da fila. Ficam fora do render para sobreviver à troca de aba:
    quem filtrou por "Hoje" não quer perder o filtro ao ir ver as com
@@ -5156,17 +5164,32 @@ async function pageFila(){
   if(U.nivel!=='proprietario'){pc.innerHTML='<div class="emp"><div class="empt">Tela restrita a proprietários</div></div>';return;}
   pc.innerHTML='<div class="emp">Carregando...</div>';
 
-  const[{data,error},{data:vars}]=await Promise.all([
+  const[{data,error},{data:vars},{data:seqs},{data:cads}]=await Promise.all([
     sb.from('crm_automacoes')
-      .select('id,cliente_id,tipo_automacao,data_hora_agendada,status,texto_montado,flags,erro,tentativas,ordem,criado_em,motivo_cancelamento,crm_clientes(nome_completo,telefone_principal,lista_id,samara_dados)')
+      .select('id,cliente_id,tipo_automacao,sequencia_id,cadencia_id,data_hora_agendada,status,texto_montado,flags,erro,tentativas,ordem,criado_em,motivo_cancelamento,crm_clientes(nome_completo,telefone_principal,lista_id,samara_dados)')
       .in('status',['aguardando_aprovacao','agendado','pausado','erro','vencida'])
       .order('data_hora_agendada',{ascending:true})
       .limit(300),
-    sb.from('crm_variaveis').select('chave,valor_texto').in('chave',['motor_ligado','samara_ligada'])
+    sb.from('crm_variaveis').select('chave,valor_texto').in('chave',['motor_ligado','samara_ligada']),
+    sb.from('crm_sequencias').select('id,codigo,nome'),
+    sb.from('crm_cadencia').select('id,sequencia_id,ordem,braco')
   ]);
 
   if(error){pc.innerHTML='<div class="emp"><div class="empt">Erro ao carregar</div><div class="emps">'+esc(error.message)+'</div></div>';return;}
   FILA_CACHE=data||[];
+  FILA_SEQ={};FILA_CAD={};FILA_NPASSOS={};
+  (seqs||[]).forEach(x=>{FILA_SEQ[x.id]={codigo:x.codigo,nome:x.nome};});
+  const ordensPorSeq={};
+  (cads||[]).forEach(x=>{
+    FILA_CAD[x.id]={ordem:x.ordem,braco:x.braco};
+    // Passo e a ORDEM, nao a linha: a triagem1 tem quatro linhas na ordem
+    // 2 (os bracos A/B/C/D do teste) e continua sendo uma sequencia de
+    // tres passos. Contar linha diria "passo 2 de 6" e seria mentira.
+    (ordensPorSeq[x.sequencia_id]=ordensPorSeq[x.sequencia_id]||new Set()).add(x.ordem);
+  });
+  Object.keys(ordensPorSeq).forEach(k=>{FILA_NPASSOS[k]=ordensPorSeq[k].size;});
+  FILA_BRACOS={};
+  (cads||[]).forEach(x=>{const k=x.sequencia_id+'|'+x.ordem;FILA_BRACOS[k]=(FILA_BRACOS[k]||0)+1;});
   FILA_FREIOS={motor_ligado:'sim',samara_ligada:'sim'};
   (vars||[]).forEach(v=>{FILA_FREIOS[v.chave]=(v.valor_texto||'sim').toLowerCase();});
   FILA_SEL.clear();
@@ -5418,7 +5441,28 @@ function cardFila(a){
   const c=a.crm_clientes||{};
   const nome=c.nome_completo||'(sem nome)';
   const quando=a.data_hora_agendada?tempoRel(a.data_hora_agendada):'';
-  const origem=a.tipo_automacao==='samara'?'Samara':(a.tipo_automacao==='abertura'?'Abertura':(a.tipo_automacao==='aviso_esdras'?'Aviso para você':'Sequência'));
+  let origem=a.tipo_automacao==='samara'?'Samara':(a.tipo_automacao==='abertura'?'Abertura':(a.tipo_automacao==='aviso_esdras'?'Aviso para você':'Sequência'));
+
+  // QUAL SEQUENCIA E QUAL PASSO. Antes o cartao dizia so "Sequência", e
+  // aprovar as de cobranca era decidir no escuro: as tres tentativas da
+  // triagem1 dizem coisas diferentes, e a terceira DESPEDE e descarta a
+  // lead. Aprovar um passo 3 achando que era um passo 1 e perder a lead
+  // com o proprio clique.
+  //
+  // O braco so aparece quando a sequencia esta em teste A/B. Passo com um
+  // texto so nao tem braco para mostrar, e escrever "braço A" ali daria a
+  // entender que existe um B em algum lugar.
+  if(a.tipo_automacao==='sequencia'){
+    const seq=FILA_SEQ[a.sequencia_id];
+    const cad=FILA_CAD[a.cadencia_id];
+    const nomeSeq=seq?(seq.nome||seq.codigo):'Sequência';
+    const passo=cad?cad.ordem:a.ordem;
+    const total=FILA_NPASSOS[a.sequencia_id];
+    let rot=esc(nomeSeq);
+    if(passo)rot+=' · passo '+passo+(total?' de '+total:'');
+    if(cad&&cad.braco&&(FILA_BRACOS[a.sequencia_id+'|'+passo]||0)>1)rot+=' · braço '+esc(cad.braco);
+    origem=rot;
+  }
 
   let etiqueta='';
   if(a.status==='aguardando_aprovacao'){

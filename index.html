@@ -5146,6 +5146,7 @@ let FILA_SEQ={};                 // sequencia_id -> {codigo, nome}
 let FILA_CAD={};                 // cadencia_id  -> {ordem, braco}
 let FILA_NPASSOS={};             // sequencia_id -> quantos passos distintos
 let FILA_BRACOS={};              // "sequencia_id|ordem" -> quantos bracos
+let FILA_SEMRESP=[];             // conversas em que a cliente falou por ultimo
 let FILA_FREIOS={motor_ligado:'sim',samara_ligada:'sim'};
 /* Filtros da fila. Ficam fora do render para sobreviver à troca de aba:
    quem filtrou por "Hoje" não quer perder o filtro ao ir ver as com
@@ -5164,7 +5165,7 @@ async function pageFila(){
   if(U.nivel!=='proprietario'){pc.innerHTML='<div class="emp"><div class="empt">Tela restrita a proprietários</div></div>';return;}
   pc.innerHTML='<div class="emp">Carregando...</div>';
 
-  const[{data,error},{data:vars},{data:seqs},{data:cads}]=await Promise.all([
+  const[{data,error},{data:vars},{data:seqs},{data:cads},{data:msgs}]=await Promise.all([
     sb.from('crm_automacoes')
       .select('id,cliente_id,tipo_automacao,sequencia_id,cadencia_id,data_hora_agendada,status,texto_montado,flags,erro,tentativas,ordem,criado_em,motivo_cancelamento,crm_clientes(nome_completo,telefone_principal,lista_id,samara_dados)')
       .in('status',['aguardando_aprovacao','agendado','pausado','erro','vencida'])
@@ -5172,7 +5173,14 @@ async function pageFila(){
       .limit(300),
     sb.from('crm_variaveis').select('chave,valor_texto').in('chave',['motor_ligado','samara_ligada']),
     sb.from('crm_sequencias').select('id,codigo,nome'),
-    sb.from('crm_cadencia').select('id,sequencia_id,ordem,braco')
+    sb.from('crm_cadencia').select('id,sequencia_id,ordem,braco'),
+    // Conversas em que a ULTIMA mensagem e da cliente. Le so os 3 ultimos
+    // dias e as colunas necessarias: crm_mensagens guarda midia em base64
+    // no texto, e um select frouxo aqui traria CNH inteira para a tela.
+    sb.from('crm_mensagens').select('cliente_id,criado_em,direcao,texto,tipo')
+      .not('cliente_id','is',null)
+      .gte('criado_em', new Date(Date.now()-3*24*3600000).toISOString())
+      .order('criado_em',{ascending:false}).limit(2000)
   ]);
 
   if(error){pc.innerHTML='<div class="emp"><div class="empt">Erro ao carregar</div><div class="emps">'+esc(error.message)+'</div></div>';return;}
@@ -5190,6 +5198,31 @@ async function pageFila(){
   Object.keys(ordensPorSeq).forEach(k=>{FILA_NPASSOS[k]=ordensPorSeq[k].size;});
   FILA_BRACOS={};
   (cads||[]).forEach(x=>{const k=x.sequencia_id+'|'+x.ordem;FILA_BRACOS[k]=(FILA_BRACOS[k]||0)+1;});
+  // SEM RESPOSTA: o criterio e um so — a ultima mensagem da conversa e
+  // dela. Se a ultima e nossa, alguem respondeu, e nao importa quem nem
+  // por qual caminho. Assim a lista nao depende de saber POR QUE travou,
+  // e continua funcionando para bloqueios que ainda nao existem.
+  const ultimaDe=new Map();
+  (msgs||[]).forEach(m=>{if(!ultimaDe.has(m.cliente_id))ultimaDe.set(m.cliente_id,m);});
+  const espIds=[];
+  ultimaDe.forEach((m,id)=>{if(m.direcao==='entrada')espIds.push(id);});
+  FILA_SEMRESP=[];
+  if(espIds.length){
+    const{data:cliEsp}=await sb.from('crm_clientes')
+      .select('id,nome_completo,telefone_principal,samara_pausada')
+      .in('id',espIds).is('arquivado_em',null).limit(1000);
+    (cliEsp||[]).forEach(c=>{
+      const m=ultimaDe.get(c.id);
+      const min=Math.floor((Date.now()-new Date(m.criado_em).getTime())/60000);
+      // Mesmos prazos do motor: 15 min com a Samara ativa, 60 quando um
+      // humano assumiu — gente almoca, robo nao.
+      if(min < (c.samara_pausada?60:15))return;
+      FILA_SEMRESP.push({id:c.id,nome:c.nome_completo||'(sem nome)',
+        fone:c.telefone_principal||'',pausada:!!c.samara_pausada,min:min,
+        texto:String(m.texto||'').replace(/\s+/g,' ').slice(0,120)});
+    });
+    FILA_SEMRESP.sort((a,b)=>b.min-a.min);
+  }
   FILA_FREIOS={motor_ligado:'sim',samara_ligada:'sim'};
   (vars||[]).forEach(v=>{FILA_FREIOS[v.chave]=(v.valor_texto||'sim').toLowerCase();});
   FILA_SEL.clear();
@@ -5230,11 +5263,50 @@ function renderFila(){
      `</div>`;
 
   h+='<div class="filatabs">'+
+     aba('semresp','Sem resposta',FILA_SEMRESP.length,FILA_SEMRESP.length>0)+
      aba('aprovar','Aprovar',aprovar.length,true)+
      aba('agendadas','Agendadas',agendadas.length,false)+
      aba('vencidas','Vencidas',vencidas.length,vencidas.length>0)+
      aba('erro','Com erro',comErro.length,comErro.length>0)+
      '</div>';
+
+  // A aba Sem resposta sai antes do resto: ela nao lista automacoes, ela
+  // lista PESSOAS esperando. Os filtros e o agrupamento por dia abaixo
+  // sao todos escritos para linha de fila e nao servem aqui.
+  if(FILA_ABA==='semresp'){
+    if(!FILA_SEMRESP.length){
+      h+='<div class="emp"><div class="empt">Ninguém esperando resposta</div>'+
+         '<div class="emps">Toda conversa dos últimos 3 dias teve resposta.</div></div>';
+    }else{
+      h+='<div class="filabox" style="margin-bottom:12px"><div class="filaboxl">O que é esta lista</div>'+
+         '<div class="fhint">A última mensagem da conversa é da cliente e ninguém respondeu. '+
+         'Aparece depois de 15 min com a Samara ativa, ou 60 min quando alguém assumiu a conversa. '+
+         'Sai daqui sozinho quando uma mensagem for enviada para ela.</div></div>';
+      h+=FILA_SEMRESP.map(c=>{
+        const horas=c.min>=60?Math.floor(c.min/60)+'h'+String(c.min%60).padStart(2,'0'):c.min+' min';
+        const dono=c.pausada
+          ?'<span class="filapill yellow">Você ou a Naiarha</span>'
+          :'<span class="filapill red">Samara travou</span>';
+        return `<div class="filacard">
+          <div class="filahead">
+            <div style="min-width:0">
+              <div class="filanome">${esc(c.nome)}</div>
+              <div class="filameta">${esc(c.fone)} · esperando há ${horas}</div>
+            </div>
+            ${dono}
+          </div>
+          <div class="filaboxl" style="margin:10px 0 5px">Última mensagem dela</div>
+          <div class="filamsg"><p class="filabalao">${esc(c.texto)||'<i>(mídia)</i>'}</p></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn btnp" style="padding:8px 15px;font-size:12px" onclick="destravarConversa('${c.id}')">🔓 Destravar e responder</button>
+            <button class="btn btns" style="padding:8px 15px;font-size:12px;margin-left:auto" onclick="location.hash='#/cliente/${c.id}'">Abrir cartão →</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    pc.innerHTML=h;
+    return;
+  }
 
   const lista=FILA_ABA==='aprovar'?aprovar:(FILA_ABA==='erro'?comErro:(FILA_ABA==='vencidas'?vencidas:agendadas));
 
@@ -5427,6 +5499,28 @@ async function filaConfirmarLote(){
   if(error){toast('Erro: '+error.message,'er');return;}
   toast(ids.length+' de volta para a fila','ok');
   FILA_SEL.clear();
+  await pageFila();
+}
+
+/* DESTRAVAR: as tres coisas de uma vez, de proposito.
+   Na hora do aperto ninguem quer escolher entre tres alavancas — e o
+   diagnostico de QUAL delas travou custa mais caro do que aplicar as
+   tres. Cancelar sequencia pendente tambem e seguro: se a lead seguir
+   sem responder, o motor reagenda pelo fluxo normal. */
+async function destravarConversa(clienteId){
+  if(!confirm('Destravar esta conversa?\n\n• cancela sequência pendente que esteja bloqueando\n• religa a Samara nesta conversa\n• manda ela responder ignorando a janela de 30 min'))return;
+  const{error:e1}=await sb.from('crm_automacoes')
+    .update({status:'cancelado',motivo_cancelamento:'Cancelado pelo botão Destravar conversa.'})
+    .eq('cliente_id',clienteId).eq('tipo_automacao','sequencia')
+    .in('status',['agendado','aguardando_aprovacao']);
+  if(e1){toast('Erro: '+e1.message,'er');return;}
+  const{error:e2}=await sb.from('crm_clientes')
+    .update({samara_pausada:false,samara_deve_continuar:true,
+             samara_continuar_motivo:'destravado na mão',
+             alerta_sem_resposta_em:null})
+    .eq('id',clienteId);
+  if(e2){toast('Erro: '+e2.message,'er');return;}
+  toast('Destravada. A Samara responde na próxima rodada.','ok');
   await pageFila();
 }
 

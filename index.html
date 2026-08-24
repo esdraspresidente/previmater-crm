@@ -3129,6 +3129,33 @@ function chatEnviarComEnter(e){
    Falha nao vira erro na tela. Se a function estiver fora, a rede cair
    ou a sessao tiver vencido, a linha continua "pendente_envio" e sai na
    rodada seguinte, como sempre saiu: o aviso volta a ser o de fila. */
+/* ENTREGA AVULSA DE UMA VENCIDA — irma da funcao acima, para a aba
+   Vencidas. Na chamada vai so o id da linha em crm_automacoes: nem
+   texto, nem telefone, nem destino.
+   O timeout e maior porque aqui a resposta so volta depois de o
+   WhatsGW aceitar a mensagem. Se estourar do lado de ca e a entrega
+   tiver completado do lado de la, clicar de novo nao duplica: a rota
+   reserva a linha trocando o status, e o segundo clique encontra ela
+   fora de "vencida" e devolve nao_vencida. */
+async function enviarVencidaPeloMotor(idAutomacao){
+  const corta=new AbortController();
+  const t=setTimeout(()=>corta.abort(),25000);
+  try{
+    const{data:sess}=await sb.auth.getSession();
+    const tk=(sess&&sess.session)?sess.session.access_token:SUPABASE_ANON_KEY;
+    const r=await fetch(SUPABASE_URL+'/functions/v1/motor?enviar_automacao='+encodeURIComponent(idAutomacao),{
+      method:'POST',
+      headers:{apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+tk},
+      signal:corta.signal
+    });
+    if(!r.ok)return{ok:false,motivo:'o motor respondeu '+r.status};
+    return await r.json();
+  }catch(e){
+    return{ok:false,motivo:'não foi possível falar com o motor'};
+  }finally{
+    clearTimeout(t);
+  }
+}
 async function enviarJaPeloMotor(idMensagem){
   const corta=new AbortController();
   const t=setTimeout(()=>corta.abort(),15000);
@@ -5580,12 +5607,38 @@ function filaSelTodas(){
   renderFila();
 }
 
+/* ENVIAR AGORA — 24/08/2026.
+
+   Antes este botao so devolvia a linha para a fila com data de agora.
+   So que a fila anda a uma mensagem por minuto (ainda sem trava de
+   intervalo) e a validade de uma samara e de 15 minutos: a mensagem
+   que voce acabou de liberar podia vencer OUTRA VEZ antes de o motor
+   alcancar ela. Foi o que aconteceu com a Bianca em 22/08 — aprovada
+   as 10:43, morta por atraso de 57 min, e a despedida so saiu as 13:15
+   por uma segunda linha que a Samara escreveu do zero.
+
+   Agora o clique pede a entrega direto ao motor, que envia na hora e
+   sem passar de novo pela validade — quem clicou aqui ja sabe que
+   esta atrasada e decidiu mandar assim mesmo.
+
+   AQUI FALHA E ERRO DE VERDADE, diferente do botao Enviar do chat.
+   La, se a chamada nao completa, a linha continua em pendente_envio e
+   o motor entrega na rodada seguinte, entao "na fila" e verdade. Uma
+   linha vencida nao e recolhida por rodada nenhuma — o motor so pega
+   status 'agendado'. Se a chamada nao completar, nada sai depois, e
+   dizer que esta na fila seria mentira.
+
+   O botao de LOTE (filaConfirmarLote) continua devolvendo para a fila,
+   de proposito: N entregas imediatas em sequencia sairiam em segundos
+   uma da outra e derrubam o numero nao oficial. Uma mensagem sozinha
+   nao derruba; vinte derrubam. */
 async function filaEnviarAgora(id){
-  await filaAtualizar(id,{
-    status:'agendado',aprovado:true,erro:null,tentativas:0,
-    motivo_cancelamento:null,
-    data_hora_agendada:new Date().toISOString()
-  },'De volta para a fila');
+  const r=await enviarVencidaPeloMotor(id);
+  if(r&&r.ok)toast('Enviada','ok');
+  else if(r&&r.situacao==='espere')toast(r.motivo,'in');
+  else if(r&&r.situacao==='nao_vencida')toast('Essa mensagem já não estava vencida — pode ser que já tenha saído.','in');
+  else toast('Não saiu: '+((r&&r.motivo)||'o motor não respondeu')+'. A mensagem continua aqui.','er');
+  await pageFila();
 }
 
 function filaEnviarSelecionadas(){

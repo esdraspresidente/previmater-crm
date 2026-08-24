@@ -4431,7 +4431,12 @@ function renderCal(){
   const ano=calMes.getFullYear(),mes=calMes.getMonth();
   const dias=new Date(ano,mes+1,0).getDate(),prim=new Date(ano,mes,1).getDay();
   const ms=`${ano}-${String(mes+1).padStart(2,'0')}`,mapa={};
-  PARC.filter(p=>p.data_vencimento&&p.data_vencimento.startsWith(ms)).forEach(p=>{
+  // Cancelada NAO entra no calendario, pela mesma razao que ja nao entra
+  // na lista de Recebimentos (ver rfiltro): parcela cancelada nao vai ser
+  // cobrada nem recebida, entao ocupar um dia da agenda so gera susto.
+  // Ate 24/08 o calendario nao filtrava status nenhum e a parcela ficava
+  // ali para sempre, sem nada no sistema capaz de tirar.
+  PARC.filter(p=>p.data_vencimento&&p.data_vencimento.startsWith(ms)&&p.status!=='cancelado').forEach(p=>{
     const d=parseInt(p.data_vencimento.split('-')[2]);
     if(!mapa[d])mapa[d]={n:0,atr:false,rec:false,prev:false};
     mapa[d].n++;const s=stD(p);
@@ -4555,25 +4560,59 @@ async function confirmaRec(){
   if(p)await checarFinalizacaoCliente(pCli(p));
   recarregarFin();
 }
+/* INADIMPLENCIA SO EXISTE DEPOIS DO VENCIMENTO — 24/08/2026.
+   Antes esta funcao carimbava 'inadimplente' em TODAS as parcelas em
+   aberto do cliente, inclusive nas que ainda nem tinham vencido. A Sara
+   Francine ficou com a 3/3 de 21/09 marcada como inadimplente em agosto:
+   uma divida que ainda nao existia, plantada na agenda para sempre,
+   porque nada no sistema reclassifica parcela.
+   Agora separa:
+     ja vencida  -> 'inadimplente'. E divida de verdade e PRECISA continuar
+                    aparecendo; sumir da tela seria esquecer de cobrar.
+     a vencer    -> 'cancelado'. A cobrança dela morreu junto com o
+                    contrato, e cancelada some do calendario e da lista.
+   Nos dois casos o valor sai da previsao de faturamento, que era o ponto
+   do botao desde o inicio. */
 async function marcaInad(pid){
   const p=PARC.find(x=>String(x.id)===String(pid));
   if(!p)return;
   const cid=pCli(p);
   const emAberto=(PARC||[]).filter(x=>pCli(x)===cid&&x.status!=='recebido'&&x.status!=='cancelado'&&x.status!=='inadimplente');
-  const total=emAberto.reduce((s,x)=>s+parseFloat(x.valor_honorario||0),0);
-  const msg='Marcar '+(p.cliente_nome||'este cliente')+' como INADIMPLENTE?\n\n'
-    +emAberto.length+' parcela(s) em aberto - '+R(total)+'\n\n'
-    +'Todas saem da previsao de faturamento e o cartao vai para a lista Inadimplente.';
-  if(!confirm(msg))return;
-  const ids=emAberto.map(x=>x.id);
-  if(ids.length){
-    const{error}=await sb.from('pm_parcelas').update({status:'inadimplente'}).in('id',ids);
-    if(error){toast('Erro ao marcar.','er');return;}
+  const hoje=fISO(today());
+  // Parcela sem data cai em 'vencida' de proposito: na duvida a divida
+  // aparece, porque o erro de esquecer de cobrar custa mais que o susto.
+  const vencidas=emAberto.filter(x=>String(x.data_vencimento||'')<=hoje);
+  const futuras=emAberto.filter(x=>String(x.data_vencimento||'')>hoje);
+  const soma=l=>l.reduce((s,x)=>s+parseFloat(x.valor_honorario||0),0);
+  const total=soma(emAberto);
+  if(!emAberto.length){toast('Nao ha parcela em aberto para este cliente.','er');return;}
+  /* Nenhuma venceu: nao ha inadimplencia para declarar. Deixar passar
+     cancelaria o contrato inteiro por um botao que diz outra coisa, e o
+     cartao nem iria para a lista Inadimplente — sincronizarFinanceiroCliente
+     ignora canceladas e sairia sem mover nada. */
+  if(!vencidas.length){
+    alert('Nenhuma parcela deste cliente venceu ainda.\n\nNao da para declarar inadimplencia de divida que ainda nao existe. Se a cobranca acabou, cancele as parcelas uma a uma.');
+    return;
   }
-  fecharModal();toast(ids.length+' parcela(s) marcada(s) como inadimplente.','in');
+  const msg='Marcar '+(p.cliente_nome||'este cliente')+' como INADIMPLENTE?\n\n'
+    +vencidas.length+' ja vencida(s) - '+R(soma(vencidas))+'\n   viram inadimplentes e CONTINUAM na cobranca\n\n'
+    +(futuras.length?futuras.length+' ainda a vencer - '+R(soma(futuras))+'\n   sao canceladas e somem da agenda\n\n':'')
+    +'Os '+R(total)+' saem da previsao de faturamento e o cartao vai para a lista Inadimplente.';
+  if(!confirm(msg))return;
+  if(vencidas.length){
+    const{error}=await sb.from('pm_parcelas').update({status:'inadimplente'}).in('id',vencidas.map(x=>x.id));
+    if(error){toast('Erro ao marcar as vencidas.','er');return;}
+  }
+  if(futuras.length){
+    const{error}=await sb.from('pm_parcelas').update({status:'cancelado'}).in('id',futuras.map(x=>x.id));
+    if(error){toast('Vencidas marcadas, mas houve erro ao cancelar as futuras.','er');}
+  }
+  fecharModal();
+  toast(vencidas.length+' inadimplente(s)'+(futuras.length?' e '+futuras.length+' cancelada(s)':'')+'.','in');
   await loadFin(true);
   if(cid){
-    await registrarAtividade(cid,'marcou como inadimplente - '+ids.length+' parcela(s) em aberto, '+R(total)+' removido(s) da previsao',undefined);
+    await registrarAtividade(cid,'marcou como inadimplente - '+vencidas.length+' parcela(s) vencida(s)'
+      +(futuras.length?', '+futuras.length+' a vencer cancelada(s)':'')+', '+R(total)+' removido(s) da previsao',undefined);
     await sincronizarFinanceiroCliente(cid,true);
   }
   recarregarFin();

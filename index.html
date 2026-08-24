@@ -143,7 +143,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .kempty{font-size:11px;color:var(--text3);text-align:center;padding:14px 6px;}
 
 /* STAT / KPI */
-.sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px;}
 @media(max-width:1100px){.sgrid{grid-template-columns:repeat(2,1fr);}}
 @media(max-width:500px){.sgrid{grid-template-columns:1fr 1fr;gap:8px;}}
 .sc{background:var(--white);border:1px solid var(--border);border-radius:var(--rl);padding:16px 18px;box-shadow:var(--sh);transition:all .15s;}
@@ -4026,7 +4026,7 @@ function dashPintar(){
         <div class="dsh-hero">
           <div class="dsh-eyb">Recebido em ${new Date().toLocaleDateString('pt-BR',{month:'long'})}</div>
           <div class="dsh-big dsh-num">${R(din.mes_recebido)}</div>
-          <div class="meta">${din.mes_parc_rec||0} de ${din.mes_parc_tot||0} parcelas do mês liquidadas</div>
+          <div class="meta">${din.mes_parc_rec||0} de ${din.mes_parc_tot||0} parcelas previstas para o mês já liquidadas</div>
           <div class="dsh-bar"><i style="width:${pct}%"></i></div>
           <div class="dsh-lg"><span>${pct}% da previsão</span><span>${falta>0?'faltam '+R(falta):'previsão batida'}</span></div>
           <div class="dsh-sp">
@@ -4341,6 +4341,12 @@ async function pageResumoRec(){
   const recM=pM.filter(p=>p.status==='recebido').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
   const aRec=pM.filter(p=>stD(p)==='previsto').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
   const atr=pM.filter(p=>stD(p)==='atrasado').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
+  /* Inadimplente do mes. Sem esta caixa as contas nao fechavam na tela:
+     o "Total do mes" so exclui cancelado, entao inclui inadimplente, mas
+     nenhuma das outras tres caixas cobria esse status. Em agosto/2026
+     sumiam R$ 450,00 (a 2/3 da Sara Francine) entre o total e a soma das
+     partes, sem nada na tela explicando o buraco. */
+  const inad=pM.filter(p=>p.status==='inadimplente').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
   const totR=PARC.filter(p=>p.status==='recebido').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
   const pend=PARC.filter(p=>stD(p)==='previsto').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
   const com=REC.reduce((s,r)=>s+parseFloat(r.indicador_comissao_total||0),0);
@@ -4349,7 +4355,7 @@ async function pageResumoRec(){
 
   pc.innerHTML=`
     <div class="pgh">
-      <div><div class="pgt">Resumo de recebimentos</div><div class="pgs">Mês a mês, com comissões e atrasadas</div></div>
+      <div><div class="pgt">Resumo de recebimentos</div><div class="pgs">Por mês de <b>vencimento</b> — do previsto para o mês, o que entrou</div></div>
       <div class="mn"><button class="mb2" onclick="mudaMes(-1)">‹</button><span class="ml">${fMes(recMes)}</span><button class="mb2" onclick="mudaMes(1)">›</button></div>
     </div>
     <div class="st" style="margin-top:0">Resumo de ${fMes(recMes)}</div>
@@ -4358,6 +4364,7 @@ async function pageResumoRec(){
       <div class="sc"><div class="scl" style="color:var(--teal)">Já recebido</div><div class="scv tl">${R(recM)}</div></div>
       <div class="sc"><div class="scl" style="color:var(--yellow)">A receber</div><div class="scv yw">${R(aRec)}</div></div>
       <div class="sc"><div class="scl" style="color:var(--red)">Atrasado</div><div class="scv rd">${R(atr)}</div></div>
+      <div class="sc"><div class="scl" style="color:var(--red)">Inadimplente</div><div class="scv rd">${R(inad)}</div><div class="scs">fora da previsão</div></div>
     </div>
     <div class="st">Visão geral</div>
     <div class="kgrid">

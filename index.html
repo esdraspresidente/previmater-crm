@@ -4337,7 +4337,13 @@ async function pageResumoRec(){
   await loadFin();
   const ms=`${recMes.getFullYear()}-${String(recMes.getMonth()+1).padStart(2,'0')}`;
   const pM=PARC.filter(p=>p.data_vencimento&&p.data_vencimento.startsWith(ms)&&p.status!=='cancelado');
-  const tot=pM.reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
+  /* PREVISTO = o que ainda pode entrar. Inadimplente fica de fora, igual
+     na RPC do dashboard, porque e a promessa que o botao de inadimplencia
+     faz: "sai da previsao de faturamento". Enquanto estava dentro, o
+     dashboard dizia "faltam R$ 4.040" em agosto/2026 quando so R$ 3.590
+     ainda podiam entrar. */
+  const pPrev=pM.filter(p=>p.status!=='inadimplente');
+  const tot=pPrev.reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
   const recM=pM.filter(p=>p.status==='recebido').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
   const aRec=pM.filter(p=>stD(p)==='previsto').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
   const atr=pM.filter(p=>stD(p)==='atrasado').reduce((s,p)=>s+parseFloat(p.valor_honorario||0),0);
@@ -4360,7 +4366,7 @@ async function pageResumoRec(){
     </div>
     <div class="st" style="margin-top:0">Resumo de ${fMes(recMes)}</div>
     <div class="sgrid">
-      <div class="sc"><div class="scl">Total do mês</div><div class="scv">${R(tot)}</div><div class="scs">${pM.length} parcelas</div></div>
+      <div class="sc"><div class="scl">Previsto para o mês</div><div class="scv">${R(tot)}</div><div class="scs">${pPrev.length} parcelas</div></div>
       <div class="sc"><div class="scl" style="color:var(--teal)">Já recebido</div><div class="scv tl">${R(recM)}</div></div>
       <div class="sc"><div class="scl" style="color:var(--yellow)">A receber</div><div class="scv yw">${R(aRec)}</div></div>
       <div class="sc"><div class="scl" style="color:var(--red)">Atrasado</div><div class="scv rd">${R(atr)}</div></div>

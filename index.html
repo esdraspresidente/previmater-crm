@@ -3121,6 +3121,33 @@ function chatEnviarComEnter(e){
   e.preventDefault();
   return true;
 }
+/* ENVIO IMEDIATO — pede ao motor que entregue ESTA linha agora, em vez
+   de ela esperar a rodada do minuto seguinte.
+   Na chamada vai so o id: nem texto, nem telefone, nem destino. Quem
+   criou a linha foi o insert daqui, com a RLS de sempre — a rota do
+   motor nao cria nada, so antecipa o que ja sairia sozinho.
+   Falha nao vira erro na tela. Se a function estiver fora, a rede cair
+   ou a sessao tiver vencido, a linha continua "pendente_envio" e sai na
+   rodada seguinte, como sempre saiu: o aviso volta a ser o de fila. */
+async function enviarJaPeloMotor(idMensagem){
+  const corta=new AbortController();
+  const t=setTimeout(()=>corta.abort(),15000);
+  try{
+    const{data:sess}=await sb.auth.getSession();
+    const tk=(sess&&sess.session)?sess.session.access_token:SUPABASE_ANON_KEY;
+    const r=await fetch(SUPABASE_URL+'/functions/v1/motor?enviar_manual='+encodeURIComponent(idMensagem),{
+      method:'POST',
+      headers:{apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+tk},
+      signal:corta.signal
+    });
+    if(!r.ok)return{ok:false};
+    return await r.json();
+  }catch(e){
+    return{ok:false};
+  }finally{
+    clearTimeout(t);
+  }
+}
 async function enviarMensagemChat(clienteId){
   const inp=$('mc-chat-input');
   if(!inp)return;
@@ -3134,7 +3161,7 @@ async function enviarMensagemChat(clienteId){
      este botao nunca gravou nada. enviada_em fica vazio de proposito:
      quem preenche e o motor, quando o envio sai de fato. */
   if(!mcChatChave){toast('Esta cliente nao tem telefone valido cadastrado','er');if(btn){btn.disabled=false;btn.textContent='Enviar';}return;}
-  const{error}=await sb.from('crm_mensagens').insert({
+  const{data:nova,error}=await sb.from('crm_mensagens').insert({
     cliente_id:clienteId,
     telefone_chave:mcChatChave,
     telefone_bruto:mcChatTel||null,
@@ -3146,13 +3173,25 @@ async function enviarMensagemChat(clienteId){
     texto:txt,
     id_externo:'crm:'+Date.now()+':'+Math.random().toString(36).slice(2,8),
     status:'pendente_envio'
-  });
-  if(btn){btn.disabled=false;btn.textContent='Enviar';}
-  if(error){toast('Erro ao registrar: '+error.message,'er');return;}
+  }).select('id').single();
+  if(error){
+    if(btn){btn.disabled=false;btn.textContent='Enviar';}
+    toast('Erro ao registrar: '+error.message,'er');
+    return;
+  }
+  /* A caixa esvazia ANTES da entrega: quem esta atendendo ja pode
+     digitar a proxima enquanto esta sai. O chat e recarregado duas
+     vezes de proposito — a primeira mostra a mensagem na conversa, a
+     segunda troca o "na fila" pelo estado real do envio. */
   inp.value='';
   mcChatAssinatura='';
   carregarChat(clienteId);
-  toast('Mensagem na fila — sai em até 1 minuto','ok');
+  if(btn)btn.textContent='Enviando...';
+  const env=await enviarJaPeloMotor(nova.id);
+  if(btn){btn.disabled=false;btn.textContent='Enviar';}
+  mcChatAssinatura='';
+  carregarChat(clienteId);
+  toast(env.ok?'Enviada':'Na fila — sai em até 1 minuto','ok');
 }
 // ============================================================
 // BUSCA GLOBAL — inclui clientes arquivados, com aviso na tela
@@ -6746,7 +6785,7 @@ async function ibEnviarMensagem(){
   if(btn){btn.disabled=true;btn.textContent='Registrando...';}
   /* Mesmo CHECK do chat do card: sem id_externo o banco recusa. */
   if(!c.telefoneChave){toast('Este contato nao tem telefone valido','er');if(btn){btn.disabled=false;btn.textContent='Enviar';}return;}
-  const{error}=await sb.from('crm_mensagens').insert({
+  const{data:nova,error}=await sb.from('crm_mensagens').insert({
     cliente_id:c.clienteId,
     telefone_chave:c.telefoneChave,
     telefone_bruto:c.ultimaMsg?c.ultimaMsg.telefone_bruto:null,
@@ -6758,13 +6797,23 @@ async function ibEnviarMensagem(){
     texto:txt,
     id_externo:'crm:'+Date.now()+':'+Math.random().toString(36).slice(2,8),
     status:'pendente_envio'
-  });
-  if(btn){btn.disabled=false;btn.textContent='Enviar';}
-  if(error){toast('Erro ao registrar: '+error.message,'er');return;}
+  }).select('id').single();
+  if(error){
+    if(btn){btn.disabled=false;btn.textContent='Enviar';}
+    toast('Erro ao registrar: '+error.message,'er');
+    return;
+  }
+  /* Mesma coisa do chat do card: esvazia a caixa, mostra na conversa,
+     entrega, e so entao troca o aviso pelo estado real. */
   inp.value='';
   ibChatAssinatura='';
   ibCarregarChat(c);
-  toast('Mensagem na fila — sai em até 1 minuto','ok');
+  if(btn)btn.textContent='Enviando...';
+  const env=await enviarJaPeloMotor(nova.id);
+  if(btn){btn.disabled=false;btn.textContent='Enviar';}
+  ibChatAssinatura='';
+  ibCarregarChat(c);
+  toast(env.ok?'Enviada':'Na fila — sai em até 1 minuto','ok');
 }
 
 // ============================================================

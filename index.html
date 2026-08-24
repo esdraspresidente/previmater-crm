@@ -5177,7 +5177,7 @@ async function pageFila(){
   if(U.nivel!=='proprietario'){pc.innerHTML='<div class="emp"><div class="empt">Tela restrita a proprietários</div></div>';return;}
   pc.innerHTML='<div class="emp">Carregando...</div>';
 
-  const[{data,error},{data:vars},{data:seqs},{data:cads},{data:msgs}]=await Promise.all([
+  const[{data,error},{data:vars},{data:seqs},{data:cads},{data:listas},{data:msgs}]=await Promise.all([
     sb.from('crm_automacoes')
       .select('id,cliente_id,tipo_automacao,sequencia_id,cadencia_id,data_hora_agendada,status,texto_montado,flags,erro,tentativas,ordem,criado_em,motivo_cancelamento,crm_clientes(nome_completo,telefone_principal,lista_id,samara_dados)')
       .in('status',['aguardando_aprovacao','agendado','pausado','erro','vencida'])
@@ -5189,6 +5189,7 @@ async function pageFila(){
     // Conversas em que a ULTIMA mensagem e da cliente. Le so os 3 ultimos
     // dias e as colunas necessarias: crm_mensagens guarda midia em base64
     // no texto, e um select frouxo aqui traria CNH inteira para a tela.
+    sb.from('crm_listas').select('id,nome'),
     sb.from('crm_mensagens').select('cliente_id,criado_em,direcao,texto,tipo')
       .not('cliente_id','is',null)
       .gte('criado_em', new Date(Date.now()-3*24*3600000).toISOString())
@@ -5216,26 +5217,41 @@ async function pageFila(){
   // e continua funcionando para bloqueios que ainda nao existem.
   const ultimaDe=new Map();
   (msgs||[]).forEach(m=>{if(!ultimaDe.has(m.cliente_id))ultimaDe.set(m.cliente_id,m);});
+  const mapaListas={};
+  (listas||[]).forEach(l=>{mapaListas[l.id]=l.nome;});
   const espIds=[];
   ultimaDe.forEach((m,id)=>{if(m.direcao==='entrada')espIds.push(id);});
   FILA_SEMRESP=[];
   if(espIds.length){
     const{data:cliEsp}=await sb.from('crm_clientes')
-      .select('id,nome_completo,telefone_principal,samara_pausada,alerta_ignorado_em')
+      .select('id,nome_completo,telefone_principal,samara_pausada,alerta_ignorado_em,lista_id')
       .in('id',espIds).is('arquivado_em',null).limit(1000);
     (cliEsp||[]).forEach(c=>{
       const m=ultimaDe.get(c.id);
       const min=Math.floor((Date.now()-new Date(m.criado_em).getTime())/60000);
-      // SO O QUE A SAMARA DEVERIA TER RESPONDIDO. Conversa pausada tem
-      // dono humano e outro ritmo — misturar as duas enche a lista de
-      // coisa que nao e falha de sistema e faz o alerta virar ruido.
-      if(c.samara_pausada)return;
-      if(min<15)return;
+      // AS DUAS APARECEM, EM GRUPOS SEPARADOS — 23/08.
+      //
+      // Na primeira versao a conversa pausada foi tirada daqui para o
+      // aviso do WhatsApp nao virar ruido. Deu no pior dos dois mundos:
+      // ela sumiu da TELA junto, e sobraram leads pagas esquecidas ha uma
+      // semana sem aparecer em lugar nenhum.
+      //
+      // A separacao certa nao e tela x tela, e TELA x WHATSAPP. Aqui
+      // aparece tudo, agrupado, porque esta e a tela para onde se vem
+      // procurar. O aviso do WhatsApp, que interrompe, continua so com o
+      // que a Samara deveria ter respondido — o motor decide isso sozinho
+      // e nao depende desta tela.
+      //
+      // O prazo e outro porque a natureza e outra: robo que nao responde
+      // em 15 min esta quebrado; gente que nao responde em 15 min esta
+      // almocando. Pausada so entra depois de 4 horas.
+      if(min < (c.samara_pausada?240:15))return;
       // Dispensada na mao continua fora ATE ELA ESCREVER DE NOVO: a
       // dispensa vale para aquela mensagem, nao para a pessoa.
       if(c.alerta_ignorado_em && new Date(c.alerta_ignorado_em) > new Date(m.criado_em))return;
       FILA_SEMRESP.push({id:c.id,nome:c.nome_completo||'(sem nome)',
         fone:foneLegivel(c.telefone_principal),pausada:!!c.samara_pausada,min:min,
+        lista:mapaListas[c.lista_id]||'',
         texto:String(m.texto||'').replace(/\s+/g,' ').slice(0,120)});
     });
     FILA_SEMRESP.sort((a,b)=>b.min-a.min);
@@ -5291,37 +5307,29 @@ function renderFila(){
   // lista PESSOAS esperando. Os filtros e o agrupamento por dia abaixo
   // sao todos escritos para linha de fila e nao servem aqui.
   if(FILA_ABA==='semresp'){
+    const trav=FILA_SEMRESP.filter(c=>!c.pausada);
+    const maos=FILA_SEMRESP.filter(c=>c.pausada);
     if(!FILA_SEMRESP.length){
       h+='<div class="emp"><div class="empt">Ninguém esperando resposta</div>'+
          '<div class="emps">Toda conversa dos últimos 3 dias teve resposta.</div></div>';
     }else{
       h+='<div class="filabox" style="margin-bottom:12px"><div class="filaboxl">O que é esta lista</div>'+
-         '<div class="fhint">Conversas que <b>a Samara deveria ter respondido</b> e não respondeu há mais de 15 min. '+
-         'Conversa que alguém assumiu na mão não entra aqui. '+
-         'Sai daqui sozinho assim que qualquer mensagem for enviada para ela — pela Samara, por você ou pela Naiarha.</div></div>';
-      h+=FILA_SEMRESP.map(c=>{
-        const horas=c.min>=60?Math.floor(c.min/60)+'h'+String(c.min%60).padStart(2,'0'):c.min+' min';
-        return `<div class="filacard">
-          <div class="filahead">
-            <div style="min-width:0">
-              <div class="filanome">${esc(c.nome)}</div>
-              <div class="filameta">${esc(c.fone)} · esperando há ${horas}</div>
-            </div>
-            <span class="filapill red">Samara travou</span>
-          </div>
-          <div class="filaboxl" style="margin:10px 0 5px">Última mensagem dela</div>
-          <div class="filamsg"><p class="filabalao">${esc(c.texto)||'<i>(mídia)</i>'}</p></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-            <button class="btn btnp" style="padding:8px 15px;font-size:12px" onclick="destravarConversa('${c.id}')">🔓 Destravar e responder</button>
-            <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="abrirCardCliente('${c.id}')">Abrir cartão →</button>
-            <button class="btn btns" style="padding:8px 15px;font-size:12px;margin-left:auto" onclick="dispensarAlerta('${c.id}')">Cancelar alerta</button>
-          </div>
-        </div>`;
-      }).join('');
+         '<div class="fhint">A última mensagem da conversa é da cliente e ninguém respondeu. '+
+         'Sai daqui sozinho assim que qualquer mensagem for enviada para ela — pela Samara, por você ou pela Naiarha.<br><br>'+
+         '<b>A Samara travou:</b> aparece com 15 min. É falha de sistema, e o alerta do WhatsApp cobra você por ela.<br>'+
+         '<b>Assumidas na mão:</b> aparece com 4h. A Samara está pausada nessas, então <u>nenhum robô vai responder</u> — ou você responde, ou devolve para a Samara. Não entram no alerta do WhatsApp para não virar ruído.</div></div>';
+      const bloco=(titulo,arr,vazio)=>{
+        let x='<div class="filaboxl" style="margin:16px 0 8px">'+titulo+' ('+arr.length+')</div>';
+        if(!arr.length)return x+'<div class="fhint" style="margin-bottom:8px">'+vazio+'</div>';
+        return x+cartoesSemResp(arr);
+      };
+      h+=bloco('🔴 A Samara travou',trav,'Nenhuma. Tudo que era da Samara foi respondido.');
+      h+=bloco('🟡 Assumidas na mão, paradas há mais de 4h',maos,'Nenhuma parada.');
     }
     pc.innerHTML=h;
     return;
   }
+
 
   const lista=FILA_ABA==='aprovar'?aprovar:(FILA_ABA==='erro'?comErro:(FILA_ABA==='vencidas'?vencidas:agendadas));
 
@@ -5522,6 +5530,35 @@ async function filaConfirmarLote(){
    diagnostico de QUAL delas travou custa mais caro do que aplicar as
    tres. Cancelar sequencia pendente tambem e seguro: se a lead seguir
    sem responder, o motor reagenda pelo fluxo normal. */
+function cartoesSemResp(arr){
+  return arr.map(c=>{
+    const horas=c.min>=60?Math.floor(c.min/60)+'h'+String(c.min%60).padStart(2,'0'):c.min+' min';
+    const pill=c.pausada
+      ?'<span class="filapill yellow">Você ou a Naiarha</span>'
+      :'<span class="filapill red">Samara travou</span>';
+    /* Em conversa pausada, despausar E a solucao — destravar sem devolver
+       para a Samara deixaria a mulher esperando do mesmo jeito. Por isso
+       o mesmo botao muda de nome conforme o grupo. */
+    const rot=c.pausada?'↩️ Devolver para a Samara':'🔓 Destravar e responder';
+    return `<div class="filacard">
+      <div class="filahead">
+        <div style="min-width:0">
+          <div class="filanome">${esc(c.nome)}</div>
+          <div class="filameta">${esc(c.fone)}${c.lista?' · '+esc(c.lista):''} · esperando há ${horas}</div>
+        </div>
+        ${pill}
+      </div>
+      <div class="filaboxl" style="margin:10px 0 5px">Última mensagem dela</div>
+      <div class="filamsg"><p class="filabalao">${esc(c.texto)||'<i>(mídia)</i>'}</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn btnp" style="padding:8px 15px;font-size:12px" onclick="destravarConversa('${c.id}')">${rot}</button>
+        <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="abrirCardCliente('${c.id}')">Abrir cartão →</button>
+        <button class="btn btns" style="padding:8px 15px;font-size:12px;margin-left:auto" onclick="dispensarAlerta('${c.id}')">Cancelar alerta</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 /* CANCELAR ALERTA: tira da lista sem mandar mensagem nenhuma.
    Para o caso de eu ter posto ali coisa que nao e problema — conversa que
    ja acabou, mae que so mandou um emoji de agradecimento, teste seu.

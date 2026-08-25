@@ -5390,7 +5390,7 @@ async function pageFila(){
       .in('status',['aguardando_aprovacao','agendado','pausado','erro','vencida'])
       .order('data_hora_agendada',{ascending:true})
       .limit(300),
-    sb.from('crm_variaveis').select('chave,valor_texto').in('chave',['motor_ligado','samara_ligada','intervalo_sequencia_min']),
+    sb.from('crm_variaveis').select('chave,valor_texto').in('chave',['motor_ligado','samara_ligada','intervalo_sequencia_min','ritmo_alerta_pct']),
     sb.from('crm_sequencias').select('id,codigo,nome'),
     sb.from('crm_cadencia').select('id,sequencia_id,ordem,braco'),
     // Conversas em que a ULTIMA mensagem e da cliente.
@@ -5547,13 +5547,35 @@ async function carregarRitmo(){
   if(FILA_ABA==='ritmo') renderFila();
 }
 
+async function ritmoTrocarIntervalo(v){
+  const{error}=await sb.from('crm_variaveis').update({valor_texto:String(v)}).eq('chave','intervalo_sequencia_min');
+  if(error){toast('Erro: '+error.message,'er');return;}
+  FILA_FREIOS.intervalo_sequencia_min=String(v);
+  toast(v===0?'Trava desligada. As sequências voltam a sair sem espaçamento.'
+             :'Intervalo em '+v+' min. Vale na próxima rodada.', v===0?'er':'ok');
+  renderFila();
+}
+
 function ritmoHTML(){
   const min=parseInt(String(FILA_FREIOS.intervalo_sequencia_min||'5').replace(/[^0-9]/g,''),10)||5;
-  let h='<div class="filabox" style="margin-bottom:12px"><div class="filaboxl">Para que serve</div>'+
-    '<div class="fhint">Quantas mensagens de <b>sequência</b> saíram por dia, contra o máximo que cabe no horário de atendimento com o intervalo atual.<br><br>'+
-    '<b>Intervalo hoje: '+min+' min</b> — muda em Configurações → Variáveis, na chave <code>intervalo_sequencia_min</code>. Vale na rodada seguinte, sem publicar nada.<br>'+
-    'O teto é a janela dividida pelo intervalo: <b>9h nos dias úteis</b>, 4h no sábado, domingo não envia.<br><br>'+
-    'Quando "enviadas" encostar no teto, ou "venceram" sair do zero, é hora de baixar o intervalo. Se o teto já não couber nem no menor intervalo aceitável, o caminho deixa de ser esse número: é ampliar a janela ou migrar para o número oficial da API.</div></div>';
+  const opcoes=[0,3,5,7,10,15];
+  const btns=opcoes.map(v=>{
+    const on=(v===min);
+    const rot=v===0?'desligado':v+' min';
+    const teto=v===0?'sem teto':Math.floor(9*60/v)+'/dia';
+    return '<button class="'+(on?'btn btnp':'btnd')+'" style="padding:7px 12px;font-size:12px" '+
+      'onclick="ritmoTrocarIntervalo('+v+')">'+rot+'<div style="font-size:10px;opacity:.75;font-weight:400">'+teto+'</div></button>';
+  }).join('');
+  let h='<div class="filabox" style="margin-bottom:12px"><div class="filaboxl">Intervalo entre sequências</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 10px">'+btns+'</div>'+
+    '<div class="fhint">Vale na rodada seguinte — nada é publicado. O rodapé de cada botão é o teto de um dia útil (9h de janela ÷ intervalo); '+
+    'no sábado a janela é de 4h e no domingo não sai nada.<br><br>'+
+    '<b>Você não precisa vir aqui todo dia.</b> Quando o dia passar de '+
+    (parseInt(String(FILA_FREIOS.ritmo_alerta_pct||'80').replace(/[^0-9]/g,''),10)||80)+
+    '% do teto, ou qualquer sequência vencer, o motor te manda um aviso no WhatsApp — uma vez por dia. '+
+    'Esta tela é para decidir depois do aviso, não para vigiar.<br><br>'+
+    'Ele avisa e não mexe sozinho de propósito: baixar o intervalo é afrouxar a proteção contra banimento do número, '+
+    'e essa decisão é sua. Se um dia nem o menor intervalo couber, o caminho deixa de ser esse número — é ampliar a janela ou o número oficial da API.</div></div>';
   if(!FILA_RITMO) return h+'<div class="emp">Contando...</div>';
   if(!FILA_RITMO.length) return h+'<div class="emp"><div class="empt">Não consegui contar</div><div class="emps">Tente atualizar a tela.</div></div>';
   h+='<table class="tbl"><thead><tr><th>Dia</th><th>Enviadas</th><th>Teto</th><th>Uso</th><th>Venceram</th></tr></thead><tbody>';

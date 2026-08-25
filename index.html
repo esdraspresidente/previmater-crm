@@ -3785,6 +3785,11 @@ async function pageCliente(id){
           <input type="text" id="f-indicanome" autocomplete="off" placeholder="nome de quem indicou esta cliente" value="${escA(c&&c.indicado_por_nome)}" oninput="buscarIndicadora(this.value)" onfocus="buscarIndicadora(this.value)" onblur="setTimeout(fecharSugIndicadora,200)"/>
           <input type="hidden" id="f-indicaid" value="${escA(c&&c.indicado_por)}"/>
           <div class="indsug" id="indsug"></div>
+          <!-- O nome de quem indicou ja aparecia, mas so como texto: para
+               ver o card dela (se fechou, se recebeu, se cabe comissao)
+               era procurar na busca. Com o uuid guardado em
+               indicado_por, o pulo e um clique. -->
+          ${(c&&c.indicado_por)?'<div class="fhint"><span class="lgcli" onclick="abrirCardCliente(\''+c.indicado_por+'\')">abrir o card de '+esc(c.indicado_por_nome||'quem indicou')+' &rarr;</span></div>':''}
           <div class="fhint" id="indhint"></div>
         </div>
         <div class="fld"><label>Data de nascimento do bebê (DN)</label><input type="date" id="f-dn" value="${(c&&c.data_nascimento_bebe)||''}"/>

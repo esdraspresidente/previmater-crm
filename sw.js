@@ -1,110 +1,101 @@
-const CACHE = 'fullfin-v3.71';
-const SHARE_CACHE = 'fullfin-share';
+// PreviMater CRM — service worker
+//
+// POR QUE ESTE ARQUIVO FOI REESCRITO EM 25/08/2026
+//
+// O que estava aqui era o service worker do FULLFIN, copiado de repo
+// errado. Ele pre-cacheava '/fullfin/index.html', '/fullfin/' e
+// '/fullfin/manifest.json' — caminhos que EXISTEM, porque os dois apps
+// moram no mesmo dominio (esdraspresidente.github.io). Entao ele
+// instalava sem erro e assumia o escopo do CRM, servindo o CRM por um
+// cache que nao era dele. Trazia junto um handler de share-target que
+// redireciona para '/fullfin/', codigo morto aqui.
+//
+// O estrago apareceu em 25/08: o celular ficou horas mostrando um
+// index.html velho depois de um deploy, e o chat desenhava a bolha de
+// midia do jeito antigo enquanto o desktop ja mostrava o novo.
+//
+// A REGRA PRINCIPAL: O index.html NUNCA E SERVIDO DE CACHE QUANDO HA
+// REDE. Ele tem 400 KB, concentra o app inteiro e muda varias vezes por
+// dia, de conversas diferentes. Uma copia velha nao e so tela
+// desatualizada: e alguem operando com regra de negocio antiga sem
+// desconfiar. O fetch dele vai com cache:'no-store' para pular ate o
+// cache HTTP do navegador, que e o que enganou o celular hoje — o
+// GitHub Pages responde com max-age e o telefone honrou.
+//
+// O cache offline fica so para o que nao muda: manifesto e icones. Se
+// o telefone estiver sem rede, o index.html cacheado da ultima visita
+// ainda e servido — melhor um app velho que nenhum app —, mas com rede
+// a versao nova ganha sempre.
+//
+// Mudar o numero de CACHE apaga o anterior no activate. E o jeito de
+// forcar todo mundo a largar cache ruim: e por isso que este comeca em
+// v2, para matar o 'fullfin-v3.71' que ficou nos aparelhos.
+
+const CACHE = 'previmater-crm-v2';
+
+// So o que e estavel. index.html de proposito fora daqui.
 const ASSETS = [
-  '/fullfin/',
-  '/fullfin/index.html',
-  '/fullfin/manifest.json',
-  '/fullfin/icon-192.png'
+  './manifest.json',
+  './icon192.png',
+  './icon512.png'
 ];
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      // allSettled e nao addAll: se um icone faltar, o SW ainda instala.
+      // Com addAll, um 404 derruba a instalacao inteira e o app fica sem
+      // service worker nenhum sem avisar.
+      .then(c => Promise.allSettled(ASSETS.map(a => c.add(a))))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE && k !== SHARE_CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', e => {
   const url = e.request.url;
 
-  // ── Intercepta POST do Share Target ──
-  if (url.includes('/fullfin/share-target') && e.request.method === 'POST') {
-    // CRÍTICO: waitUntil garante que o SW não seja morto antes de terminar de escrever o cache.
-    // respondWith só resolve DEPOIS que o arquivo foi 100% gravado.
-    e.respondWith(handleShare(e));
+  // Supabase passa direto: dado de cliente nao entra em cache do
+  // navegador, e link assinado de storage expira em minutos.
+  if (url.includes('supabase.co')) return;
+  if (e.request.method !== 'GET') return;
+
+  const ehDocumento = e.request.mode === 'navigate' ||
+                      url.endsWith('/') ||
+                      url.includes('index.html') ||
+                      url.includes('trafego.html');
+
+  if (ehDocumento) {
+    e.respondWith(
+      fetch(new Request(url, { cache: 'no-store' }))
+        .then(res => {
+          if (res && res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, clone));
+          }
+          return res;
+        })
+        // Só cai no cache quando a rede falhou de verdade.
+        .catch(() => caches.match(e.request))
+    );
     return;
   }
 
-  if (url.includes('supabase.co')) return;
-
+  // Resto (icone, manifesto): cache primeiro, que é o que não muda.
   e.respondWith(
-    fetch(e.request)
-      .then(res => {
-        if (res.ok && e.request.method === 'GET') {
-          const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
-        return res;
-      })
-      .catch(() => caches.match(e.request))
+    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+      if (res && res.ok) {
+        const clone = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
+      }
+      return res;
+    }))
   );
 });
-
-// Grava um log de diagnóstico que sobrevive ao redirect.
-// O index.html lê isso no painel "Diagnóstico do Compartilhamento".
-async function gravarShareLog(dados) {
-  try {
-    const cache = await caches.open(SHARE_CACHE);
-    dados.quando = new Date().toISOString();
-    await cache.put('/fullfin/share-log', new Response(JSON.stringify(dados), {
-      headers: { 'Content-Type': 'application/json' }
-    }));
-  } catch (e) { /* se nem isso grava, o problema é permissão de cache */ }
-}
-
-async function handleShare(e) {
-  const log = { etapa: 'inicio', campos: [], salvou: false };
-  let salvou = false;
-  try {
-    const formData = await e.request.formData();
-    log.etapa = 'formdata_ok';
-
-    // Registra TUDO que o Android mandou: nome do campo, tipo e tamanho
-    for (const [nome, v] of formData.entries()) {
-      if (v && typeof v === 'object' && 'size' in v) {
-        log.campos.push(nome + ' [arquivo ' + (v.type || 'sem-tipo') + ' ' + v.size + 'b]');
-      } else {
-        log.campos.push(nome + ' [texto: "' + String(v).slice(0, 40) + '"]');
-      }
-    }
-
-    // Tenta pegar o arquivo por qualquer nome de campo (file, files, etc.)
-    let file = formData.get('file');
-    if (!file || !file.size) {
-      for (const [, v] of formData.entries()) {
-        if (v && typeof v === 'object' && 'size' in v && v.size > 0) { file = v; break; }
-      }
-    }
-
-    if (file && file.size > 0) {
-      log.etapa = 'arquivo_encontrado';
-      log.arquivo = (file.name || '?') + ' / ' + (file.type || 'sem-tipo') + ' / ' + file.size + 'b';
-      const cache = await caches.open(SHARE_CACHE);
-      await cache.put('/fullfin/shared-file', new Response(file, {
-        headers: {
-          'Content-Type': file.type || 'application/octet-stream',
-          'X-File-Name': encodeURIComponent(file.name || 'comprovante.pdf')
-        }
-      }));
-      const check = await cache.match('/fullfin/shared-file');
-      salvou = !!check;
-      log.etapa = salvou ? 'gravado_ok' : 'put_falhou';
-      log.salvou = salvou;
-    } else {
-      log.etapa = 'nenhum_arquivo';
-    }
-  } catch (err) {
-    log.etapa = 'excecao';
-    log.erro = (err && err.message) ? err.message : String(err);
-    console.error('[SW] Share error:', err);
-  }
-  await gravarShareLog(log);
-  return Response.redirect('/fullfin/?share=' + (salvou ? '1' : 'erro'), 303);
-}

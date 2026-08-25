@@ -2674,6 +2674,42 @@ function mcTriagemHtml(dados){
     <div class="fhint" style="margin-top:7px">Coletado na conversa. Para corrigir, fale com a cliente ou ajuste em <code>samara_dados</code>.</div>
   </div>`;
 }
+/* De qual anuncio esta mae veio.
+   Bloco SO DE LEITURA, e de proposito: o dado e carimbado pelo webhook
+   a partir do que o Meta manda na PRIMEIRA mensagem e nao existe mais
+   depois dela. Campo editavel aqui viraria numero digitado a mao
+   entrando no relatorio de trafego como se fosse medicao.
+
+   Card que nao veio de anuncio devolve string vazia e o bloco nem
+   aparece — sao 37 mil, e a maioria esmagadora nao tem anuncio. */
+function blocoAnuncioHtml(c){
+  if(!c||!c.anuncio_id) return '';
+  const linha=(rot,val)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:13px">
+      <span style="color:var(--text3)">${esc(rot)}</span><b>${esc(String(val))}</b></div>`;
+  const app=c.anuncio_app?(c.anuncio_app==='instagram'?'Instagram':(c.anuncio_app==='facebook'?'Facebook':c.anuncio_app)):'—';
+  let quando='—', janela='';
+  if(c.anuncio_em){
+    const d=new Date(c.anuncio_em);
+    quando=d.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    /* A janela de atribuicao do Meta e de 7 dias contados do CLIQUE.
+       Depois disso o evento de conversao e descartado sem aviso: nao
+       adianta mover o card correndo, o credito daquele anuncio ja
+       passou. Mostrar aqui evita a pergunta "por que nao contou". */
+    const faltam=Math.ceil((d.getTime()+7*86400000-Date.now())/86400000);
+    janela = faltam>0
+      ? `<div class="fhint" style="margin-top:7px">Atribuição no Meta vale por mais ${faltam} dia${faltam===1?'':'s'}.</div>`
+      : `<div class="fhint" style="margin-top:7px">Passou dos 7 dias do clique: mudança de etapa daqui em diante não conta mais para o anúncio.</div>`;
+  }
+  return `<div class="mcsens" style="background:var(--bg2,#f6f7f8);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
+    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">📣 Veio de anúncio</div>
+    ${linha('Anúncio (ID)',c.anuncio_id)}
+    ${linha('Plataforma',app)}
+    ${c.anuncio_codigo?linha('Código no texto',c.anuncio_codigo):''}
+    ${linha('Clicou em',quando)}
+    ${janela}
+    <div class="fhint" style="margin-top:5px">Preenchido sozinho na primeira mensagem. O nome do criativo está no painel de tráfego.</div>
+  </div>`;
+}
 function renderCardClienteModal(c,etqSel,listas){
   mcOriginal={nome_completo:c.nome_completo,quadro:c.quadro,lista_id:c.lista_id};
   mcClienteId=c.id;mcMencoes=[];mcEtqSelAtual=etqSel.slice();
@@ -2825,6 +2861,7 @@ function renderCardClienteModal(c,etqSel,listas){
         </div>
         <div class="cb" id="mc-cbox" style="display:none;margin-bottom:13px"></div>
 
+        ${blocoAnuncioHtml(c)}
         <div class="fld ff" style="margin-bottom:13px"><label>Observações</label><textarea id="mc-obs">${esc(c.observacoes)}</textarea></div>
         <div class="fld ff" style="margin-bottom:18px"><label>Link do Trello</label><input type="url" id="mc-trello" placeholder="https://trello.com/c/..." value="${escA(c.trello_url)}"/></div>
 

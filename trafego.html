@@ -366,7 +366,7 @@ async function carregar(){
     sb.from('vw_trafego_estoque').select('ordem,lista,qtd,qtd_pre,qtd_adm').order('ordem',{ascending:true}).limit(30),
     sb.from('vw_trafego_meta_dia').select('dia,gasto,alcance,cliques,conversas').order('dia',{ascending:true}).limit(400),
     sb.from('vw_trafego_descartes').select('dia,codigo,rotulo,ordem,qtd').order('dia',{ascending:true}).limit(900),
-    sb.from('vw_trafego_anuncio').select('criativo,leads,nunca_respondeu,descartada,elegivel,gasto,por_lead,por_elegivel,pct_descarte').order('gasto',{ascending:false}).limit(200)
+    sb.from('vw_trafego_anuncio').select('criativo,leads,nunca_respondeu,descartada,elegivel,gasto,por_lead,por_elegivel,pct_descarte,nao_classificada').order('gasto',{ascending:false}).limit(200)
   ]);
   if(!desc.error && Array.isArray(desc.data)) DESCARTES=desc.data;
   if(!anun.error && Array.isArray(anun.data)){ ANUNCIOS=anun.data; desenharAnuncios(); }
@@ -682,9 +682,9 @@ function desenharDescartes(){
 function desenharAnuncios(){
   if(!ANUNCIOS.length){ $('anuncios').innerHTML='<div class="vazio">Nenhuma lead com anúncio identificado ainda.</div>'; return; }
   const real=v=>v==null?'—':'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-  let leads=0, eleg=0, gasto=0;
+  let leads=0, eleg=0, gasto=0, semBalde=0;
   const linhas=ANUNCIOS.map(a=>{
-    leads+=a.leads||0; eleg+=a.elegivel||0; gasto+=Number(a.gasto)||0;
+    leads+=a.leads||0; eleg+=a.elegivel||0; gasto+=Number(a.gasto)||0; semBalde+=a.nao_classificada||0;
     const pouco=(a.elegivel||0)<3;
     return '<tr><td>'+a.criativo
          + (pouco?'<span class="aravo">poucos elegíveis — ainda não dá para concluir</span>':'')
@@ -700,13 +700,21 @@ function desenharAnuncios(){
     + linhas + '</tbody></table>'
     + '<div class="vazio" style="margin-top:10px">'+leads+' leads atribuídas · '+eleg+' elegíveis · '
     + real(gasto)+' investido · <b>'+geral+' por elegível</b> no geral.<br>'
-    + 'Lead que chegou por indicação não entra aqui, mesmo tendo vindo depois de um anúncio.</div>';
+    + 'Lead que chegou por indicação não entra aqui, mesmo tendo vindo depois de um anúncio. '
+    + 'Card arquivado continua contando: arquivar organiza a tela, não desfaz o que o anúncio trouxe.</div>'
+    /* Lista que ninguém classificou aparece aqui em vez de evaporar do
+       numerador. Acontece quando se cria lista nova no kanban: até
+       alguém encaixar, a lead conta em "leads" e em nada mais. */
+    + (semBalde ? '<div class="vazio" style="color:var(--yellow);font-weight:700">'
+        + semBalde + (semBalde===1?' lead está':' leads estão')
+        + ' numa lista que este relatório ainda não sabe classificar — não entra em elegível nem em descartada. Criou lista nova no kanban? Me avise para encaixar.</div>' : '');
 }
 
 function baixarAnuncios(){
-  const linhas=[['Criativo','Leads','Nunca respondeu','Descartadas','Elegiveis','Gasto','Por lead','Por elegivel','% descarte']];
+  const linhas=[['Criativo','Leads','Nunca respondeu','Descartadas','Elegiveis','Nao classificadas','Gasto','Por lead','Por elegivel','% descarte']];
   for(const a of ANUNCIOS) linhas.push([a.criativo,a.leads||0,a.nunca_respondeu||0,a.descartada||0,
-                                        a.elegivel||0,a.gasto||0,a.por_lead||'',a.por_elegivel||'',a.pct_descarte||0]);
+                                        a.elegivel||0,a.nao_classificada||0,a.gasto||0,
+                                        a.por_lead||'',a.por_elegivel||'',a.pct_descarte||0]);
   baixar('previmater-anuncios-'+hojeISO()+'.csv',linhas);
 }
 

@@ -467,6 +467,11 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .chatb-bot{align-self:flex-end;background:#0E7490;color:#fff;border-bottom-right-radius:4px;}
 .chatb-meta{font-size:11px;opacity:.75;margin-top:5px;display:block;}
 .chatb-mid{font-size:13.5px;font-weight:700;opacity:.9;display:block;margin-bottom:4px;}
+.chatb-arq{display:block;margin-bottom:4px;}
+.chatb-arq img,.chatb-arq video{max-width:260px;max-height:320px;border-radius:10px;display:block;cursor:zoom-in;}
+.chatb-arq audio{width:240px;height:38px;display:block;}
+.chatb-arq a{color:inherit;text-decoration:underline;}
+.chatb-leg{font-size:15px;line-height:1.48;}
 .chatdia{align-self:center;font-size:11px;font-weight:700;color:var(--text3);background:var(--white);border:1px solid var(--border);border-radius:20px;padding:3px 12px;margin:5px 0;}
 .chatsend{margin-top:14px;}
 .chatsend textarea{width:100%;background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:12px 15px;font-size:15px;font-family:inherit;resize:vertical;min-height:58px;color:var(--text);}
@@ -3077,13 +3082,54 @@ function rotuloMidia(m){
   if(t)return (ic[t]||'📎')+' '+(m.midia_nome||nome[t]||t);
   return '📎 mídia';
 }
+/* TROCA O LUGAR VAZIO PELO ARQUIVO, depois que o feed ja foi pintado.
+   Roda uma vez por bolha (data-pronto), entao repintar a conversa no
+   poll nao refaz assinatura do que ja esta na tela.
+   O link assinado vale 300s: tempo de olhar, e curto o bastante para
+   nao virar url publica se alguem copiar.
+   SOBRE EGRESS: imagem carrega sozinha ao abrir a conversa, e isso e
+   egress de storage. E aceitavel porque e humano abrindo UMA conversa
+   de 40 mensagens — diferente da consulta do motor que rodava 780x por
+   dia sozinha (item 251). Mesmo assim: loading=lazy so busca o que
+   esta visivel, e audio e video vao com preload=none, ou seja nao
+   baixam nada ate alguem apertar o play. */
+async function chatCarregarMidias(feed){
+  if(!feed)return;
+  const alvos=Array.from(feed.querySelectorAll('[data-midia]')).filter(el=>!el.dataset.pronto);
+  for(const el of alvos){
+    el.dataset.pronto='1';
+    const caminho=el.dataset.midia;
+    const mime=el.dataset.mime||'';
+    const nome=el.dataset.nome||'arquivo';
+    try{
+      const{data,error}=await sb.storage.from(ANEXO_BUCKET).createSignedUrl(caminho,300);
+      if(error||!data||!data.signedUrl)continue;
+      const u=escA(data.signedUrl);
+      if(mime.indexOf('image/')===0)el.innerHTML=`<img src="${u}" alt="${escA(nome)}" loading="lazy" onclick="window.open(this.src,'_blank')">`;
+      else if(mime.indexOf('audio/')===0)el.innerHTML=`<audio controls preload="none" src="${u}"></audio>`;
+      else if(mime.indexOf('video/')===0)el.innerHTML=`<video controls preload="none" src="${u}"></video>`;
+      else el.innerHTML=`<a href="${u}" target="_blank" rel="noopener">📄 ${esc(nome)}</a>`;
+    }catch(e){/* arquivo sumido do bucket nao pode derrubar a conversa */}
+  }
+}
 function chatCorpoMsg(m){
   const ehMidia=m.tipo&&m.tipo!=='texto';
-  /* Mensagem de midia NUNCA imprime o texto cru. Naquele campo nao vem
-     legenda: vem o arquivo inteiro em base64. Antes isso dependia de
-     pareceBase64 acertar o palpite; agora e regra fixa, decidida pelo
-     tipo, que o webhook ja grava certo. */
-  if(ehMidia)return `<span class="chatb-mid">${esc(rotuloMidia(m))}</span>`;
+  /* MIDIA — 25/08, item 115.
+     A partir do webhook v11 o arquivo vai para o bucket crm-anexos e a
+     linha guarda midia_caminho; o texto passou a ser a LEGENDA, que
+     antes era descartada. Aqui sai um lugar vazio com o caminho no
+     data-midia, e o chatCarregarMidias() troca pelo arquivo depois que
+     o feed ja esta na tela — createSignedUrl e assincrono e este render
+     e sincrono.
+     Linha ANTIGA (anterior ao v11) nao tem midia_caminho: continua
+     saindo so o rotulo, e o texto dela ainda e base64, por isso o
+     pareceBase64 guarda a legenda. Some quando o backfill rodar. */
+  if(ehMidia){
+    const rot=`<span class="chatb-mid">${esc(rotuloMidia(m))}</span>`;
+    const leg=(m.texto&&!pareceBase64(m.texto))?`<div class="chatb-leg">${esc(m.texto).replace(/\n/g,'<br>')}</div>`:'';
+    if(!m.midia_caminho)return rot+leg;
+    return `<div class="chatb-arq" data-midia="${escA(m.midia_caminho)}" data-mime="${escA(m.midia_mime||'')}" data-nome="${escA(m.midia_nome||'')}">${rot}</div>${leg}`;
+  }
   const cru=m.texto||'';
   if(!cru)return '<span style="opacity:.6">(mensagem sem texto)</span>';
   /* Sobra o caso do tipo vir como "texto" mas o conteudo ser base64 —
@@ -3145,6 +3191,7 @@ async function carregarChat(clienteId,silencioso){
   });
   feed.innerHTML=html;
   feed.scrollTop=feed.scrollHeight;
+  chatCarregarMidias(feed);
 }
 /* ENTER MANDA, SHIFT+ENTER PULA LINHA.
    Vale para os dois chats (cartao e Caixa de Entrada), que sao conversa
@@ -6665,6 +6712,7 @@ async function ibCarregarChat(c,silencioso){
   });
   feed.innerHTML=html;
   feed.scrollTop=feed.scrollHeight;
+  chatCarregarMidias(feed);
 }
 function pararInboxChatPoll(){if(ibChatTimer){clearInterval(ibChatTimer);ibChatTimer=null;}}
 /* ============================================================

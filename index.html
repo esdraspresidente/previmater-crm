@@ -5343,7 +5343,7 @@ async function pageFila(){
       .in('status',['aguardando_aprovacao','agendado','pausado','erro','vencida'])
       .order('data_hora_agendada',{ascending:true})
       .limit(300),
-    sb.from('crm_variaveis').select('chave,valor_texto').in('chave',['motor_ligado','samara_ligada']),
+    sb.from('crm_variaveis').select('chave,valor_texto').in('chave',['motor_ligado','samara_ligada','intervalo_sequencia_min']),
     sb.from('crm_sequencias').select('id,codigo,nome'),
     sb.from('crm_cadencia').select('id,sequencia_id,ordem,braco'),
     // Conversas em que a ULTIMA mensagem e da cliente.
@@ -5449,6 +5449,81 @@ function freioBotao(chave,titulo,ligadoTxt,paradoTxt,explica){
   </div>`;
 }
 
+/* ABA RITMO — item 196, 25/08/2026.
+
+   Existe para uma decisao so: quando baixar o intervalo entre sequencias.
+   A trava do motor le `intervalo_sequencia_min` de crm_variaveis, entao o
+   numero muda pela tela de variaveis sem publicar nada — mas so vale a
+   pena mudar olhando o quanto a fila esta encostando no teto.
+
+   A JANELA E O TETO. 9h-18h de segunda a sexta (9 horas) e 10h-14h no
+   sabado (4 horas); domingo nao envia. Teto = horas da janela dividido
+   pelo intervalo. A 5 min sao 108 num dia util; a 10 min seriam 54, que
+   em 24/08 teria sido menos da metade do que a operacao mandou.
+
+   CONTA NO BANCO, NAO EM MEMORIA. Sao consultas de contagem (head:true),
+   uma por dia: nao trazem linha nenhuma para o navegador. Baixar os
+   registros e contar aqui esbarraria no teto de 1.000 linhas do PostgREST
+   assim que o volume crescer — e crescer e exatamente o que esta
+   acontecendo. Tambem e o que segura o egress, que estourou a cota em
+   25/08 por tela pedindo linha demais.
+
+   RESSALVA DA COLUNA. crm_automacoes nao tem "vencida_em": as vencidas
+   sao agrupadas por data_hora_agendada, ou seja, pelo dia em que a
+   mensagem DEVERIA ter saido. Para esta leitura serve — a linha vence
+   poucas horas depois — mas nao e a hora exata do vencimento. */
+let FILA_RITMO=null;
+
+function janelaHoras(d){ const w=d.getDay(); if(w===0) return 0; if(w===6) return 4; return 9; }
+
+async function carregarRitmo(){
+  const dias=[];
+  for(let i=6;i>=0;i--){
+    const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-i);
+    const fim=new Date(d); fim.setDate(fim.getDate()+1);
+    dias.push({d:d,ini:d.toISOString(),fim:fim.toISOString()});
+  }
+  try{
+    const linhas=await Promise.all(dias.map(async x=>{
+      const[env,ven]=await Promise.all([
+        sb.from('crm_automacoes').select('id',{count:'exact',head:true})
+          .eq('tipo_automacao','sequencia').eq('status','enviado')
+          .gte('enviado_em',x.ini).lt('enviado_em',x.fim),
+        sb.from('crm_automacoes').select('id',{count:'exact',head:true})
+          .eq('tipo_automacao','sequencia').eq('status','vencida')
+          .gte('data_hora_agendada',x.ini).lt('data_hora_agendada',x.fim)
+      ]);
+      return{d:x.d,enviadas:env.count||0,vencidas:ven.count||0};
+    }));
+    FILA_RITMO=linhas;
+  }catch(e){ FILA_RITMO=[]; }
+  if(FILA_ABA==='ritmo') renderFila();
+}
+
+function ritmoHTML(){
+  const min=parseInt(String(FILA_FREIOS.intervalo_sequencia_min||'5').replace(/[^0-9]/g,''),10)||5;
+  let h='<div class="filabox" style="margin-bottom:12px"><div class="filaboxl">Para que serve</div>'+
+    '<div class="fhint">Quantas mensagens de <b>sequência</b> saíram por dia, contra o máximo que cabe no horário de atendimento com o intervalo atual.<br><br>'+
+    '<b>Intervalo hoje: '+min+' min</b> — muda em Configurações → Variáveis, na chave <code>intervalo_sequencia_min</code>. Vale na rodada seguinte, sem publicar nada.<br>'+
+    'O teto é a janela dividida pelo intervalo: <b>9h nos dias úteis</b>, 4h no sábado, domingo não envia.<br><br>'+
+    'Quando "enviadas" encostar no teto, ou "venceram" sair do zero, é hora de baixar o intervalo. Se o teto já não couber nem no menor intervalo aceitável, o caminho deixa de ser esse número: é ampliar a janela ou migrar para o número oficial da API.</div></div>';
+  if(!FILA_RITMO) return h+'<div class="emp">Contando...</div>';
+  if(!FILA_RITMO.length) return h+'<div class="emp"><div class="empt">Não consegui contar</div><div class="emps">Tente atualizar a tela.</div></div>';
+  h+='<table class="tbl"><thead><tr><th>Dia</th><th>Enviadas</th><th>Teto</th><th>Uso</th><th>Venceram</th></tr></thead><tbody>';
+  FILA_RITMO.forEach(r=>{
+    const horas=janelaHoras(r.d);
+    const teto=Math.floor(horas*60/min);
+    const pct=teto>0?Math.round(r.enviadas*100/teto):0;
+    const cor=teto===0?'':(pct>=90?'red':(pct>=70?'yellow':'green'));
+    const dia=r.d.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'});
+    h+='<tr><td>'+esc(dia)+'</td><td><b>'+r.enviadas+'</b></td><td>'+(teto||'—')+'</td>'+
+       '<td>'+(teto?'<span class="filapill '+cor+'">'+pct+'%</span>':'—')+'</td>'+
+       '<td>'+(r.vencidas?'<span class="filapill red">'+r.vencidas+'</span>':'0')+'</td></tr>';
+  });
+  h+='</tbody></table>';
+  return h;
+}
+
 function renderFila(){
   const pc=$('pc');
   const aprovar=FILA_CACHE.filter(a=>a.status==='aguardando_aprovacao');
@@ -5474,7 +5549,12 @@ function renderFila(){
      aba('agendadas','Agendadas',agendadas.length,false)+
      aba('vencidas','Vencidas',vencidas.length,vencidas.length>0)+
      aba('erro','Com erro',comErro.length,comErro.length>0)+
+     aba('ritmo','Ritmo',0,false)+
      '</div>';
+
+  // A aba Ritmo tambem nao lista automacoes: ela conta as que JA sairam.
+  // Sai antes dos filtros pelo mesmo motivo que a Sem resposta.
+  if(FILA_ABA==='ritmo'){ h+=ritmoHTML(); pc.innerHTML=h; if(!FILA_RITMO) carregarRitmo(); return; }
 
   // A aba Sem resposta sai antes do resto: ela nao lista automacoes, ela
   // lista PESSOAS esperando. Os filtros e o agrupamento por dia abaixo

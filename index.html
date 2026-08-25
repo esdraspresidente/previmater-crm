@@ -5309,14 +5309,27 @@ async function pageFila(){
     sb.from('crm_variaveis').select('chave,valor_texto').in('chave',['motor_ligado','samara_ligada']),
     sb.from('crm_sequencias').select('id,codigo,nome'),
     sb.from('crm_cadencia').select('id,sequencia_id,ordem,braco'),
-    // Conversas em que a ULTIMA mensagem e da cliente. Le so os 3 ultimos
-    // dias e as colunas necessarias: crm_mensagens guarda midia em base64
-    // no texto, e um select frouxo aqui traria CNH inteira para a tela.
+    // Conversas em que a ULTIMA mensagem e da cliente.
+    //
+    // LE PELA vw_inbox_lista, NAO PELA crm_mensagens — 25/08.
+    // O select anterior pedia `texto` inteiro e cortava em 120 caracteres
+    // aqui no navegador: baixava 5.188 kB para usar 26 kB. Como a midia
+    // chega em base64 dentro do `texto` (item 115), cada audio de cliente
+    // atravessava a rede completo A CADA carregamento desta tela — era o
+    // maior consumidor isolado de egress da operacao.
+    //
+    // A view resolve as duas pontas: devolve `previa` = left(texto,200) e
+    // ja entrega uma linha por conversa (a mais recente), que e exatamente
+    // o que o `ultimaDe` abaixo calculava na mao. 1.809 linhas viraram 174.
+    // O `ultimaDe` fica: custa nada e nao depende da view continuar assim.
+    //
+    // Enquanto o 115 nao subir a midia para o bucket, NENHUMA tela pode
+    // pedir `texto` cru de crm_mensagens sem limite de linhas.
     sb.from('crm_listas').select('id,nome'),
-    sb.from('crm_mensagens').select('cliente_id,criado_em,direcao,texto,tipo')
+    sb.from('vw_inbox_lista').select('cliente_id,criado_em,direcao,previa')
       .not('cliente_id','is',null)
       .gte('criado_em', new Date(Date.now()-3*24*3600000).toISOString())
-      .order('criado_em',{ascending:false}).limit(2000)
+      .order('criado_em',{ascending:false}).limit(1000)
   ]);
 
   if(error){pc.innerHTML='<div class="emp"><div class="empt">Erro ao carregar</div><div class="emps">'+esc(error.message)+'</div></div>';return;}
@@ -5375,7 +5388,7 @@ async function pageFila(){
       FILA_SEMRESP.push({id:c.id,nome:c.nome_completo||'(sem nome)',
         fone:foneLegivel(c.telefone_principal),pausada:!!c.samara_pausada,min:min,
         lista:mapaListas[c.lista_id]||'',
-        texto:String(m.texto||'').replace(/\s+/g,' ').slice(0,120)});
+        texto:String(m.previa||'').replace(/\s+/g,' ').slice(0,120)});
     });
     FILA_SEMRESP.sort((a,b)=>b.min-a.min);
   }

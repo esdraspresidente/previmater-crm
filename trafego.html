@@ -129,6 +129,16 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 .btcsv:active{background:var(--teal-l);}
 .ctopo{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
 .vazio{font-size:12px;color:var(--text3);padding:14px 0;text-align:center;}
+.atab{width:100%;border-collapse:collapse;font-size:12px;}
+.atab th{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;text-align:right;padding:0 0 8px;border-bottom:1px solid var(--border);}
+.atab th:first-child{text-align:left;}
+.atab td{padding:10px 0;border-bottom:1px solid #F0F7F7;text-align:right;font-variant-numeric:tabular-nums;}
+.atab td:first-child{text-align:left;font-weight:600;font-size:13px;}
+/* Custo por lead sai apagado de proposito: e o numero que engana.
+   Custo por elegivel sai em destaque, porque e o que muda decisao. */
+.apale{color:var(--text3);}
+.aforte{font-weight:800;color:var(--teal);}
+.aravo{font-size:10px;color:var(--yellow);font-weight:700;display:block;margin-top:2px;}
 .rodape{text-align:center;font-size:11px;color:var(--text3);margin-top:18px;line-height:1.6;}
 </style>
 </head>
@@ -244,6 +254,15 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
       <div id="descartes"></div>
     </div>
 
+    <div class="card">
+      <div class="ctopo">
+        <div class="ctit">Qual anúncio traz mãe elegível</div>
+        <button class="btcsv" onclick="baixarAnuncios()">Exportar CSV</button>
+      </div>
+      <div class="csub">Foto do total desde 18/08, quando o anúncio de origem passou a ser gravado em cada lead — <b>não segue o filtro de período lá em cima</b>. O <b>custo por lead</b> é o número que o Gerenciador do Meta mostra, e ele engana: o algoritmo aprendeu a achar quem abre conversa, não quem tem direito. O que decide é o <b>custo por elegível</b>.</div>
+      <div id="anuncios"></div>
+    </div>
+
     <div class="rodape">
       Atualizado ao abrir a página · Somente leitura<br>
       Este painel não mostra nome, telefone, CPF nem conversa de cliente.
@@ -333,6 +352,7 @@ let LINHAS=[];           // uma linha por dia, direto da view
 let META=[];             // uma linha por dia, gasto do Meta
 let ESTOQUE=[];          // uma linha por etapa do funil
 let DESCARTES=[];        // uma linha por dia e por motivo de descarte
+let ANUNCIOS=[];         // uma linha por criativo, ja agregada na view
 let VARIANTE='qtd';      // qtd = geral | qtd_pre | qtd_adm
 let PERIODO='7';         // hoje | ontem | 7 | 15 | 30
 let COMPARAR='0';        // 0 = sem comparacao; 1,7,15,30 = deslocamento em dias
@@ -341,13 +361,15 @@ const PERIODOS=[['hoje','Hoje'],['ontem','Ontem'],['7','7 dias'],['15','15 dias'
 const COMPARACOES=[['0','Não comparar'],['1','Dia anterior'],['7','Semana anterior'],['15','Quinzena anterior'],['30','Mês anterior']];
 
 async function carregar(){
-  const [dia,estoque,meta,desc]=await Promise.all([
+  const [dia,estoque,meta,desc,anun]=await Promise.all([
     sb.from('vw_trafego_dia').select('dia,novos_contatos,contratos_enviados,contratos_assinados').order('dia',{ascending:true}).limit(400),
     sb.from('vw_trafego_estoque').select('ordem,lista,qtd,qtd_pre,qtd_adm').order('ordem',{ascending:true}).limit(30),
     sb.from('vw_trafego_meta_dia').select('dia,gasto,alcance,cliques,conversas').order('dia',{ascending:true}).limit(400),
-    sb.from('vw_trafego_descartes').select('dia,codigo,rotulo,ordem,qtd').order('dia',{ascending:true}).limit(900)
+    sb.from('vw_trafego_descartes').select('dia,codigo,rotulo,ordem,qtd').order('dia',{ascending:true}).limit(900),
+    sb.from('vw_trafego_anuncio').select('criativo,leads,nunca_respondeu,descartada,elegivel,gasto,por_lead,por_elegivel,pct_descarte').order('gasto',{ascending:false}).limit(200)
   ]);
   if(!desc.error && Array.isArray(desc.data)) DESCARTES=desc.data;
+  if(!anun.error && Array.isArray(anun.data)){ ANUNCIOS=anun.data; desenharAnuncios(); }
   if(!meta.error && Array.isArray(meta.data)) META=meta.data;
 
   // A view devolve um dia por linha desde 12/08. Com 400 dias de teto o
@@ -639,6 +661,53 @@ function desenharDescartes(){
          + '<div class="fqtd">'+v.qtd+'</div><div class="dpct">'+share+'%</div></div>';
   }).join('')
   + '<div class="vazio" style="margin-top:10px">'+total+' no período. Cliente que sair de Descartado deixa de contar aqui.</div>';
+}
+
+/* Anuncio x funil real.
+   A view ja entrega agregado por criativo — nao ha o que somar aqui, e
+   nao ha como esta tela ver cliente nenhum: vw_trafego_anuncio devolve
+   contagem, nunca linha de pessoa.
+
+   POR QUE NAO SEGUE O FILTRO DE PERIODO: a atribuicao so existe a
+   partir de 18/08, e o gasto do Meta e acumulado do criativo inteiro.
+   Cruzar um recorte de 7 dias de lead com o gasto total daria um custo
+   por elegivel inventado. Quando houver mais historico, a view passa a
+   devolver por dia e ai o filtro entra.
+
+   O AVISO DE POUCO VOLUME E O PONTO DA TELA. Criativo com menos de 3
+   elegiveis nao se separa de sorte: 1 elegivel em 2 leads da 50%, e
+   50% de dois nao e nada. Sem esse aviso a tela convida a cortar
+   criativo no escuro, so que com mais confianca — que e o jeito mais
+   caro de errar. */
+function desenharAnuncios(){
+  if(!ANUNCIOS.length){ $('anuncios').innerHTML='<div class="vazio">Nenhuma lead com anúncio identificado ainda.</div>'; return; }
+  const real=v=>v==null?'—':'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  let leads=0, eleg=0, gasto=0;
+  const linhas=ANUNCIOS.map(a=>{
+    leads+=a.leads||0; eleg+=a.elegivel||0; gasto+=Number(a.gasto)||0;
+    const pouco=(a.elegivel||0)<3;
+    return '<tr><td>'+a.criativo
+         + (pouco?'<span class="aravo">poucos elegíveis — ainda não dá para concluir</span>':'')
+         + '</td><td>'+(a.leads||0)+'</td><td>'+(a.pct_descarte==null?'—':a.pct_descarte+'%')+'</td>'
+         + '<td>'+(a.elegivel||0)+'</td>'
+         + '<td class="apale">'+real(a.por_lead)+'</td>'
+         + '<td class="'+(pouco?'apale':'aforte')+'">'+real(a.por_elegivel)+'</td></tr>';
+  }).join('');
+  const geral = eleg>0 ? real(gasto/eleg) : '—';
+  $('anuncios').innerHTML =
+      '<table class="atab"><thead><tr><th>Criativo</th><th>Leads</th><th>Descarte</th>'
+    + '<th>Elegíveis</th><th>Por lead</th><th>Por elegível</th></tr></thead><tbody>'
+    + linhas + '</tbody></table>'
+    + '<div class="vazio" style="margin-top:10px">'+leads+' leads atribuídas · '+eleg+' elegíveis · '
+    + real(gasto)+' investido · <b>'+geral+' por elegível</b> no geral.<br>'
+    + 'Lead que chegou por indicação não entra aqui, mesmo tendo vindo depois de um anúncio.</div>';
+}
+
+function baixarAnuncios(){
+  const linhas=[['Criativo','Leads','Nunca respondeu','Descartadas','Elegiveis','Gasto','Por lead','Por elegivel','% descarte']];
+  for(const a of ANUNCIOS) linhas.push([a.criativo,a.leads||0,a.nunca_respondeu||0,a.descartada||0,
+                                        a.elegivel||0,a.gasto||0,a.por_lead||'',a.por_elegivel||'',a.pct_descarte||0]);
+  baixar('previmater-anuncios-'+hojeISO()+'.csv',linhas);
 }
 
 // ------------------------------------------------------------

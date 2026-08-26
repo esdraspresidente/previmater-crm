@@ -555,6 +555,9 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .trilha .qd{font-weight:700;color:#3D7C7E;}
 .mcdesde{font-size:11.5px;color:var(--text3);font-weight:700;}
 .seqbox{border:1.5px solid var(--border);border-radius:14px;overflow:hidden;}
+/* Os botoes ficam ABAIXO do texto da linha, e nao ao lado: no celular
+   cinco botoes na mesma linha do nome espremeriam os dois. */
+.seqacoes{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
 .seqlinha{display:flex;align-items:center;gap:11px;padding:11px 14px;border-bottom:1px solid var(--border2);}
 .seqlinha:last-child{border-bottom:none;}
 .seqlinha.viva{background:#F7FCFC;}
@@ -1053,6 +1056,10 @@ function fecharModal(){$('modal').classList.add('h');mcPreviewAberto=false;if(ty
 function fecharSeFundo(e){if(e.target===e.currentTarget)fecharInteligente();}
 function fecharInteligente(){
   if(mcPreviewAberto&&mcClienteId){mcPreviewAberto=false;abrirCardCliente(mcClienteId);return;}
+  /* Fechou clicando no fundo: se havia um cartao esperando para voltar,
+     devolve o cartao em vez de sumir com tudo — e o mesmo que o botao
+     Voltar faz. */
+  if(typeof FILA_VOLTAR!=='undefined'&&FILA_VOLTAR){const id=FILA_VOLTAR;FILA_VOLTAR=null;fecharModal();abrirCardCliente(id);return;}
   fecharModal();
 }
 function abrirModal(h,largo){const box=$('modalbox');if(typeof pararChatPoll==='function')pararChatPoll();box.onscroll=null;box.classList.remove('mb-card');box.innerHTML=h;box.classList.toggle('mb-wide',!!largo);$('modal').classList.remove('h');}
@@ -5671,6 +5678,9 @@ function filaVoltarPara(status){
 
 async function pageFila(){
   const pc=$('pc');marcarNav('fila');
+  /* Chegou na Fila: nao ha cartao pendente para voltar. Sem isto, uma
+     volta esquecida faria a proxima acao na Fila abrir um cartao. */
+  FILA_VOLTAR=null;
   if(U.nivel!=='proprietario'){pc.innerHTML='<div class="emp"><div class="empt">Tela restrita a proprietários</div></div>';return;}
   pc.innerHTML='<div class="emp">Carregando...</div>';
 
@@ -6130,9 +6140,9 @@ async function filaEnviarAgora(id){
   const r=await enviarVencidaPeloMotor(id);
   if(r&&r.ok)toast('Enviada','ok');
   else if(r&&r.situacao==='espere')toast(r.motivo,'in');
-  else if(r&&r.situacao==='nao_vencida')toast('Essa mensagem já não estava vencida — pode ser que já tenha saído.','in');
+  else if(r&&r.situacao==='nao_vencida')toast('Essa mensagem já não estava esperando — pode ser que já tenha saído.','in');
   else toast('Não saiu: '+((r&&r.motivo)||'o motor não respondeu')+'. A mensagem continua aqui.','er');
-  await pageFila();
+  await filaRecarregar();
 }
 
 function filaEnviarSelecionadas(){
@@ -6315,7 +6325,17 @@ function cardFila(a){
       <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaEditar('${a.id}')">✎ Editar</button>
       <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaCancelar('${a.id}')">✕ Cancelar</button>`;
   }else if(a.status==='agendado'){
-    acoes=`<button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaPausar('${a.id}')">⏸ Pausar</button>
+    /* ENVIAR AGORA TAMBEM AQUI — v96 do motor, 26/08/2026.
+       Ate a v95 a rota ?enviar_automacao= so aceitava status 'vencida',
+       e a aba Agendadas so sabia adiar. Nao poder ANTECIPAR o que ja
+       esta pronto era falta boba: a mensagem existe, o texto esta
+       montado, so a hora nao chegou.
+       Isso FURA a trava de intervalo do item 196 de proposito — clique
+       do Esdras e decisao, nao ritmo. O que nao fura sao os 8 segundos
+       entre duas mensagens para a MESMA cliente: aquilo e limitacao do
+       WhatsGW, que embaralha a ordem dos baloes. */
+    acoes=`<button class="btn btnp" style="padding:8px 15px;font-size:12px" onclick="filaEnviarAgora('${a.id}')">➤ Enviar agora</button>
+      <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaPausar('${a.id}')">⏸ Pausar</button>
       <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaReagendar('${a.id}')">🕐 Reagendar</button>
       <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaEditar('${a.id}')">✎ Editar</button>
       <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaCancelar('${a.id}')">✕ Cancelar</button>`;
@@ -6367,11 +6387,58 @@ function cardFila(a){
   </div>`;
 }
 
+/* AS MESMAS ACOES, DOIS LUGARES — 26/08/2026.
+
+   Estas funcoes nasceram na Fila e agora servem tambem o bloco de
+   Sequencias dentro do cartao. Duplicar cada uma daria duas versoes da
+   mesma decisao, que divergem no primeiro ajuste — e a decisao que o
+   Esdras toma dentro do cartao tem que ser a mesma da Fila.
+
+   O QUE MUDA E SO PARA ONDE VOLTAR. FILA_VOLTAR guarda o cliente quando
+   a acao partiu do cartao; nulo quer dizer que partiu da Fila.
+
+   E ele existe por um motivo chato: o cartao e os dialogos de Editar,
+   Reagendar e Cancelar dividem o MESMO container de modal (#modalbox).
+   Abrir o Reagendar por cima do cartao apaga o cartao. Entao, quando a
+   acao vem de dentro, o dialogo assume a tela e o cartao e reaberto
+   depois — ao salvar E ao desistir. Sem isso, cancelar um Reagendar
+   deixaria o Esdras olhando para o quadro, sem entender por que o
+   cartao fechou. */
+let FILA_VOLTAR=null;
+
+async function filaRecarregar(){
+  if(FILA_VOLTAR){const id=FILA_VOLTAR;FILA_VOLTAR=null;await abrirCardCliente(id);return;}
+  await pageFila();
+}
+
+/* Chamado pelos botoes dentro do cartao: marca de onde veio e dispara a
+   mesma acao da Fila. */
+function mcSeqAcao(fn,idAuto){
+  FILA_VOLTAR=mcClienteId;
+  window[fn](idAuto);
+}
+
+/* O "Voltar" dos dialogos. Fechar e so isso quando se veio da Fila; do
+   cartao, precisa devolver o cartao. */
+function filaFecharDialogo(){
+  if(FILA_VOLTAR){const id=FILA_VOLTAR;FILA_VOLTAR=null;fecharModal();abrirCardCliente(id);return;}
+  fecharModal();
+}
+
+/* Editar e Reagendar precisam do texto e da data atuais. Na Fila isso
+   vem do FILA_CACHE; no cartao, do MC_AUTOS. Um lugar so procura nos
+   dois, para as funcoes nao terem que saber onde estao. */
+function filaAchar(id){
+  return (typeof FILA_CACHE!=='undefined'?FILA_CACHE.find(x=>x.id===id):null)
+      || (typeof MC_AUTOS!=='undefined'?MC_AUTOS.find(x=>x.id===id):null)
+      || null;
+}
+
 async function filaAtualizar(id,campos,msg){
   const{error}=await sb.from('crm_automacoes').update(campos).eq('id',id);
   if(error){toast('Erro: '+error.message,'er');return false;}
   toast(msg,'ok');
-  await pageFila();
+  await filaRecarregar();
   return true;
 }
 
@@ -6398,7 +6465,7 @@ function filaCancelar(id){
     <div class="fld ff" style="margin-bottom:16px"><label>Por que está cancelando?</label>
       <textarea id="fila-motivo" placeholder="Ex: cliente já respondeu por telefone"></textarea></div>
     <div class="brow" style="justify-content:flex-end;gap:9px">
-      <button class="btn btns" onclick="fecharModal()">Voltar</button>
+      <button class="btn btns" onclick="filaFecharDialogo()">Voltar</button>
       <button class="btnd" onclick="filaConfirmarCancelar('${id}')">Cancelar envio</button>
     </div>`);
 }
@@ -6411,8 +6478,8 @@ async function filaConfirmarCancelar(id){
 }
 
 function filaEditar(id){
-  const a=FILA_CACHE.find(x=>x.id===id);
-  if(!a)return;
+  const a=filaAchar(id);
+  if(!a){toast('Não achei essa mensagem — recarregue a tela','er');FILA_VOLTAR=null;return;}
   abrirModal(`
     <div class="mbt">Editar mensagem</div>
     <div class="mbs">Cada trecho separado por <b> / </b> vira um balão no WhatsApp.</div>
@@ -6420,7 +6487,7 @@ function filaEditar(id){
       <textarea id="fila-texto" style="min-height:150px">${esc(a.texto_montado||'')}</textarea></div>
     <div class="fhint" style="margin-bottom:16px">Nada com <b>{chave}</b> sem valor sai — o motor trava o envio.</div>
     <div class="brow" style="justify-content:flex-end;gap:9px">
-      <button class="btn btns" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btns" onclick="filaFecharDialogo()">Cancelar</button>
       <button class="btn btnp" onclick="filaSalvarTexto('${id}')">Salvar</button>
     </div>`);
 }
@@ -6433,8 +6500,8 @@ async function filaSalvarTexto(id){
 }
 
 function filaReagendar(id){
-  const a=FILA_CACHE.find(x=>x.id===id);
-  if(!a)return;
+  const a=filaAchar(id);
+  if(!a){toast('Não achei essa mensagem — recarregue a tela','er');FILA_VOLTAR=null;return;}
   const d=new Date(a.data_hora_agendada);
   const local=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
   abrirModal(`
@@ -6443,7 +6510,7 @@ function filaReagendar(id){
     <div class="fld" style="margin-bottom:16px"><label>Sai em</label>
       <input type="datetime-local" id="fila-quando" value="${local}"/></div>
     <div class="brow" style="justify-content:flex-end;gap:9px">
-      <button class="btn btns" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btns" onclick="filaFecharDialogo()">Cancelar</button>
       <button class="btn btnp" onclick="filaSalvarQuando('${id}')">Salvar</button>
     </div>`);
 }
@@ -7301,8 +7368,11 @@ async function mcCarregarSequencias(clienteId){
   const box=$('mc-seqs');
   if(!box)return;
   mcSeqMostrarFim=false;
+  /* texto_montado entra no select porque o Editar precisa dele. Nao ha
+     risco de egress aqui: e texto curto de uma cliente so, nao a coluna
+     bruto nem base64. */
   const{data:autos,error}=await sb.from('crm_automacoes')
-    .select('id,sequencia_id,tipo_automacao,ordem,status,data_hora_agendada,enviado_em,motivo_cancelamento,criado_em')
+    .select('id,sequencia_id,tipo_automacao,ordem,status,data_hora_agendada,enviado_em,motivo_cancelamento,criado_em,texto_montado')
     .eq('cliente_id',clienteId).order('criado_em',{ascending:true}).limit(500);
   if(!$('mc-seqs')||mcClienteId!==clienteId)return;
   if(error){box.innerHTML='<div class="seqbox"><div class="seqvazio">Erro ao carregar: '+esc(error.message)+'</div></div>';return;}
@@ -7318,10 +7388,14 @@ async function mcCarregarSequencias(clienteId){
     (seqs||[]).forEach(x=>{nomes[x.id]=x.nome;});
     (cads||[]).forEach(x=>{totais[x.sequencia_id]=Math.max(totais[x.sequencia_id]||0,x.ordem||0);});
   }
+  MC_AUTOS=linhas;
   MC_SEQS=mcAgruparSequencias(linhas,nomes,totais);
   mcRenderSequencias();
 }
 let MC_SEQS=[];
+/* As linhas cruas, para o filaAchar(): o cartao agrupa por sequencia,
+   mas Editar e Reagendar agem sobre uma automacao especifica. */
+let MC_AUTOS=[];
 
 /* Uma sequencia pode ter varias automacoes ao mesmo tempo. O estado que
    vale e o mais urgente: o que espera voce vem antes do que esta
@@ -7335,7 +7409,7 @@ function mcAgruparSequencias(linhas,nomes,totais){
       grupos[chave]={
         nome:a.sequencia_id?(nomes[a.sequencia_id]||'Sequência sem nome'):(a.tipo_automacao||'Avulsa'),
         total:a.sequencia_id?(totais[a.sequencia_id]||0):0,
-        peso:0,estado:'fim',ordem:a.ordem||0,quando:null,motivo:null,ultima:null
+        peso:0,estado:'fim',ordem:a.ordem||0,quando:null,motivo:null,ultima:null,id:null
       };
     }
     const g=grupos[chave];
@@ -7344,6 +7418,12 @@ function mcAgruparSequencias(linhas,nomes,totais){
     if(peso>g.peso){
       g.peso=peso;g.estado=a.status;g.ordem=a.ordem||g.ordem;
       g.quando=a.data_hora_agendada||null;g.motivo=a.motivo_cancelamento||null;
+      /* QUAL automacao produziu este estado. Sem guardar o id, os botoes
+         da linha nao teriam sobre o que agir: o cartao mostra UMA linha
+         por sequencia, e uma sequencia pode ter varias automacoes ao
+         mesmo tempo. Age-se sobre a que esta mandando no estado — a
+         mesma que a linha esta descrevendo. */
+      g.id=a.id;
     }
     if(!g.peso&&(a.ordem||0)>g.ordem)g.ordem=a.ordem||g.ordem;
   });
@@ -7372,10 +7452,28 @@ function mcSeqLinha(g,viva){
   else if(g.estado==='pausado'){ic='ic-pau';sim='⏸';sub='pausada'+(g.motivo?' — '+g.motivo:'');}
   else if(g.estado==='erro'){ic='ic-err';sim='⚠';sub='falhou no envio';}
   else sub=g.ultima?('terminou '+mcQuandoTexto(g.ultima)):'encerrada';
+  /* AS MESMAS DECISOES DA FILA, AQUI DENTRO — 26/08/2026.
+     Antes este bloco era so leitura: dava para VER que a Pedir
+     Documentacao estava no passo 4 de 4 e nao dava para fazer nada com
+     isso sem sair do cartao, abrir a Fila e cacar a linha. Os botoes sao
+     os mesmos porque a tabela e a mesma (crm_automacoes) — nao sao duas
+     verdades, e a mesma verdade com dois lugares para clicar.
+     So a linha VIVA ganha botoes: sequencia encerrada nao tem o que
+     pausar nem reagendar. */
+  const b=(fn,rot,cls)=>`<button class="btn ${cls||'btns'}" style="padding:6px 11px;font-size:11.5px" onclick="mcSeqAcao('${fn}','${g.id}')">${rot}</button>`;
+  let bts='';
+  if(viva&&g.id){
+    if(g.estado==='aguardando_aprovacao')bts=b('filaAprovar','✓ Aprovar','btnp')+b('filaEditar','✎ Editar')+b('filaCancelar','✕ Cancelar');
+    else if(g.estado==='agendado')bts=b('filaEnviarAgora','➤ Enviar agora','btnp')+b('filaPausar','⏸ Pausar')+b('filaReagendar','🕐 Reagendar')+b('filaEditar','✎ Editar')+b('filaCancelar','✕ Cancelar');
+    else if(g.estado==='vencida')bts=b('filaEnviarAgora','➤ Enviar agora','btnp')+b('filaReagendar','🕐 Reagendar')+b('filaEditar','✎ Editar')+b('filaCancelar','✕ Descartar');
+    else if(g.estado==='pausado')bts=b('filaRetomar','▶ Retomar','btnp')+b('filaCancelar','✕ Cancelar');
+    else if(g.estado==='erro')bts=b('filaRetomar','↻ Tentar de novo','btnp')+b('filaCancelar','✕ Cancelar');
+  }
   return`<div class="seqlinha${viva?' viva':''}">
     <div class="seqic ${ic}">${sim}</div>
     <div class="seqcorpo"><div class="seqnome${viva?'':' morta'}">${esc(g.nome)}</div>
-      <div class="seqsub">${esc(sub)}</div></div>
+      <div class="seqsub">${esc(sub)}</div>
+      ${bts?`<div class="seqacoes">${bts}</div>`:''}</div>
     ${passo?`<div class="seqpasso">${esc(passo)}</div>`:''}
   </div>`;
 }

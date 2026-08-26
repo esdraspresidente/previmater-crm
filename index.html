@@ -121,6 +121,17 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .kc{background:var(--white);border:1.5px solid var(--border);border-radius:11px;padding:11px 12px;margin-bottom:8px;cursor:grab;transition:all .13s;box-shadow:var(--sh);position:relative;}
 .kc:hover{border-color:var(--teal);box-shadow:var(--shm);transform:translateY(-1px);}
 .kc.dragging{opacity:.4;cursor:grabbing;}
+/* CARTAO PARADO — 26/08/2026.
+   Duas cores porque nao valem a mesma coisa: parado COM direito e
+   dinheiro na mesa (vermelho, barra grossa), parado sem direito e
+   faxina (ambar). A barra e na LATERAL e nao no fundo: fundo colorido
+   brigaria com a etiqueta, que ja e a linguagem de cor do quadro. */
+.kc.kc-parado{border-color:var(--yellow);box-shadow:inset 4px 0 0 var(--yellow),var(--sh);}
+.kc.kc-parado-direito{border-color:var(--red);box-shadow:inset 4px 0 0 var(--red),var(--sh);}
+.kc-parado .kcpar{color:var(--yellow);}
+.kc-parado-direito .kcpar{color:var(--red);}
+.kcpar{font-size:11px;font-weight:800;}
+.klpar{font-size:10.5px;font-weight:800;color:var(--red);margin-left:6px;}
 .kcn{font-size:13px;font-weight:700;color:var(--text);line-height:1.3;padding-right:26px;}
 .kcm{font-size:11px;color:var(--text3);margin-top:3px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
 .kc-anexo{display:inline-flex;align-items:center;color:var(--text3);font-weight:700;}
@@ -2268,6 +2279,21 @@ async function pageQuadro(q){
     C.forEach(c=>{c.finResumo=porCliente[c.id]||null;});
   }
 
+  /* OS PARADOS DESTE QUADRO.
+     Uma consulta so, na view, filtrada pelo quadro: ela ja devolve apenas
+     quem passou do prazo, entao sao dezenas de linhas e nao a base. NAO
+     da para perguntar isso card a card — seriam N consultas — nem trazer
+     tudo e filtrar aqui, que esbarraria no teto de 1.000 do PostgREST
+     quando o volume crescer.
+     Falha nao quebra o quadro: sem os parados o quadro fica como era
+     antes de 26/08, que e uma tela pior e nao uma tela quebrada. */
+  PARADOS={};
+  try{
+    const{data:par}=await sb.from('vw_cards_parados')
+      .select('cliente_id,dias_parado,veredito').eq('quadro',q).limit(1000);
+    (par||[]).forEach(x=>{PARADOS[x.cliente_id]=x;});
+  }catch(_){}
+
   if(C.length){
     const ids=C.map(c=>c.id);
     const{data:anx}=await sb.from('crm_anexos').select('cliente_id').in('cliente_id',ids);
@@ -2304,6 +2330,13 @@ function listaHtml(l,cards,semAcoes,arqCount){
         <div class="kln">${esc(l.nome)}</div>
         <div style="display:flex;align-items:center;gap:4px">
           <span class="klc">${cards.length}</span>
+          ${(()=>{const n=cards.filter(c=>PARADOS[c.id]).length;
+                  if(!n)return'';
+                  const d=cards.filter(c=>paradoComDireito(PARADOS[c.id])).length;
+                  /* O numero fica no cabecalho para a lista colapsada
+                     tambem avisar: colapsada nao mostra cartao nenhum, e
+                     era ali que o abandono ficava mais escondido. */
+                  return`<span class="klpar" title="Cartões sem nenhuma automação pendente, parados além do prazo desta lista">◉ ${n}${d?' · '+d+' com direito':''}</span>`;})()}
           ${arqCount?`<button class="klc klc-arq" onclick="event.stopPropagation();verArquivadosDaLista('${l.id}')" title="Ver cards arquivados nesta lista">📦 ${arqCount}</button>`:''}
           ${semAcoes?'':`<button class="klm" onclick="event.stopPropagation();toggleColapsarLista('${l.id}')" title="Minimizar/expandir lista">⬌</button>`}
           ${semAcoes?'':`<button class="klm" onclick="modalEditarLista('${l.id}')" title="Editar lista">⋯</button>`}
@@ -2312,6 +2345,16 @@ function listaHtml(l,cards,semAcoes,arqCount){
       <div class="klb" data-drop="${l.id}">${cs}</div>
       ${semAcoes?'':`<div class="klf"><button class="kadd" onclick="location.hash='#/cliente/novo?lista=${l.id}'">+ adicionar cliente</button></div>`}
     </div>`;
+}
+/* Quais cartoes deste quadro estao parados, por id. Preenchido pelo
+   pageQuadro e lido pelo cardHtml, que e sincrono. */
+let PARADOS={};
+/* O veredito e o que separa "dinheiro na mesa" de "faxina".
+   CAMINHO_CONTRIBUICAO entra junto com TEM_DIREITO de proposito: ali a
+   cliente TEM caminho, so depende de uma guia paga dentro do prazo — e
+   prazo de guia vence, entao parada ali e a que mais custa. */
+function paradoComDireito(par){
+  return par&&(par.veredito==='TEM_DIREITO'||par.veredito==='CAMINHO_CONTRIBUICAO');
 }
 /* Card de gravida: a etiqueta PRE e o que diz que o acompanhamento
    gestacional se aplica. Sem a data ele nao dispara — por isso a falta
@@ -2339,6 +2382,13 @@ function cardHtml(c){
      isso a falta grita em vermelho em vez de ficar campo vazio calado. */
   if(c.data_nascimento_bebe)meta.push('DN '+fD(c.data_nascimento_bebe));
   else if(temEtiquetaPre(c))meta.push('<span style="color:var(--red);font-weight:700">sem DN</span>');
+  /* PARADO: nenhuma automacao pendente e mais tempo na lista que o prazo
+     dela. Quem decide isso e a view vw_cards_parados, no banco — a tela
+     so pinta. O cartao NAO muda de lista: mover por diagnostico
+     destruiria o significado da lista ("Aguardando documentos" deixaria
+     de responder quem esta aguardando documentos), e a ordem do quadro e
+     sua, montada arrastando. Por isso cor e faixa, nunca movimento. */
+  const par=PARADOS[c.id];
   if(c.anexosCount)meta.push(`<span class="kc-anexo">${clipeSvg()}${c.anexosCount}</span>`);
   let finHtml='';
   if(c.finResumo){
@@ -2347,9 +2397,13 @@ function cardHtml(c){
     if(f.inad>0)finHtml+=`<div class="kcm"><span class="ent ent-late">⚑ ${f.inad} parcela(s) inadimplente(s)</span></div>`;
     else if(f.atraso>=DIAS_AVISO_ATRASO)finHtml+=`<div class="kcm"><span class="ent ent-late">⚑ atrasado há ${f.atraso}d</span></div>`;
   }
-  return `<div class="kc" draggable="true" data-card="${c.id}" onclick="abrirCardCliente('${c.id}')">
+  const clsPar=par?(paradoComDireito(par)?' kc-parado-direito':' kc-parado'):'';
+  const parHtml=par?`<div class="kcm"><span class="kcpar">◉ parado há ${par.dias_parado}d${paradoComDireito(par)?' · TEM DIREITO':''}</span></div>`:'';
+
+  return `<div class="kc${clsPar}" draggable="true" data-card="${c.id}" onclick="abrirCardCliente('${c.id}')">
       <button class="kcmv" title="Mover cartão" onclick="event.stopPropagation();modalMover('${c.id}')">⇄</button>
       <div class="kcn">${esc(c.nome_completo)}</div>
+      ${parHtml}
       ${meta.length?`<div class="kcm">${meta.join(' · ')}</div>`:''}
       ${finHtml||(c.valor_honorarios?`<div class="kcm"><span class="kcv">${R(c.valor_honorarios)}</span></div>`:'')}
       ${entregaHtml(c.data_entrega)}
@@ -4461,7 +4515,15 @@ function dashAlertas(al){
     {n:al.exigencia,l:'Exigências abertas no INSS',h:'Prazo corre contra',cls:'y',k:'exigencia'},
     {n:al.samara_pausada,l:'Clientes com a Samara pausada',h:'Esperando você responder',cls:'p',k:'samara_pausada'},
     {n:al.automacao_erro,l:'Automações que falharam',h:'Mensagem não saiu',cls:'y',k:'automacao_erro'},
-    {n:al.sem_resposta,l:'Conversas sem resposta',h:'A cliente falou por último',cls:'t',k:'sem_resposta'}
+    {n:al.sem_resposta,l:'Conversas sem resposta',h:'A cliente falou por último',cls:'t',k:'sem_resposta'},
+    /* CARTAO PARADO — 26/08/2026, o caso da Ana Karolina.
+       Duas entradas e nao uma: parado COM direito e dinheiro na mesa e
+       vem em vermelho; o resto e faxina e vem em amarelo. Num numero so,
+       os 5 que importam sumiriam dentro dos 98. A entrada com direito sai
+       primeiro de proposito — a faixa e lida da esquerda para a direita. */
+    {n:al.parados_direito,l:'Paradas COM direito',h:'Sem automação nenhuma — é dinheiro na mesa',cls:'r',k:'parados_direito'},
+    {n:Math.max(0,Number(al.parados||0)-Number(al.parados_direito||0)),
+     l:'Cartões parados sem automação',h:'A sequência acabou e ninguém mais fala com elas',cls:'y',k:'parados'}
   ].filter(a=>Number(a.n)>0);
   if(!itens.length)return'';
   return '<div class="st">Precisa de você</div><div class="dsh-al">'+itens.map(a=>
@@ -4591,6 +4653,38 @@ function dwrFechar(){
 }
 async function dwrBuscar(){
   if(!DWR_REC||DWR_CARREGANDO)return;
+  /* OS PARADOS VEM DA VIEW, e nao da crm_dashboard_cards.
+     A view ja responde exatamente esta pergunta, com o prazo por lista
+     dentro dela. Ensinar o mesmo recorte a RPC criaria duas definicoes de
+     "parado" — e no dia em que o prazo mudasse, a faixa do dashboard e a
+     gaveta que ela abre passariam a discordar uma da outra.
+     O periodo do topo do dashboard NAO se aplica aqui, e nem faria
+     sentido: parado e um estado de agora, nao um evento da semana. */
+  if(DWR_REC.recorte==='parados'||DWR_REC.recorte==='parados_direito'){
+    DWR_CARREGANDO=true;
+    let q=sb.from('vw_cards_parados')
+      .select('cliente_id,nome,telefone,quadro,lista,cor,dias_parado,veredito,valor')
+      .order('dias_parado',{ascending:false}).limit(300);
+    if(DWR_REC.recorte==='parados_direito')q=q.in('veredito',['TEM_DIREITO','CAMINHO_CONTRIBUICAO']);
+    /* O `is.null` no OR NAO e zelo: `veredito NOT IN (...)` devolve NULL
+       para quem tem a coluna vazia, e NULL nao passa no WHERE. Como 93
+       dos 98 parados ainda estao sem veredito (a varredura do motor so
+       carimba quem tem triagem da Samara, e cartao herdado do Trello nao
+       tem), sem esta linha a faixa diria 93 e a gaveta abriria vazia. */
+    else q=q.or('veredito.is.null,veredito.not.in.(TEM_DIREITO,CAMINHO_CONTRIBUICAO)');
+    const{data:pl,error:pe}=await q;
+    DWR_CARREGANDO=false;
+    if(pe){$('dwrb').innerHTML='<div class="emp"><div class="empt">Erro ao carregar a lista</div><div class="emps">'+esc(pe.message)+'</div></div>';return;}
+    DWR_LINHAS=(pl||[]).map(x=>({
+      cliente_id:x.cliente_id,nome:x.nome,telefone:x.telefone,
+      quadro:x.quadro,lista:x.lista,cor:x.cor,valor:x.valor,
+      contexto:'parada há '+x.dias_parado+' dia(s)'+(x.veredito?' · '+x.veredito.replace(/_/g,' ').toLowerCase():'')
+    }));
+    DWR_TOTAL=DWR_LINHAS.length;
+    DWR_OFFSET=DWR_LINHAS.length;
+    dwrPintar();
+    return;
+  }
   DWR_CARREGANDO=true;
   const{data,error}=await sb.rpc('crm_dashboard_cards',{
     p_recorte:DWR_REC.recorte,p_periodo:DASH_PER,p_offset:DWR_OFFSET,p_limit:DWR_PAGINA

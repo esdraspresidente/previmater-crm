@@ -575,6 +575,16 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .seqvazio{padding:14px;font-size:12.5px;color:var(--text3);text-align:center;font-weight:600;}
 .seqverfim{width:100%;background:none;border:none;border-top:1px solid var(--border2);padding:9px;font-size:11.5px;font-weight:800;color:var(--teal);cursor:pointer;font-family:inherit;}
 .seqverfim:hover{background:var(--bg);}
+.displista{max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:7px;}
+.dispitem{text-align:left;background:var(--white);border:1.5px solid var(--border);border-radius:11px;padding:10px 12px;cursor:pointer;font-family:inherit;transition:all .12s;}
+.dispitem:hover:not(.off){border-color:var(--teal);background:var(--bg);}
+.dispitem.off{opacity:.45;cursor:not-allowed;}
+.dispnome{font-size:13px;font-weight:800;color:var(--text);}
+.dispcod{font-size:11px;font-weight:600;color:var(--text3);}
+.dispav{font-size:11px;margin-top:2px;}
+/* A previa em duas linhas: o suficiente para reconhecer a mensagem, sem
+   virar um paredao que esconde as outras opcoes. */
+.disppre{font-size:11.5px;color:var(--text2);margin-top:5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 /* Gravador de audio da Caixa de Entrada. */
 .ib-send-linha{display:flex;align-items:stretch;gap:8px;margin-top:9px;}
 .ib-send-linha .btn{flex:1;}
@@ -7490,9 +7500,87 @@ function mcRenderSequencias(){
   if(mortos.length){
     html+=`<button class="seqverfim" onclick="mcSeqTogFim()">${mcSeqMostrarFim?'esconder as que já terminaram':'mostrar '+(mortos.length===1?'a que já terminou':'as '+mortos.length+' que já terminaram')}</button>`;
   }
+  /* DISPARAR NA MAO — 26/08/2026, item 293.
+     Até aqui toda sequência nascia de gatilho automático. Não havia como
+     dizer "manda a promo_500 para esta aqui". */
+  html+=`<button class="seqverfim" style="border-top:1px solid var(--border2)" onclick="mcAbrirDisparo()">＋ disparar uma sequência na mão</button>`;
   box.innerHTML=html+'</div>';
 }
 function mcSeqTogFim(){mcSeqMostrarFim=!mcSeqMostrarFim;mcRenderSequencias();}
+
+/* ============================================================
+   DISPARAR SEQUENCIA NA MAO
+   ============================================================
+
+   O CRM NAO CRIA A AUTOMACAO. Ele escreve o codigo em
+   crm_clientes.sequencia_solicitada e o motor chama o agendarSequencia()
+   de verdade na rodada seguinte, em ate 1 minuto.
+
+   Fazer a linha aqui obrigaria esta tela a repetir janela de horario,
+   unidade de atraso util, so_por_gatilho, sorteio de braco, mover_para e
+   etiqueta — tudo que o motor ja sabe. Seriam duas verdades sobre
+   cadencia, e elas divergiriam no primeiro ajuste. */
+let MC_SEQ_LISTA=null;
+
+async function mcAbrirDisparo(){
+  const alvo=mcClienteId;
+  if(!alvo)return;
+  abrirModal('<div class="mbt">Disparar sequência</div><div class="mbs">Carregando...</div>');
+  if(!MC_SEQ_LISTA){
+    /* As sequencias ativas e o passo 1 de cada uma. A previa importa: os
+       nomes nao dizem o que a mulher vai receber, e "fecha_auto" pode ser
+       qualquer coisa na cabeca de quem clica as 23h. */
+    const[{data:seqs,error:e1},{data:cads}]=await Promise.all([
+      sb.from('crm_sequencias').select('id,codigo,nome,etapa,precisa_aprovacao').eq('ativa',true).order('etapa').order('codigo'),
+      sb.from('crm_cadencia').select('sequencia_id,ordem,texto,ativa').eq('ordem',1).limit(1000)
+    ]);
+    if(e1){abrirModal('<div class="mbt">Disparar sequência</div><div class="mbs">Erro ao carregar: '+esc(e1.message)+'</div><div class="brow" style="justify-content:flex-end"><button class="btn btns" onclick="filaFecharDialogo()">Voltar</button></div>');return;}
+    const p1={};(cads||[]).forEach(c=>{if(c.ativa!==false&&String(c.texto||'').trim())p1[c.sequencia_id]=c.texto;});
+    MC_SEQ_LISTA=(seqs||[]).map(x=>({...x,previa:p1[x.id]||null}));
+  }
+  if(mcClienteId!==alvo)return; // o cartao trocou enquanto carregava
+  /* Quais ja estao rodando para ela: disparar de novo nao faz nada (o
+     agendarSequencia recusa duplicata) e o clique pareceria quebrado. */
+  const rodando=new Set((MC_SEQS&&MC_SEQS.vivos?MC_SEQS.vivos:[]).map(g=>g.nome));
+  const linhas=MC_SEQ_LISTA.map(x=>{
+    const jaRoda=rodando.has(x.nome);
+    const semTexto=!x.previa;
+    const trava=jaRoda||semTexto;
+    const aviso=jaRoda?'<span style="color:var(--yellow);font-weight:800">já está rodando</span>'
+              :(semTexto?'<span style="color:var(--text3)">sem texto ainda</span>'
+              :(x.precisa_aprovacao?'<span style="color:var(--text3)">passa pela sua aprovação</span>':''));
+    return`<button class="dispitem${trava?' off':''}" ${trava?'disabled':''} onclick="mcConfirmarDisparo('${esc(x.codigo)}','${escA(x.nome)}')">
+      <div class="dispnome">${esc(x.nome)} <span class="dispcod">${esc(x.codigo)}</span></div>
+      ${aviso?`<div class="dispav">${aviso}</div>`:''}
+      ${x.previa?`<div class="disppre">${esc(String(x.previa).slice(0,160))}${String(x.previa).length>160?'…':''}</div>`:''}
+    </button>`;
+  }).join('');
+  abrirModal(`
+    <div class="mbt">Disparar sequência na mão</div>
+    <div class="mbs">A mensagem entra na fila e o motor entrega em até 1 minuto, no ritmo de sempre.</div>
+    <div class="fhint" style="margin-bottom:12px">Sequência de etapa mais adiantada <b>cancela o que estiver pendente das etapas anteriores</b> — é assim que o funil funciona, e vale também no disparo manual.</div>
+    <div class="displista">${linhas||'<div class="seqvazio">Nenhuma sequência ativa.</div>'}</div>
+    <div class="brow" style="justify-content:flex-end;gap:9px;margin-top:14px">
+      <button class="btn btns" onclick="filaFecharDialogo()">Voltar</button>
+    </div>`,true);
+  FILA_VOLTAR=alvo;
+}
+
+async function mcConfirmarDisparo(codigo,nome){
+  const alvo=FILA_VOLTAR||mcClienteId;
+  if(!alvo)return;
+  const{error}=await sb.from('crm_clientes').update({
+    sequencia_solicitada:codigo,
+    sequencia_solicitada_em:new Date().toISOString(),
+    sequencia_solicitada_por:U.id
+  }).eq('id',alvo);
+  if(error){toast('Erro: '+error.message,'er');return;}
+  registrarAtividade(alvo,'pediu para disparar a sequência '+nome);
+  toast(nome+' na fila — sai em até 1 minuto','ok');
+  FILA_VOLTAR=null;
+  fecharModal();
+  await abrirCardCliente(alvo);
+}
 
 async function ibEnviarMensagem(){
   const c=IB_CONVS.find(x=>x.chave===ibSelId);

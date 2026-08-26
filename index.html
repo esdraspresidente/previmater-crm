@@ -1342,6 +1342,11 @@ document.addEventListener('keydown',e=>{
   const dw=$('dwr');
   if(dw&&dw.classList.contains('on')){dwrFechar();return;}
 },true);
+/* Para onde a tela volta quando o cartao e aberto por link direto. E a
+   mesma escolha do "/" logo abaixo, escrita uma vez so. */
+function VOLTA_PADRAO(){
+  return (U&&U.nivel==='proprietario')?'/dashboard':('/quadro/'+(QPERM[0]||'comercial'));
+}
 function route(){
   if(!U)return;
   if(typeof pararInboxPoll==='function')pararInboxPoll();
@@ -1352,7 +1357,30 @@ function route(){
   let m;
   if(m=r.match(/^\/quadro\/(.+)$/))return pageQuadro(m[1]);
   if(r==='/cliente/novo')return pageCliente(null);
-  if(m=r.match(/^\/cliente\/(.+)$/))return pageCliente(m[1]);
+  /* O CARTAO E A UNICA TELA DE CLIENTE — 26/08/2026.
+
+     Existiam duas telas para o mesmo cliente: o cartao (modal, com chat,
+     anexos, comentarios, sequencias e triagem) e o formulario cru desta
+     rota. Editar num lugar e olhar no outro dava a impressao de dado
+     perdido, e o formulario nao mostrava nada do atendimento.
+
+     A rota nao foi apagada, foi redirecionada: link antigo, favorito e
+     botao esquecido em outra tela continuam funcionando, e caem no
+     cartao. Apagar de vez daria "Tela nao encontrada" para quem tivesse
+     o link salvo.
+
+     O /cliente/novo CONTINUA sendo o formulario, de proposito: cliente
+     que ainda nao existe nao tem cartao para abrir — nem chat, nem
+     anexo, nem sequencia. */
+  if(m=r.match(/^\/cliente\/(.+)$/)){
+    const alvo=m[1];
+    /* Volta o endereco para a tela de tras ANTES de abrir o cartao, para
+       o hash nao ficar preso em #/cliente/<id>: preso ali, fechar o
+       cartao nao teria para onde voltar e o F5 cairia aqui de novo. */
+    location.replace('#'+(VOLTA_PADRAO()));
+    setTimeout(()=>abrirCardCliente(alvo),0);
+    return;
+  }
   if(r==='/etiquetas')return pageEtiquetas();
   if(r==='/fila')return pageFila();
   if(r==='/trafego')return pageTrafego();
@@ -2976,6 +3004,18 @@ function renderCardClienteModal(c,etqSel,listas){
           <div class="fld"><label>Telefone</label><input type="text" id="mc-tel" value="${escA(c.telefone_principal)}"/></div>
           <div class="fld"><label>Canal WhatsApp</label><select id="mc-canal" onchange="mcCanalChange()">${optCanal}</select></div>
           <div class="fld"><label>Origem</label><select id="mc-origem">${optOrig}</select></div>
+          <!-- INDICADA POR — trazido do formulario cru em 26/08/2026.
+               Era o unico campo que so existia la, e e obrigatorio para o
+               card sair da lista Chamar indicada: e este nome que a Samara
+               usa no primeiro contato com a indicada. Sem ele aqui, matar
+               a rota do formulario deixaria o campo sem casa nenhuma. -->
+          <div class="fld ff" style="position:relative"><label>Indicada por</label>
+            <input type="text" id="mc-indicanome" autocomplete="off" placeholder="nome de quem indicou esta cliente" value="${escA(c.indicado_por_nome)}" oninput="buscarIndicadora(this.value,'mc')" onfocus="buscarIndicadora(this.value,'mc')" onblur="setTimeout(()=>fecharSugIndicadora('mc'),200)"/>
+            <input type="hidden" id="mc-indicaid" value="${escA(c.indicado_por)}"/>
+            <div class="indsug" id="mc-indsug"></div>
+            ${c.indicado_por?'<div class="fhint"><span class="lgcli" onclick="abrirCardCliente(\''+c.indicado_por+'\')">abrir o card de '+esc(c.indicado_por_nome||'quem indicou')+' &rarr;</span></div>':''}
+            <div class="fhint" id="mc-indhint"></div>
+          </div>
           <div class="fld"><label>DN do bebê</label><input type="date" id="mc-dn" value="${c.data_nascimento_bebe||''}"/>
             <div class="fhint">Enquanto não nasceu, a data prevista vai aqui mesmo. Quando nascer, corrija neste campo.</div></div>
           <div class="fld"><label>DS (saída do último emprego)</label><input type="date" id="mc-ds" value="${c.data_saida_emprego||''}"/></div>
@@ -3067,6 +3107,7 @@ function renderCardClienteModal(c,etqSel,listas){
   mcAba('coment');
   carregarAnexos(c.id);
   renderAtividadeFeed(c.id);
+  atualizarHintIndicadora('mc');
   mcSnapshot=mcFotoCampos();
 }
 /* FOTO DOS CAMPOS.
@@ -3763,6 +3804,15 @@ async function salvarCardCliente(id){
     referencia2_telefone:vCampo('mc-ref2-tel'),
     canal_ativo:$('mc-canal').value||'whatsgw',
     origem:$('mc-origem').value||null,
+    /* SAO DUAS COLUNAS E ELAS SAO INDEPENDENTES. O nome sempre vale — e
+       o que entra na mensagem que a Samara manda para a indicada. O
+       vinculo com o card de quem indicou e opcional: quem indicou por
+       ligacao ou pessoalmente pode nao ter card, e exigir card travaria
+       o cadastro justamente na hora de andar. Sem nome, as duas vao a
+       null juntas: id apontando para alguem com o nome apagado seria
+       rastro sem texto, e o card nao sairia de Chamar indicada. */
+    indicado_por_nome:$('mc-indicanome').value.trim()||null,
+    indicado_por:($('mc-indicanome').value.trim()?($('mc-indicaid').value||null):null),
     trello_url:$('mc-trello').value.trim()||null,
     quadro:quadro,
     lista_id:listaId,
@@ -3992,15 +4042,15 @@ async function pageCliente(id){
         <div class="fld"><label>Canal WhatsApp</label><select id="f-canal">${optCanal}</select></div>
         <div class="fld"><label>Origem</label><select id="f-origem"><option value="">— selecione —</option>${optOrig}</select></div>
         <div class="fld ff" style="position:relative"><label>Indicada por</label>
-          <input type="text" id="f-indicanome" autocomplete="off" placeholder="nome de quem indicou esta cliente" value="${escA(c&&c.indicado_por_nome)}" oninput="buscarIndicadora(this.value)" onfocus="buscarIndicadora(this.value)" onblur="setTimeout(fecharSugIndicadora,200)"/>
+          <input type="text" id="f-indicanome" autocomplete="off" placeholder="nome de quem indicou esta cliente" value="${escA(c&&c.indicado_por_nome)}" oninput="buscarIndicadora(this.value,'f')" onfocus="buscarIndicadora(this.value,'f')" onblur="setTimeout(()=>fecharSugIndicadora('f'),200)"/>
           <input type="hidden" id="f-indicaid" value="${escA(c&&c.indicado_por)}"/>
-          <div class="indsug" id="indsug"></div>
+          <div class="indsug" id="f-indsug"></div>
           <!-- O nome de quem indicou ja aparecia, mas so como texto: para
                ver o card dela (se fechou, se recebeu, se cabe comissao)
                era procurar na busca. Com o uuid guardado em
                indicado_por, o pulo e um clique. -->
           ${(c&&c.indicado_por)?'<div class="fhint"><span class="lgcli" onclick="abrirCardCliente(\''+c.indicado_por+'\')">abrir o card de '+esc(c.indicado_por_nome||'quem indicou')+' &rarr;</span></div>':''}
-          <div class="fhint" id="indhint"></div>
+          <div class="fhint" id="f-indhint"></div>
         </div>
         <div class="fld"><label>Data de nascimento do bebê (DN)</label><input type="date" id="f-dn" value="${(c&&c.data_nascimento_bebe)||''}"/>
           <div class="fhint">Grávida: ponha aqui a data prevista. Quando nascer, corrija neste mesmo campo — não existe outro.</div></div>
@@ -4043,7 +4093,7 @@ async function pageCliente(id){
       </div>
     </div>`;
   renderCaixaCliente();
-  atualizarHintIndicadora();
+  atualizarHintIndicadora('f');
 }
 function recalcHonorariosCliente(){
   const vb=m2f($('f-vb'));
@@ -4082,38 +4132,58 @@ async function trocarQuadroForm(){
 // acharia so quem estivesse no primeiro pedaco, e calado.
 // ============================================================
 let INDTIMER=null;
-function buscarIndicadora(v){
+/* O MESMO CAMPO EM DUAS TELAS — 26/08/2026.
+
+   Ate aqui estas quatro funcoes falavam com id fixo (f-indicanome,
+   indsug, indhint), porque so existia um lugar no sistema com o campo
+   Indicada por: o formulario de cliente. Ele agora existe tambem no
+   cartao, e o cartao passou a ser o unico caminho para editar cliente
+   (a rota do formulario cru morreu).
+
+   O PREFIXO VIAJA POR ARGUMENTO, e nao por variavel global. Global
+   seria mais curto e estaria errado: o cartao pode abrir POR CIMA do
+   formulario pelo link "abrir o card de quem indicou", e ai a ultima
+   tela aberta sobrescreveria o prefixo da outra — a busca de uma
+   escreveria no campo da outra, calada. */
+function indId(p,q){return $((p||'f')+'-'+q);}
+function buscarIndicadora(v,p){
+  p=p||'f';
   const t=(v||'').trim();
   if(INDTIMER)clearTimeout(INDTIMER);
   // Digitou por cima do que estava escolhido: o vinculo morre. Manter o
   // id antigo com nome novo apontaria para a pessoa errada.
-  const cx=$('f-indicaid');
+  const cx=indId(p,'indicaid');
   if(cx&&cx.getAttribute('data-nome')&&cx.getAttribute('data-nome')!==t)cx.value='';
-  atualizarHintIndicadora();
-  if(t.length<3){fecharSugIndicadora();return;}
+  atualizarHintIndicadora(p);
+  if(t.length<3){fecharSugIndicadora(p);return;}
   INDTIMER=setTimeout(async()=>{
     const busca=t.replace(/[%,()]/g,'');
     const{data}=await sb.from('crm_clientes').select('id,nome_completo,telefone_principal').ilike('nome_completo','%'+busca+'%').order('nome_completo').limit(8);
-    const cx2=$('indsug');if(!cx2)return;
-    const atual=(location.hash.match(/cliente\/([^?&]+)/)||[])[1]||'';
+    const cx2=indId(p,'indsug');if(!cx2)return;
+    /* Ninguem indica a si mesma. No cartao quem responde e o
+       mcClienteId; no formulario o id vive na rota, porque cliente nova
+       ainda nao tem id nenhum. */
+    const atual=(p==='mc')?(mcClienteId||''):((location.hash.match(/cliente\/([^?&]+)/)||[])[1]||'');
     const achados=(data||[]).filter(x=>x.id!==atual);
     if(!achados.length){
       cx2.innerHTML='<div style="cursor:default;color:var(--text3)">Ninguém com esse nome na base — vale como texto livre.</div>';
       cx2.classList.add('on');return;
     }
-    cx2.innerHTML=achados.map(x=>`<div onmousedown="escolherIndicadora('${x.id}',this.getAttribute('data-n'))" data-n="${escA(x.nome_completo)}">${esc(x.nome_completo)}<span class="indsub">${esc(x.telefone_principal||'sem telefone')}</span></div>`).join('');
+    cx2.innerHTML=achados.map(x=>`<div onmousedown="escolherIndicadora('${x.id}',this.getAttribute('data-n'),'${p}')" data-n="${escA(x.nome_completo)}">${esc(x.nome_completo)}<span class="indsub">${esc(x.telefone_principal||'sem telefone')}</span></div>`).join('');
     cx2.classList.add('on');
   },350);
 }
-function escolherIndicadora(id,nome){
-  $('f-indicanome').value=nome;
-  const cx=$('f-indicaid');cx.value=id;cx.setAttribute('data-nome',nome);
-  fecharSugIndicadora();atualizarHintIndicadora();
+function escolherIndicadora(id,nome,p){
+  p=p||'f';
+  indId(p,'indicanome').value=nome;
+  const cx=indId(p,'indicaid');cx.value=id;cx.setAttribute('data-nome',nome);
+  fecharSugIndicadora(p);atualizarHintIndicadora(p);
 }
-function fecharSugIndicadora(){const c=$('indsug');if(c)c.classList.remove('on');}
-function atualizarHintIndicadora(){
-  const h=$('indhint');if(!h)return;
-  const nome=($('f-indicanome')||{}).value||'',id=($('f-indicaid')||{}).value||'';
+function fecharSugIndicadora(p){const c=indId(p||'f','indsug');if(c)c.classList.remove('on');}
+function atualizarHintIndicadora(p){
+  p=p||'f';
+  const h=indId(p,'indhint');if(!h)return;
+  const nome=(indId(p,'indicanome')||{}).value||'',id=(indId(p,'indicaid')||{}).value||'';
   if(!nome.trim()){h.innerHTML='Obrigatório para o card sair da lista <b>Chamar indicada</b>: é este nome que a Samara usa no primeiro contato.';return;}
   h.innerHTML=id?'<span class="indvinc">✓ vinculada ao card dela</span> — a indicação fica registrada para o pagamento dos R$200.':'Sem vínculo com card: o nome entra na mensagem, mas não gera rastro para o pagamento.';
 }
@@ -6018,7 +6088,7 @@ function cartoesSemResp(arr){
       <div class="filahead">
         <div style="min-width:0">
           <div class="filanome">${esc(c.nome)}</div>
-          <div class="filameta">${esc(c.fone)}${c.lista?' · '+esc(c.lista):''} · esperando há ${horas}</div>
+          <div class="filameta">${foneLink(c.fone)}${c.lista?' · '+esc(c.lista):''} · esperando há ${horas}</div>
         </div>
         ${pill}
       </div>
@@ -6063,6 +6133,15 @@ async function destravarConversa(clienteId){
   if(e2){toast('Erro: '+e2.message,'er');return;}
   toast('Destravada. A Samara responde na próxima rodada.','ok');
   await pageFila();
+}
+
+/* Um so lugar monta o link do WhatsApp, usado pela aba Sem resposta e
+   pelos cartoes das outras abas. Numero invalido volta como texto
+   simples em vez de virar link quebrado. */
+function foneLink(bruto){
+  const so=String(bruto||'').replace(/\D/g,'');
+  if(so.length<10)return esc(bruto||'');
+  return`<a href="https://wa.me/${so}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:inherit">${esc(bruto)}</a>`;
 }
 
 function motivoDaTrava(a){
@@ -6159,18 +6238,31 @@ function cardFila(a){
       <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="filaCancelar('${a.id}')">✕ Cancelar</button>`;
   }
 
-  const verCard=a.cliente_id?`<button class="btn btns" style="padding:8px 15px;font-size:12px;margin-left:auto" onclick="location.hash='#/cliente/${a.cliente_id}'">Abrir cartão →</button>`:'';
+  /* ABRE O CARTAO, e nao mais a rota #/cliente/<id>. Aquela rota
+     desenhava o formulario cru — outra tela, com outros campos e outro
+     botao Salvar, para o mesmo cliente. Quem clicava aqui era jogado num
+     lugar diferente do que ve no quadro e na aba Sem resposta, que ja
+     abriam o cartao. Uma tela por cliente, sempre. */
+  const verCard=a.cliente_id?`<button class="btn btns" style="padding:8px 15px;font-size:12px;margin-left:auto" onclick="abrirCardCliente('${a.cliente_id}')">Abrir cartão →</button>`:'';
 
   const marcador=a.status==='vencida'
     ? `<input type="checkbox" style="width:18px;height:18px;flex:none;margin-right:9px;accent-color:var(--pri)" ${FILA_SEL.has(a.id)?'checked':''} onchange="filaMarcar('${a.id}',this.checked)"/>`
     : '';
+
+  /* O TELEFONE NA LINHA, E CLICAVEL — 26/08/2026.
+     Ele ja vinha na consulta desta tela (o filtro de busca compara com
+     ele), so nao era impresso: para ver o numero de quem estava com
+     automacao era preciso abrir o cartao, um por um. Como o atendimento
+     acontece no WhatsApp Web, o numero e link: um clique abre a conversa.
+     A aba Sem resposta ja mostrava — as outras quatro passam por aqui. */
+  const foneHtml=c.telefone_principal?' · '+foneLink(c.telefone_principal):'';
 
   return`<div class="filacard">
     <div class="filahead">
       ${marcador}
       <div style="min-width:0">
         <div class="filanome">${esc(nome)}</div>
-        <div class="filameta">${origem} · ${esc(quando)}</div>
+        <div class="filameta">${origem} · ${esc(quando)}${foneHtml}</div>
       </div>
       ${etiqueta}
     </div>

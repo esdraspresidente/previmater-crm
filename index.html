@@ -1876,6 +1876,122 @@ async function subirArquivosAnexo(files,clienteId){
   registrarAtividade(clienteId,`anexou ${files.length>1?files.length+' arquivos':'um arquivo'}`);
 }
 /* ============================================================
+   GUIA DA CONTRIBUICAO (GPS) — itens 69 e 70
+
+   A guia e emitida a mao pelo Esdras, as vezes com semanas de
+   antecedencia. Aqui ela so e CADASTRADA: quem decide o dia do envio e
+   o motor, pelo vencimento — dia 1 do mes do vencimento, ou na proxima
+   rodada se esse dia 1 ja passou.
+
+   POR QUE O ANEXO NAO PASSA PELO BOTAO SALVAR. Anexar e fechar o card
+   sem salvar deixaria o arquivo no bucket e a coluna vazia: o motor
+   nunca acharia a guia e a cliente nunca receberia nada. Upload e
+   marcacao de pagamento gravam na hora. So o vencimento vai no Salvar,
+   porque e campo digitado junto dos outros.
+
+   POR QUE A GUIA NAO ENTRA EM crm_anexos. Se entrasse, o X da aba
+   Anexos apagaria o arquivo do bucket sem limpar gps_anexo, e o envio
+   quebraria com o card dizendo que a guia esta la.
+   ============================================================ */
+function mcDataBR(iso){
+  if(!iso)return '';
+  const p=String(iso).slice(0,10).split('-');
+  return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:'';
+}
+function mcCarimbo(ts){
+  if(!ts)return '';
+  return new Date(ts).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'});
+}
+/* O prazo real: guia que vence em sabado ou domingo prorroga para o
+   proximo dia util. Espelha o prazoEfetivoGPS do motor — os dois
+   precisam concordar, senao a tela promete um dia e a cobranca sai em
+   outro. */
+function mcPrazoGps(iso){
+  const p=String(iso||'').slice(0,10).split('-');
+  if(p.length!==3)return null;
+  const d=new Date(Date.UTC(+p[0],+p[1]-1,+p[2]));
+  while(d.getUTCDay()===0||d.getUTCDay()===6)d.setUTCDate(d.getUTCDate()+1);
+  return d;
+}
+function mcGpsHtml(c){
+  const nomeArq=c.gps_anexo?String(c.gps_anexo).split('/').pop().replace(/^\d+_/,''):'';
+  const anexo = c.gps_anexo
+    ? `<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+         <span style="font-size:12px">📎 <b>${esc(nomeArq)}</b></span>
+         <button class="btn btns" style="padding:3px 9px;font-size:11px" onclick="visualizarAnexo('${escA(c.gps_anexo)}','${escA(nomeArq)}')">Ver</button>
+         <button class="btn btns" style="padding:3px 9px;font-size:11px" onclick="removerGuiaGPS('${c.id}')">Remover</button>
+       </div>`
+    : `<label class="btn btns" style="padding:4px 11px;font-size:11px;cursor:pointer">Anexar a guia
+         <input type="file" accept="application/pdf,image/*" style="display:none" onchange="uploadGuiaGPS(this,'${c.id}')"/>
+       </label>`;
+  /* O estado em uma frase. Sem isto o card mostra tres campos e nenhuma
+     resposta para "ja saiu?" — que e a unica pergunta que importa. */
+  let estado, cor='var(--text3)';
+  if(c.gps_paga_em){
+    estado=`✅ Paga em ${mcCarimbo(c.gps_paga_em)}. A cobrança do vencimento não sai.`;cor='var(--green,#2e7d32)';
+  }else if(!c.gps_anexo){
+    estado='Anexe a guia para ela entrar na fila.';
+  }else if(!c.gps_vencimento){
+    estado='Preencha o vencimento: é ele que decide o dia do envio.';
+  }else if(c.gps_enviada_em){
+    const pz=mcPrazoGps(c.gps_vencimento);
+    estado=`Enviada em ${mcCarimbo(c.gps_enviada_em)}. Cobrança automática em ${pz?mcDataBR(pz.toISOString()):''} se ninguém marcar o pagamento.`;
+  }else{
+    const p=String(c.gps_vencimento).slice(0,10).split('-');
+    const dia1=new Date(Date.UTC(+p[0],+p[1]-1,1));
+    const hoje=new Date();
+    const hojeUTC=new Date(Date.UTC(hoje.getFullYear(),hoje.getMonth(),hoje.getDate()));
+    estado = hojeUTC.getTime()<dia1.getTime()
+      ? `Vai sair em ${mcDataBR(dia1.toISOString())}, no dia 1º do mês do vencimento.`
+      : 'Sai na próxima rodada do motor.';
+  }
+  const pago = c.gps_paga_em
+    ? `<button class="btn btns" style="padding:4px 10px;font-size:11px" onclick="marcarGpsPaga('${c.id}',false)">Desfazer pagamento</button>`
+    : `<button class="btn btnp" style="padding:4px 10px;font-size:11px" onclick="marcarGpsPaga('${c.id}',true)">Marcar guia paga</button>`;
+  return `<div class="mcsens" style="background:var(--bg2,#f6f7f8);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;color:var(--text2)">🧾 Contribuição (GPS)</div>
+      ${c.gps_anexo?pago:''}
+    </div>
+    <div class="fg">
+      <div class="fld"><label>Guia</label>${anexo}</div>
+      <div class="fld"><label>Vencimento na guia</label><input type="date" id="mc-gps-venc" value="${escA(String(c.gps_vencimento||'').slice(0,10))}"/></div>
+    </div>
+    <div class="fhint" style="margin-top:7px;color:${cor}">${estado}</div>
+    <div class="fhint" style="margin-top:4px">É uma contribuição só, nunca mensalidade. Paga depois do vencimento, ela conta para aposentadoria e não para o salário-maternidade.</div>
+  </div>`;
+}
+async function uploadGuiaGPS(input,clienteId){
+  const f=(input.files||[])[0];input.value='';
+  if(!f)return;
+  const caminho=`${clienteId}/gps/${Date.now()}_${f.name.replace(/[^\w.\-]/g,'_')}`;
+  const{error:eu}=await sb.storage.from(ANEXO_BUCKET).upload(caminho,f);
+  if(eu){toast('Erro ao enviar a guia: '+eu.message,'er');return;}
+  const{error}=await sb.from('crm_clientes').update({gps_anexo:caminho}).eq('id',clienteId);
+  if(error){toast('Erro ao gravar a guia: '+error.message,'er');return;}
+  toast('Guia anexada','ok');
+  registrarAtividade(clienteId,'anexou a guia da contribuição');
+  abrirCardCliente(clienteId);
+}
+async function removerGuiaGPS(clienteId){
+  if(!confirm('Remover a guia deste card?\n\nSe ela já foi enviada, a mensagem que a cliente recebeu continua lá, mas o link para de funcionar.'))return;
+  const{error}=await sb.from('crm_clientes').update({gps_anexo:null}).eq('id',clienteId);
+  if(error){toast('Erro ao remover: '+error.message,'er');return;}
+  toast('Guia removida','ok');
+  registrarAtividade(clienteId,'removeu a guia da contribuição');
+  abrirCardCliente(clienteId);
+}
+/* Marcar o pagamento e o que tira a cliente da cobranca do vencimento.
+   Sem a marcacao o sistema cobra quem esta em dia — por isso o botao
+   fica no cabecalho da secao, e nao escondido no rodape. */
+async function marcarGpsPaga(clienteId,paga){
+  const{error}=await sb.from('crm_clientes').update({gps_paga_em:paga?new Date().toISOString():null}).eq('id',clienteId);
+  if(error){toast('Erro ao marcar: '+error.message,'er');return;}
+  toast(paga?'Guia marcada como paga':'Pagamento desfeito','ok');
+  registrarAtividade(clienteId,paga?'marcou a guia da contribuição como paga':'desfez a marcação de pagamento da guia');
+  abrirCardCliente(clienteId);
+}
+/* ============================================================
    COMPARTILHAR ANEXO
    Duas saidas: menu nativo do aparelho (o arquivo em si, sem link)
    e envio direto na conversa da cliente.
@@ -2312,6 +2428,9 @@ const ETAPA_LISTA={
   'Em pagamento INSS':3,'Pago / encerrado':3,'Inadimplente':3
 };
 const ETAPA_CONTRATO=1, ETAPA_INSS=2, ETAPA_PAGAMENTOS=3;
+/* A guia da contribuicao aparece a partir de "Contrato enviado": e dali
+   em diante que existe cliente PRE pagando GPS. */
+const ETAPA_GPS=2;
 let mcMostrarTudo=false;   // o "mostrar assim mesmo" do rodape do card
 
 function etapaDaLista(nome){
@@ -2738,7 +2857,9 @@ function renderCardClienteModal(c,etqSel,listas){
   const verContrato=mcVerSecao(ETAPA_CONTRATO,etapa,temContrato);
   const verInss=mcVerSecao(ETAPA_INSS,etapa,temInss);
   const verPag=mcVerSecao(ETAPA_PAGAMENTOS,etapa,pagHtml.temParc);
-  const ocultas=[!verContrato&&'Contrato',!verInss&&'Acesso INSS',!verPag&&'Pagamentos'].filter(Boolean);
+  const temGps=!!(c.gps_vencimento||c.gps_anexo||c.gps_paga_em);
+  const verGps=mcVerSecao(ETAPA_GPS,etapa,temGps);
+  const ocultas=[!verContrato&&'Contrato',!verInss&&'Acesso INSS',!verGps&&'Contribuição',!verPag&&'Pagamentos'].filter(Boolean);
   /* O motivo do descarte e campo comum do cartao, nao balao de uma vez
      so. O balao dependia de voce estar olhando na hora do movimento: se
      piscasse fora da tela, ou se o cartao ja estivesse em Descartado de
@@ -2829,6 +2950,7 @@ function renderCardClienteModal(c,etqSel,listas){
             <div class="fld"><label>Referência 2 · telefone</label><input type="text" id="mc-ref2-tel" value="${escA(c.referencia2_telefone)}"/></div>
           </div>
         </div>`}
+        ${!verGps?'':mcGpsHtml(c)}
         ${!verPag?'':`<div class="mcsens" style="background:var(--yellow-bg);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${pagHtml.temParc?'10px':'0'}">
             <div style="font-size:12px;font-weight:700;color:var(--text2)">💰 Pagamentos</div>
@@ -3648,6 +3770,10 @@ async function salvarCardCliente(id){
     data_nascimento_bebe:$('mc-dn').value||null,
     data_saida_emprego:$('mc-ds').value||null,
     data_desbloqueio_inss:$('mc-bloqueio').value||null,
+    /* vCampo e nao $().value: com a secao escondida o input nem existe,
+       e undefined some do JSON em vez de gravar null por cima de uma
+       guia que ja estava marcada. Mesma armadilha do CPF. */
+    gps_vencimento:vCampo('mc-gps-venc'),
     documento_pendente:$('mc-docpend').value.trim()||null,
     valor_beneficio_esperado:m2f($('mc-vb'))||null,
     valor_honorarios:m2f($('mc-vh'))||null,

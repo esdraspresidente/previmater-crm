@@ -6923,6 +6923,13 @@ function ibRenderPainel(c){
       </div>
       <div class="inb-panel-title" style="margin-top:20px">Etiquetas</div><div class="inb-panel-chips">${chips}</div>
       <a class="inb-cta" onclick="abrirCardCliente('${cli.id}')">Abrir cartão completo →</a>
+      <!-- DISPARAR DAQUI TAMBEM — 26/08/2026.
+           O seletor nasceu so no cartao, e e na Caixa de Entrada que o
+           Esdras esta quando decide mandar alguma coisa: ele acabou de
+           ler a conversa. Obrigar a abrir o cartao para isso e um desvio
+           sem motivo. Mesma funcao, mesmo pedido no banco — muda so para
+           onde a tela volta depois. -->
+      <a class="inb-cta" style="margin-top:8px" onclick="abrirDisparoSequencia('${cli.id}',false)">＋ Disparar uma sequência na mão</a>
       <div class="inb-panel-title" style="margin-top:22px">Zona de risco</div>
       <div class="fhint" style="margin-bottom:10px">Apaga a cliente, o cartão, a conversa e tudo que estiver agendado para ela. Não dá para desfazer.</div>
       <button class="btnd" style="width:100%" onclick="ibExcluirTudo('${escA(c.chave)}')">Excluir cliente e conversa</button>`;
@@ -7521,10 +7528,18 @@ function mcSeqTogFim(){mcSeqMostrarFim=!mcSeqMostrarFim;mcRenderSequencias();}
    etiqueta — tudo que o motor ja sabe. Seriam duas verdades sobre
    cadencia, e elas divergiriam no primeiro ajuste. */
 let MC_SEQ_LISTA=null;
+/* Para quem e o disparo e para onde a tela volta depois. Guardados aqui
+   porque o seletor serve DOIS lugares — o cartao e a Caixa de Entrada —
+   e cada um volta para um lugar diferente. */
+let DISP_ALVO=null,DISP_VOLTA_CARTAO=false;
 
-async function mcAbrirDisparo(){
-  const alvo=mcClienteId;
+/* Atalho do cartao: quem esta aberto e o alvo, e a volta e para ele. */
+function mcAbrirDisparo(){return abrirDisparoSequencia(mcClienteId,true);}
+
+async function abrirDisparoSequencia(clienteId,voltarParaCartao){
+  const alvo=clienteId;
   if(!alvo)return;
+  DISP_ALVO=alvo;DISP_VOLTA_CARTAO=!!voltarParaCartao;
   abrirModal('<div class="mbt">Disparar sequência</div><div class="mbs">Carregando...</div>');
   if(!MC_SEQ_LISTA){
     /* As sequencias ativas e o passo 1 de cada uma. A previa importa: os
@@ -7534,16 +7549,22 @@ async function mcAbrirDisparo(){
       sb.from('crm_sequencias').select('id,codigo,nome,etapa,precisa_aprovacao').eq('ativa',true).order('etapa').order('codigo'),
       sb.from('crm_cadencia').select('sequencia_id,ordem,texto,ativa').eq('ordem',1).limit(1000)
     ]);
-    if(e1){abrirModal('<div class="mbt">Disparar sequência</div><div class="mbs">Erro ao carregar: '+esc(e1.message)+'</div><div class="brow" style="justify-content:flex-end"><button class="btn btns" onclick="filaFecharDialogo()">Voltar</button></div>');return;}
+    if(e1){abrirModal('<div class="mbt">Disparar sequência</div><div class="mbs">Erro ao carregar: '+esc(e1.message)+'</div><div class="brow" style="justify-content:flex-end"><button class="btn btns" onclick="dispFechar()">Voltar</button></div>');return;}
     const p1={};(cads||[]).forEach(c=>{if(c.ativa!==false&&String(c.texto||'').trim())p1[c.sequencia_id]=c.texto;});
     MC_SEQ_LISTA=(seqs||[]).map(x=>({...x,previa:p1[x.id]||null}));
   }
-  if(mcClienteId!==alvo)return; // o cartao trocou enquanto carregava
+  if(DISP_ALVO!==alvo)return; // trocaram de conversa enquanto carregava
   /* Quais ja estao rodando para ela: disparar de novo nao faz nada (o
-     agendarSequencia recusa duplicata) e o clique pareceria quebrado. */
-  const rodando=new Set((MC_SEQS&&MC_SEQS.vivos?MC_SEQS.vivos:[]).map(g=>g.nome));
+     agendarSequencia recusa duplicata) e o clique pareceria quebrado.
+     VEM DO BANCO e nao do MC_SEQS do cartao: na Caixa de Entrada aquele
+     cache nao existe, e usar um cache de outra tela daria lista errada
+     calada — que e pior do que uma consulta a mais. */
+  const{data:vivas}=await sb.from('crm_automacoes')
+    .select('sequencia_id').eq('cliente_id',alvo)
+    .in('status',['agendado','aguardando_aprovacao','enviando','vencida','pausado']);
+  const rodando=new Set((vivas||[]).map(v=>v.sequencia_id));
   const linhas=MC_SEQ_LISTA.map(x=>{
-    const jaRoda=rodando.has(x.nome);
+    const jaRoda=rodando.has(x.id);
     const semTexto=!x.previa;
     const trava=jaRoda||semTexto;
     const aviso=jaRoda?'<span style="color:var(--yellow);font-weight:800">já está rodando</span>'
@@ -7561,13 +7582,22 @@ async function mcAbrirDisparo(){
     <div class="fhint" style="margin-bottom:12px">Sequência de etapa mais adiantada <b>cancela o que estiver pendente das etapas anteriores</b> — é assim que o funil funciona, e vale também no disparo manual.</div>
     <div class="displista">${linhas||'<div class="seqvazio">Nenhuma sequência ativa.</div>'}</div>
     <div class="brow" style="justify-content:flex-end;gap:9px;margin-top:14px">
-      <button class="btn btns" onclick="filaFecharDialogo()">Voltar</button>
+      <button class="btn btns" onclick="dispFechar()">Voltar</button>
     </div>`,true);
-  FILA_VOLTAR=alvo;
+  if(DISP_VOLTA_CARTAO)FILA_VOLTAR=alvo;
+}
+
+/* Desistir do disparo. Do cartao devolve o cartao (o filaFecharDialogo
+   ja sabe fazer isso); da Caixa de Entrada so fecha. */
+function dispFechar(){
+  DISP_ALVO=null;
+  const eraCartao=DISP_VOLTA_CARTAO;
+  DISP_VOLTA_CARTAO=false;
+  if(eraCartao)filaFecharDialogo(); else fecharModal();
 }
 
 async function mcConfirmarDisparo(codigo,nome){
-  const alvo=FILA_VOLTAR||mcClienteId;
+  const alvo=DISP_ALVO;
   if(!alvo)return;
   const{error}=await sb.from('crm_clientes').update({
     sequencia_solicitada:codigo,
@@ -7577,9 +7607,13 @@ async function mcConfirmarDisparo(codigo,nome){
   if(error){toast('Erro: '+error.message,'er');return;}
   registrarAtividade(alvo,'pediu para disparar a sequência '+nome);
   toast(nome+' na fila — sai em até 1 minuto','ok');
-  FILA_VOLTAR=null;
+  FILA_VOLTAR=null;DISP_ALVO=null;
   fecharModal();
-  await abrirCardCliente(alvo);
+  /* Da Caixa de Entrada NAO abre o cartao: quem estava lendo a conversa
+     quer continuar lendo a conversa. Abrir o cartao por cima seria
+     mudar de tela sem ninguem ter pedido. */
+  if(DISP_VOLTA_CARTAO)await abrirCardCliente(alvo);
+  DISP_VOLTA_CARTAO=false;
 }
 
 async function ibEnviarMensagem(){

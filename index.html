@@ -6468,23 +6468,81 @@ async function filaRetomar(id){
   await filaAtualizar(id,{status:'agendado',erro:null,tentativas:0},'De volta para a fila');
 }
 
-function filaCancelar(id){
+/* CANCELAR: ESTE PASSO OU A SEQUENCIA INTEIRA — 26/08/2026.
+
+   O ✕ cancelava sempre UMA linha. Nas telas onde a linha fala em nome da
+   sequencia ("Pedir Documentação · passo 1 de 4") isso engana: matar o
+   passo 1 deixa os passos 2, 3 e 4 vivos e saindo nos proximos dias,
+   sem nada na tela dizendo isso.
+
+   NAO ESCOLHI POR ELE. Cancelar um passo solto e legitimo — a mensagem
+   de quinta esta errada, as outras estao certas. So nao e o caso comum:
+   quem desiste de cobrar documento desiste da cobranca inteira. Entao a
+   pergunta e feita, com o numero de mensagens em cada opcao.
+
+   SO PERGUNTA QUANDO HA O QUE PERGUNTAR: se aquele passo e o unico
+   pendente da sequencia, as duas opcoes sao a mesma coisa, e oferecer as
+   duas seria um clique a mais para nada.
+
+   AS IRMAS VEM DO BANCO, nao do cache da tela. FILA_CACHE tem so a aba
+   aberta e o MC_AUTOS so o cartao aberto — passo agendado para semana
+   que vem pode nao estar em nenhum dos dois, e ficaria vivo depois de um
+   "cancelar tudo". */ async function filaCancelar(id){
+  const{data:a}=await sb.from('crm_automacoes')
+    .select('id,cliente_id,sequencia_id,tipo_automacao,ordem').eq('id',id).single();
+  let irmas=[],nomeSeq='';
+  if(a&&a.tipo_automacao==='sequencia'&&a.sequencia_id&&a.cliente_id){
+    const[{data:outras},{data:seq}]=await Promise.all([
+      sb.from('crm_automacoes').select('id,ordem')
+        .eq('cliente_id',a.cliente_id).eq('sequencia_id',a.sequencia_id)
+        .in('status',['agendado','aguardando_aprovacao','pausado','vencida'])
+        .neq('id',id),
+      sb.from('crm_sequencias').select('nome').eq('id',a.sequencia_id).single()
+    ]);
+    irmas=outras||[];
+    nomeSeq=(seq&&seq.nome)||'';
+  }
+  const n=irmas.length;
   abrirModal(`
     <div class="mbt">Cancelar envio</div>
-    <div class="mbs">Essa mensagem não será enviada. O motivo fica registrado.</div>
+    <div class="mbs">${n
+      ? `Esta cliente tem <b>${n+1} mensagens</b> pendentes da sequência <b>${esc(nomeSeq)}</b>.`
+      : 'Essa mensagem não será enviada. O motivo fica registrado.'}</div>
     <div class="fld ff" style="margin-bottom:16px"><label>Por que está cancelando?</label>
       <textarea id="fila-motivo" placeholder="Ex: cliente já respondeu por telefone"></textarea></div>
-    <div class="brow" style="justify-content:flex-end;gap:9px">
+    ${n?`<div class="fhint" style="margin-bottom:14px">Cancelar só este passo deixa as outras ${n} saindo normalmente nos próximos dias.</div>`:''}
+    <div class="brow" style="justify-content:flex-end;gap:9px;flex-wrap:wrap">
       <button class="btn btns" onclick="filaFecharDialogo()">Voltar</button>
-      <button class="btnd" onclick="filaConfirmarCancelar('${id}')">Cancelar envio</button>
+      <button class="btnd" onclick="filaConfirmarCancelar('${id}')">${n?'Só este passo':'Cancelar envio'}</button>
+      ${n?`<button class="btnd" onclick="filaConfirmarCancelar('${id}',true)">A sequência inteira (${n+1})</button>`:''}
     </div>`);
 }
 
-async function filaConfirmarCancelar(id){
+async function filaConfirmarCancelar(id,tudo){
   const motivo=$('fila-motivo').value.trim();
   if(!motivo){toast('O motivo é obrigatório','er');return;}
+  if(!tudo){
+    fecharModal();
+    await filaAtualizar(id,{status:'cancelado',motivo_cancelamento:motivo},'Envio cancelado');
+    return;
+  }
+  /* A sequencia inteira. Relemos a automacao para pegar cliente e
+     sequencia na hora do clique: entre abrir o dialogo e confirmar, o
+     motor pode ter enviado o passo que estava vencendo. */
+  const{data:a}=await sb.from('crm_automacoes')
+    .select('cliente_id,sequencia_id').eq('id',id).single();
+  if(!a||!a.sequencia_id){toast('Não achei a sequência — recarregue a tela','er');return;}
   fecharModal();
-  await filaAtualizar(id,{status:'cancelado',motivo_cancelamento:motivo},'Envio cancelado');
+  const{data:mortas,error}=await sb.from('crm_automacoes')
+    .update({status:'cancelado',motivo_cancelamento:motivo})
+    .eq('cliente_id',a.cliente_id).eq('sequencia_id',a.sequencia_id)
+    .in('status',['agendado','aguardando_aprovacao','pausado','vencida'])
+    .select('id');
+  if(error){toast('Erro: '+error.message,'er');return;}
+  const q=(mortas||[]).length;
+  registrarAtividade(a.cliente_id,'cancelou a sequência inteira ('+q+' mensagem(ns)): '+motivo);
+  toast('Sequência cancelada · '+q+' mensagem(ns)','ok');
+  await filaRecarregar();
 }
 
 function filaEditar(id){

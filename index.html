@@ -3310,8 +3310,8 @@ function pareceBase64(t){
   return /^[A-Za-z0-9+/=_-]+$/.test(semEspaco.slice(0,400));
 }
 function rotuloMidia(m){
-  const ic={imagem:'🖼',audio:'🎤',video:'🎬',documento:'📄',figurinha:'🩹',localizacao:'📍'};
-  const nome={imagem:'imagem',audio:'áudio',video:'vídeo',documento:'documento',figurinha:'figurinha',localizacao:'localização'};
+  const ic={imagem:'🖼',audio:'🎤',video:'🎬',documento:'📄',figurinha:'🩹',localizacao:'📍',reacao:'❤',chamada:'📞',desconhecido:'📎'};
+  const nome={imagem:'imagem',audio:'áudio',video:'vídeo',documento:'documento',figurinha:'figurinha',localizacao:'localização',reacao:'reação',chamada:'chamada',desconhecido:'arquivo'};
   const t=m&&m.tipo&&m.tipo!=='texto'?m.tipo:null;
   if(t)return (ic[t]||'📎')+' '+(m.midia_nome||nome[t]||t);
   return '📎 mídia';
@@ -3358,6 +3358,14 @@ function chatCorpoMsg(m){
      Linha ANTIGA (anterior ao v11) nao tem midia_caminho: continua
      saindo so o rotulo, e o texto dela ainda e base64, por isso o
      pareceBase64 guarda a legenda. Some quando o backfill rodar. */
+  /* REACAO E CHAMADA — 27/08. Nenhuma das duas tem arquivo, entao nao
+     podem cair no caminho de midia (que desenha um lugar vazio esperando
+     o bucket devolver algo que nao existe). Ate a v13 do webhook as duas
+     chegavam aqui com tipo 'documento' e a bolha dizia "📄 documento" —
+     era esse mesmo apelido errado que fazia a Samara agradecer arquivo
+     que ninguem mandou. */
+  if(m.tipo==='reacao')return `<span class="chatb-mid">reagiu com ${esc(m.texto||'❤️')}</span>`;
+  if(m.tipo==='chamada')return '<span class="chatb-mid">📞 tentou ligar</span>';
   if(ehMidia){
     const rot=`<span class="chatb-mid">${esc(rotuloMidia(m))}</span>`;
     const leg=(m.texto&&!pareceBase64(m.texto))?`<div class="chatb-leg">${esc(m.texto).replace(/\n/g,'<br>')}</div>`:'';

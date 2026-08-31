@@ -3001,7 +3001,10 @@ function renderCardClienteModal(c,etqSel,listas){
      ficar visivel, porque esconder dado gravado e pior que mostrar
      campo vazio. */
   const etapa=etapaDaLista(listaAtual?listaAtual.nome:'');
-  const temContrato=!!(c.link_contrato||c.referencia1_nome||c.referencia1_telefone||c.referencia2_nome||c.referencia2_telefone);
+  /* contrato_dados_lidos entra aqui porque 78% dos documentos chegam
+     ANTES de alguem pedir (medido em 31/08). Sem isso a proposta da
+     leitura ficaria escondida justamente em quem mandou cedo. */
+  const temContrato=!!(c.link_contrato||c.referencia1_nome||c.referencia1_telefone||c.referencia2_nome||c.referencia2_telefone||c.contrato_dados_lidos||c.endereco_completo);
   const temInss=!!(c.cpf||c.senha_inss);
   const verContrato=mcVerSecao(ETAPA_CONTRATO,etapa,temContrato);
   const verInss=mcVerSecao(ETAPA_INSS,etapa,temInss);
@@ -3091,6 +3094,15 @@ function renderCardClienteModal(c,etqSel,listas){
         </div>`}
         ${!verContrato?'':`<div class="mcsens" style="background:var(--rose-l);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
           <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">📄 Contrato</div>
+          ${mcContratoLidosHtml(c)}
+          <div class="fld ff" style="margin-bottom:11px"><label>Endereço completo</label>
+            <input type="text" id="mc-endereco" value="${escA(c.endereco_completo)}" placeholder="Rua, número, bairro, cidade, UF, CEP"/>
+            <div class="fhint">Linha corrida: é um campo só no formulário da Autentica.</div>
+          </div>
+          <div class="fg" style="margin-bottom:11px">
+            <div class="fld"><label>Cidade</label><input type="text" id="mc-endereco-cidade" value="${escA(c.endereco_cidade)}"/></div>
+            <div class="fld"><label>UF</label><input type="text" id="mc-endereco-uf" maxlength="2" value="${escA(c.endereco_uf)}" oninput="this.value=this.value.toUpperCase()"/></div>
+          </div>
           <div class="fld ff" style="margin-bottom:11px"><label>Link do contrato (Autentica Online)</label>
             <input type="url" id="mc-link-contrato" placeholder="https://..." value="${escA(c.link_contrato)}"/>
             <div class="fhint">Cole o link e mova o card para <b>Contrato enviado</b>. A Samara volta a falar com a cliente e manda o contrato sozinha.</div>
@@ -3917,6 +3929,98 @@ function vCampo(id){
   if(!el)return undefined;
   return el.value.trim()||null;
 }
+/* O QUE A LEITURA DE DOCUMENTO PROPOS — item 177, 31/08/2026.
+
+   O motor le RG, CNH, CIN, CNIS, CTPS digital e comprovante de
+   residencia com Haiku e guarda o resultado em
+   crm_clientes.contrato_dados_lidos. Este bloco e onde alguem confere.
+
+   FASE PROBATORIA. O valor lido NAO escreve no cadastro sozinho: ele
+   aparece aqui do lado do que ja esta gravado, e so entra no campo se
+   alguem clicar. Enquanto contrato_dados_conferido_em for nulo, o
+   contrato nao deveria ser gerado — e o aviso vermelho existe para
+   isso. Quando a leitura provar que acerta, campo por campo, esta
+   trava sai; ate la, maquina propoe e gente decide.
+
+   POR QUE O BOTAO SO PREENCHE O INPUT e nao grava direto no banco:
+   assim o fluxo continua sendo um so — mexeu, clicou em Salvar. Gravar
+   por fora criaria um segundo caminho de escrita para os mesmos
+   campos, e dois caminhos e como o CPF some sem ninguem entender. */
+let mcLidos = null;
+function mcContratoLidosHtml(c) {
+  const L = c.contrato_dados_lidos || null;
+  mcLidos = L;
+  const conferido = c.contrato_dados_conferido_em;
+  const campos = [
+    ['nome_completo', 'Nome completo', 'mc-nome', c.nome_completo],
+    ['cpf', 'CPF', 'mc-cpf', c.cpf],
+    ['endereco_completo', 'Endereço completo', 'mc-endereco', c.endereco_completo],
+    ['endereco_cidade', 'Cidade', 'mc-endereco-cidade', c.endereco_cidade],
+    ['endereco_uf', 'UF', 'mc-endereco-uf', c.endereco_uf]
+  ].filter(x => L && L[x[0]]);
+  if (!campos.length && !conferido) return '';
+  if (conferido) {
+    return `<div style="background:var(--green-bg,#e8f5e9);border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;margin-bottom:11px;font-size:11.5px;color:var(--text2)">
+      ✓ Dados do contrato conferidos em ${fD(String(conferido).slice(0,10))}. O contrato pode ser gerado.
+    </div>`;
+  }
+  /* Linha a linha, com o que ESTA gravado ao lado do que a leitura leu.
+     Mostrar os dois lados e o ponto: sem o valor atual, quem confere
+     nao sabe se esta aceitando ou sobrescrevendo. */
+  const linhas = campos.map(([chave, rotulo, input, atual]) => {
+    const lido = String(L[chave]);
+    const igual = String(atual || '').trim() === lido.trim();
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border)">
+      <div style="flex:0 0 128px;font-size:11px;color:var(--text3)">${esc(rotulo)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12.5px;font-weight:600;word-break:break-word">${esc(lido)}</div>
+        ${igual ? '<div style="font-size:10.5px;color:var(--text3)">já é o que está no cadastro</div>'
+          : atual ? `<div style="font-size:10.5px;color:var(--text3)">no cadastro: ${esc(String(atual))}</div>`
+          : '<div style="font-size:10.5px;color:var(--text3)">campo vazio no cadastro</div>'}
+      </div>
+      ${igual ? '' : `<button class="btn btns" style="padding:3px 9px;font-size:10.5px;flex-shrink:0" onclick="mcUsarLido('${chave}','${input}')">usar</button>`}
+    </div>`;
+  }).join('');
+  return `<div style="background:var(--yellow-bg,#fff8e1);border:1.5px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:12px">
+    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:2px">🔍 Lido dos documentos — falta conferir</div>
+    <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px">Confira contra o documento anexado antes de gerar o contrato. O CPF já passou no dígito verificador; o resto não tem como conferir sozinho.</div>
+    ${linhas}
+    <div style="display:flex;gap:8px;margin-top:11px">
+      <button class="btn btnp" style="padding:5px 12px;font-size:11.5px" onclick="mcMarcarConferido('${c.id}')">Marcar como conferido</button>
+      <button class="btn btns" style="padding:5px 12px;font-size:11.5px" onclick="mcUsarTodosLidos()">Usar todos</button>
+    </div>
+  </div>`;
+}
+/* Preenche o input e para por ai. Quem grava e o Salvar, como em todo
+   o resto do card. */
+function mcUsarLido(chave, inputId) {
+  if (!mcLidos || !mcLidos[chave]) return;
+  const el = $(inputId);
+  if (!el) { toast('Campo não está visível nesta etapa', 'er'); return; }
+  el.value = String(mcLidos[chave]);
+  if (chave === 'cpf' && typeof cpfMask === 'function') cpfMask(el);
+  el.style.background = 'var(--yellow-bg,#fff8e1)';
+  toast('Preenchido. Clique em Salvar para gravar.');
+}
+function mcUsarTodosLidos() {
+  if (!mcLidos) return;
+  [['nome_completo','mc-nome'],['cpf','mc-cpf'],['endereco_completo','mc-endereco'],
+   ['endereco_cidade','mc-endereco-cidade'],['endereco_uf','mc-endereco-uf']]
+    .forEach(([k, i]) => { if (mcLidos[k] && $(i)) mcUsarLido(k, i); });
+}
+/* O CARIMBO. Depois dele o bloco some e o contrato esta liberado.
+   Grava direto porque nao e campo de formulario: e uma decisao, e
+   decisao que depende de clicar em Salvar depois se perde. */
+async function mcMarcarConferido(id) {
+  if (!confirm('Confirmar que os dados do contrato foram conferidos contra os documentos?\n\nDepois disso o contrato pode ser gerado e este aviso some.')) return;
+  const { error } = await sb.from('crm_clientes').update({
+    contrato_dados_conferido_em: new Date().toISOString(),
+    contrato_dados_conferido_por: U ? U.id : null
+  }).eq('id', id);
+  if (error) { toast('Erro ao marcar: ' + error.message, 'er'); return; }
+  toast('Marcado como conferido.');
+  abrirCardCliente(id);
+}
 async function salvarCardCliente(id){
   const nome=$('mc-nome').value.trim();
   if(!nome){toast('Preencha o nome','er');return;}
@@ -3936,6 +4040,12 @@ async function salvarCardCliente(id){
     cpf:vCampo('mc-cpf'),
     senha_inss:vCampo('mc-senha-inss'),
     link_contrato:linkContrato||null,
+    /* vCampo e nao $().value: com a secao Contrato escondida os inputs
+       nem existem, e undefined some do JSON em vez de gravar null por
+       cima de um endereco que ja estava la. */
+    endereco_completo:vCampo('mc-endereco'),
+    endereco_cidade:vCampo('mc-endereco-cidade'),
+    endereco_uf:vCampo('mc-endereco-uf'),
     referencia1_nome:vCampo('mc-ref1-nome'),
     referencia1_telefone:vCampo('mc-ref1-tel'),
     referencia2_nome:vCampo('mc-ref2-nome'),

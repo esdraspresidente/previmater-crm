@@ -669,6 +669,22 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .filadiat.atrasado{color:var(--red);}
 .filadian{font-size:11px;font-weight:700;background:var(--bg);color:var(--text3);padding:1px 8px;border-radius:8px;}
 .filadiln{flex:1;height:1.5px;background:var(--border);}
+/* GRUPO POR SEQUENCIA — 31/08. A cor e da ETAPA, nao da sequencia: sao 7
+   etapas contra 26 sequencias ativas, e 26 cores deixam de ser
+   distinguiveis. Reativacao e Triagem dividem o roxo de proposito — as
+   duas sao etapa 1, e e a etapa que diz em que ponto do funil a pessoa
+   esta. */
+.seqg{background:var(--white);border:.5px solid var(--border);border-left:3px solid var(--sc,var(--gray));border-radius:0 var(--r) var(--r) 0;padding:10px 12px;margin:16px 0 8px;}
+.seqgt{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.seqgn{font-size:14px;font-weight:700;color:var(--sc,var(--text));}
+.seqge{font-size:11px;color:var(--text3);margin-left:auto;white-space:nowrap;}
+.seqgp{display:flex;gap:4px;margin-top:8px;}
+.seqgpi{flex:1;font-size:11px;font-weight:700;text-align:center;padding:3px 2px;border-radius:5px;background:var(--bg);color:var(--text3);}
+.seqgpi.tem{background:var(--sbg,var(--gray-bg));color:var(--sc,var(--text));}
+.seqvenc{font-size:12px;font-weight:700;color:var(--yellow);margin-top:5px;}
+.filaagr{display:flex;gap:6px;margin-bottom:12px;}
+.filaagr button{font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;border:.5px solid transparent;background:none;color:var(--text3);cursor:pointer;}
+.filaagr button.on{background:var(--white);border-color:var(--border);color:var(--text);}
 .filamsg{border-left:2.5px solid var(--teal-m);padding-left:12px;}
 .filabalao{margin:0 0 6px;font-size:14px;line-height:1.55;color:var(--text);}
 .filabalao:last-child{margin-bottom:0;}
@@ -5659,6 +5675,14 @@ async function excluirEtiqueta(id){
 // ============================================================
 let FILA_ABA='aprovar';
 let FILA_CACHE=[];
+/* COMO A LISTA VEM AGRUPADA. Abre em 'seq' porque a pergunta que se faz
+   ao chegar aqui e "o que tem de cada sequencia e em que passo", nao "o
+   que sai hoje" — para essa continua existindo o 'dia', a um clique. */
+let FILA_AGRUP='seq';
+/* A ultima mensagem de cada conversa, para saber se o contexto da
+   automacao ainda vale. So cobre os ultimos 3 dias: fora disso nao ha
+   dado, e ai NAO se mostra aviso nenhum em vez de mostrar um errado. */
+let FILA_ULTIMA=new Map();
 let FILA_SEL=new Set();          // vencidas marcadas para reenvio em lote
 // Mapas de apoio do cartao da fila: qual sequencia, qual passo, qual braco.
 // Carregados junto com a fila em vez de virem por join aninhado, porque
@@ -5667,7 +5691,7 @@ let FILA_SEL=new Set();          // vencidas marcadas para reenvio em lote
 let FILA_SEQ={};                 // sequencia_id -> {codigo, nome}
 let FILA_CAD={};                 // cadencia_id  -> {ordem, braco}
 let FILA_NPASSOS={};             // sequencia_id -> quantos passos distintos
-let FILA_BRACOS={};              // "sequencia_id|ordem" -> quantos bracos
+let FILA_BRACOS={};let FILA_ORDENS={};              // "sequencia_id|ordem" -> quantos bracos
 let FILA_SEMRESP=[];             // conversas em que a cliente falou por ultimo
 /* O telefone vem do banco em formatos diferentes: uns ja formatados, uns
    so digitos com 55 na frente. Lido as pressas, 5579999451651 e uma
@@ -5709,7 +5733,7 @@ async function pageFila(){
       .order('data_hora_agendada',{ascending:true})
       .limit(300),
     sb.from('crm_variaveis').select('chave,valor_texto').in('chave',['motor_ligado','samara_ligada','intervalo_sequencia_min','ritmo_alerta_pct']),
-    sb.from('crm_sequencias').select('id,codigo,nome'),
+    sb.from('crm_sequencias').select('id,codigo,nome,etapa'),
     sb.from('crm_cadencia').select('id,sequencia_id,ordem,braco'),
     // Conversas em que a ULTIMA mensagem e da cliente.
     //
@@ -5737,7 +5761,7 @@ async function pageFila(){
   if(error){pc.innerHTML='<div class="emp"><div class="empt">Erro ao carregar</div><div class="emps">'+esc(error.message)+'</div></div>';return;}
   FILA_CACHE=data||[];
   FILA_SEQ={};FILA_CAD={};FILA_NPASSOS={};
-  (seqs||[]).forEach(x=>{FILA_SEQ[x.id]={codigo:x.codigo,nome:x.nome};});
+  (seqs||[]).forEach(x=>{FILA_SEQ[x.id]={codigo:x.codigo,nome:x.nome,etapa:x.etapa};});
   const ordensPorSeq={};
   (cads||[]).forEach(x=>{
     FILA_CAD[x.id]={ordem:x.ordem,braco:x.braco};
@@ -5747,6 +5771,11 @@ async function pageFila(){
     (ordensPorSeq[x.sequencia_id]=ordensPorSeq[x.sequencia_id]||new Set()).add(x.ordem);
   });
   Object.keys(ordensPorSeq).forEach(k=>{FILA_NPASSOS[k]=ordensPorSeq[k].size;});
+  /* As ordens REAIS, nao 1..n: se uma sequencia tem os passos 1, 3 e 4,
+     a regua tem que mostrar 1, 3 e 4. Inventar o 2 mostraria um passo
+     que nao existe e faria parecer que alguem esta parado nele. */
+  FILA_ORDENS={};
+  Object.keys(ordensPorSeq).forEach(k=>{FILA_ORDENS[k]=[...ordensPorSeq[k]].sort((a,b)=>a-b);});
   FILA_BRACOS={};
   (cads||[]).forEach(x=>{const k=x.sequencia_id+'|'+x.ordem;FILA_BRACOS[k]=(FILA_BRACOS[k]||0)+1;});
   // SEM RESPOSTA: o criterio e um so — a ultima mensagem da conversa e
@@ -5755,6 +5784,7 @@ async function pageFila(){
   // e continua funcionando para bloqueios que ainda nao existem.
   const ultimaDe=new Map();
   (msgs||[]).forEach(m=>{if(!ultimaDe.has(m.cliente_id))ultimaDe.set(m.cliente_id,m);});
+  FILA_ULTIMA=ultimaDe;
   const mapaListas={};
   (listas||[]).forEach(l=>{mapaListas[l.id]=l.nome;});
   const espIds=[];
@@ -5987,6 +6017,10 @@ function renderFila(){
   }
 
   h+=filtrosFilaHtml(lista);
+  h+=`<div class="filaagr">
+        <button class="${FILA_AGRUP==='seq'?'on':''}" onclick="FILA_AGRUP='seq';renderFila()">Por sequência</button>
+        <button class="${FILA_AGRUP==='dia'?'on':''}" onclick="FILA_AGRUP='dia';renderFila()">Por dia</button>
+      </div>`;
   const filtrada=filtrarFila(lista);
 
   if(lista.length===0){
@@ -5996,7 +6030,7 @@ function renderFila(){
     h+=`<div class="emp"><div class="empt">Nada com esses filtros</div>
         <div class="emps">Existem ${lista.length} nesta aba — só não batem com o que você filtrou.</div></div>`;
   }else{
-    h+=agruparPorDia(filtrada);
+    h+=(FILA_AGRUP==='seq'?agruparPorSequencia(filtrada):agruparPorDia(filtrada));
   }
   pc.innerHTML=h;
 }
@@ -6072,6 +6106,91 @@ function rotuloDoDia(ts){
   if(d===hoje-dia)return{txt:'Ontem',cls:'atrasado'};
   const f=new Date(ts).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'});
   return{txt:f.replace('.',''),cls:d<hoje?'atrasado':''};
+}
+
+/* A COR DE CADA ETAPA DO FUNIL. Escolhida por etapa e nao por sequencia
+   porque sao 7 contra 26: a partir de uma duzia de cores ninguem
+   distingue mais nada e elas param de informar. Sequencia sem etapa cai
+   no cinza, que e o certo — nao ha funil para representar. */
+const CORES_ETAPA={1:['var(--purple)','var(--purple-bg)'],2:['var(--green)','var(--green-bg)'],
+  3:['var(--yellow)','var(--yellow-bg)'],4:['var(--teal)','var(--teal-l)'],
+  5:['var(--rose)','var(--rose-l)'],6:['var(--teal2)','var(--teal-l)'],
+  7:['var(--red)','var(--red-bg)']};
+function corDaEtapa(e){return CORES_ETAPA[e]||['var(--gray)','var(--gray-bg)'];}
+
+/* AGRUPA PELO QUE A PESSOA E, NAO POR QUANDO SAI.
+   Agrupar so por dia embolava as 26 sequencias na mesma pilha: para
+   saber quantas estao esperando documentacao era preciso ler cartao por
+   cartao. Aqui cada sequencia vira um bloco com a regua de passos, e a
+   regua mostra ONDE a fila empilhou — hoje 14 das 15 de triagem estao no
+   passo 3, que e o que se despede e descarta a lead. Isso e invisivel
+   numa lista ordenada por data. */
+function agruparPorSequencia(lista){
+  const grupos=new Map();
+  lista.forEach(a=>{
+    const chave=a.sequencia_id||('t:'+a.tipo_automacao);
+    if(!grupos.has(chave))grupos.set(chave,[]);
+    grupos.get(chave).push(a);
+  });
+  const rotuloSolto={samara:'Samara (IA)',abertura:'Abertura',aviso_esdras:'Aviso para você',
+    aviso_indicacao:'Aviso de indicação'};
+  const blocos=[...grupos.entries()].map(([chave,itens])=>{
+    const seq=FILA_SEQ[chave];
+    const etapa=seq?seq.etapa:null;
+    return{chave:chave,itens:itens,etapa:etapa,
+      nome:seq?(seq.nome||seq.codigo):(rotuloSolto[String(chave).slice(2)]||'Outros')};
+  });
+  // Ordena pelo funil: etapa 1 primeiro. O que nao tem etapa (Samara,
+  // abertura, avisos) vai para o fim — nao e sequencia e nao compete
+  // pela atencao com o funil.
+  blocos.sort((a,b)=>(a.etapa||99)-(b.etapa||99)||a.nome.localeCompare(b.nome));
+
+  let h='';
+  blocos.forEach(g=>{
+    const[cor,bg]=corDaEtapa(g.etapa);
+    const porOrdem={};
+    g.itens.forEach(a=>{
+      const cad=FILA_CAD[a.cadencia_id];
+      const p=cad?cad.ordem:a.ordem;
+      if(p)porOrdem[p]=(porOrdem[p]||0)+1;
+    });
+    const ordens=FILA_ORDENS[g.chave]||[];
+    let regua='';
+    if(ordens.length>1){
+      regua='<div class="seqgp">'+ordens.map(o=>{
+        const n=porOrdem[o]||0;
+        return`<span class="seqgpi ${n?'tem':''}">p${o} · ${n}</span>`;
+      }).join('')+'</div>';
+    }
+    // Quantas deste grupo perderam o contexto. Vale a pena no cabecalho
+    // porque e o motivo de abrir o bloco: se nenhuma perdeu, nao ha o
+    // que revisar aqui.
+    const venc=g.itens.filter(contextoVencido).length;
+    h+=`<div class="seqg" style="--sc:${cor};--sbg:${bg}">
+          <div class="seqgt"><span class="seqgn">${esc(g.nome)}</span>
+          <span class="seqge">${g.itens.length}${g.etapa?' · etapa '+g.etapa:''}</span></div>
+          ${regua}
+          ${venc?`<div class="seqvenc">${venc} com o contexto vencido</div>`:''}
+        </div>`;
+    h+=g.itens.slice().sort((a,b)=>new Date(a.data_hora_agendada||0)-new Date(b.data_hora_agendada||0))
+        .map(cardFila).join('');
+  });
+  return h;
+}
+
+/* A CLIENTE FALOU DEPOIS QUE ISTO FOI PROGRAMADO.
+   A sequencia e montada num momento e sai noutro. Se ela escreveu no
+   meio, o texto agendado responde a uma conversa que ja andou — e o
+   pedido de documento que ela ja mandou sai assim mesmo.
+   So vale para sequencia: a mensagem da Samara nasce JUNTO com a fala da
+   cliente, entao "responder depois" ali e o funcionamento normal.
+   Fora dos 3 dias que a tela carrega nao ha dado, e sem dado nao se
+   inventa aviso. */
+function contextoVencido(a){
+  if(a.tipo_automacao!=='sequencia')return false;
+  const m=FILA_ULTIMA.get(a.cliente_id);
+  if(!m||m.direcao!=='entrada')return false;
+  return new Date(m.criado_em)>new Date(a.criado_em);
 }
 
 function agruparPorDia(lista){
@@ -6311,6 +6430,11 @@ function cardFila(a){
   }else if(a.status==='vencida'){
     etiqueta='<span class="filapill yellow">Venceu</span>';
   }
+
+  // O contexto vencido nao e um erro da automacao: ela esta certa, o
+  // mundo e que mudou. Por isso e etiqueta amarela e nao vermelha — e
+  // uma decisao sua, nao uma falha a consertar.
+  if(contextoVencido(a))etiqueta+='<span class="filapill yellow">Ela falou depois</span>';
 
   const baloes=(a.texto_montado||'').split(' / ').map(b=>b.trim()).filter(Boolean);
   const corpo=baloes.length?baloes.map(b=>`<p class="filabalao">${esc(b)}</p>`).join(''):'<p class="filabalao fhint">(sem texto)</p>';

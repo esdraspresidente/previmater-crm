@@ -2627,6 +2627,23 @@ async function registrarMovimentoLista(clienteId,origListaId,destListaId){
      nasce já registrando o motivo, sem ninguém lembrar de plugar. */
   const entrou = ld && ld.nome==='Descartado';
   const saiu   = lo && lo.nome==='Descartado' && !entrou;
+  /* CONTRATO CANCELADO TEM A MESMA MECANICA DO DESCARTE, E DE PROPOSITO.
+     Contrato que morre depois de assinado NAO e descarte de lead: ela
+     passou pela triagem, assinou e custou trabalho. Misturar os dois em
+     `descartado_em` poluiria o painel do trafego, que existe para julgar
+     anuncio — um contrato cancelado entrando ali faria o custo por lead
+     descartada mentir. Por isso data e motivo proprios. */
+  const entrouCanc = ld && ld.nome==='Contrato Cancelado';
+  const saiuCanc   = lo && lo.nome==='Contrato Cancelado' && !entrouCanc;
+  if(entrouCanc){
+    await sb.from('crm_clientes').update({cancelado_em:new Date().toISOString()}).eq('id',clienteId);
+    if(!mcClienteId||mcClienteId!==clienteId) toast('Contrato cancelado. Abra o cartão para registrar o motivo','ok');
+  }else if(saiuCanc){
+    /* Voltou atras: o cancelamento nao aconteceu. Deixar a data ali
+       faria o contrato contar como cancelado para sempre no relatorio,
+       mesmo depois de virar processo. Mesma regra do descarte. */
+    await sb.from('crm_clientes').update({cancelado_em:null,cancelamento_motivo:null}).eq('id',clienteId);
+  }
   if(entrou){
     await sb.from('crm_clientes').update({descartado_em:new Date().toISOString()}).eq('id',clienteId);
     /* Arrastado no quadro, com o cartao fechado: nao ha onde mostrar o
@@ -2648,6 +2665,18 @@ async function registrarMovimentoLista(clienteId,origListaId,destListaId){
    Motivo novo entra com um INSERT e aparece na hora, sem publicar
    versão nova do CRM. */
 let MOTIVOS_DESC=null;
+let MOTIVOS_CANC=null;
+/* Lista propria, tabela propria (crm_motivos_cancelamento). Os motivos
+   de descarte falam de lead que nao tinha caminho; estes falam de
+   contrato que caiu depois de assinado. Um dropdown so, com os dois
+   juntos, obrigaria a escolher entre "filho com 5 anos" e "nao pagou a
+   GPS" na mesma lista. */
+async function carregarMotivosCancelamento(){
+  if(MOTIVOS_CANC)return MOTIVOS_CANC;
+  const{data}=await sb.from('crm_motivos_cancelamento').select('codigo,rotulo').eq('ativo',true).order('ordem');
+  MOTIVOS_CANC=data||[];
+  return MOTIVOS_CANC;
+}
 async function carregarMotivosDescarte(){
   if(MOTIVOS_DESC)return MOTIVOS_DESC;
   const{data}=await sb.from('crm_motivos_descarte').select('codigo,rotulo').eq('ativo',true).order('ordem');
@@ -2864,6 +2893,7 @@ async function abrirCardCliente(id){
   const etqSel=(c.crm_clientes_etiquetas||[]).map(e=>e.etiqueta_id);
   const{data:listas}=await sb.from('crm_listas').select('*').eq('quadro',c.quadro).eq('arquivada',false).order('ordem');
   await carregarMotivosDescarte();  // cacheado: so vai ao banco na primeira vez
+  await carregarMotivosCancelamento();
   renderCardClienteModal(c,etqSel,listas||[]);
 }
 /* O que a Samara apurou na triagem mora em crm_clientes.samara_dados,
@@ -2986,6 +3016,9 @@ function renderCardClienteModal(c,etqSel,listas){
   const ehDescartado=!!(listaAtual&&listaAtual.nome==='Descartado');
   const optMotivo='<option value="">— escolher —</option>'+(MOTIVOS_DESC||[]).map(m=>
     `<option value="${escA(m.codigo)}" ${c.motivo_descarte===m.codigo?'selected':''}>${esc(m.rotulo)}</option>`).join('');
+  const ehCancelado=!!(listaAtual&&listaAtual.nome==='Contrato Cancelado');
+  const optCancel='<option value="">— escolher —</option>'+(MOTIVOS_CANC||[]).map(m=>
+    `<option value="${escA(m.codigo)}" ${c.cancelamento_motivo===m.codigo?'selected':''}>${esc(m.rotulo)}</option>`).join('');
   abrirModalCard(`
     <div class="mchead-sticky" id="mchead-sticky">
       <div class="mchs-nome">${esc(c.nome_completo)}</div>
@@ -3089,6 +3122,11 @@ function renderCardClienteModal(c,etqSel,listas){
             <label>Motivo do descarte</label>
             <select id="mc-motivo">${optMotivo}</select>
             <div class="fhint">Aparece sozinho quando a lista vira Descartado. É o que vira barra no painel do tráfego — sem ele a lead conta como "sem motivo".</div>
+          </div>
+          <div class="fld" id="mc-cancel-wrap" style="${ehCancelado?'':'display:none'}">
+            <label>Motivo do cancelamento</label>
+            <select id="mc-cancel-motivo">${optCancel}</select>
+            <div class="fhint">Aparece sozinho quando a lista vira Contrato Cancelado. É contrato assinado que caiu — conta no relatório de cancelamentos, não no painel do tráfego.</div>
           </div>
         </div>
         <div class="fg" style="margin-bottom:13px">
@@ -3854,10 +3892,11 @@ async function mcCopiarSenha(btn){
    depois de salvar. Assim o movimento e o motivo vao no MESMO Salvar,
    em vez de exigir salvar, esperar a tela voltar e salvar de novo. */
 function mcListaChange(){
-  const sel=$('mc-lista'), wrap=$('mc-motivo-wrap');
-  if(!sel||!wrap)return;
-  const nome=(sel.options[sel.selectedIndex]||{}).text||'';
-  wrap.style.display=(nome.trim()==='Descartado')?'':'none';
+  const sel=$('mc-lista'), wrap=$('mc-motivo-wrap'), wrapC=$('mc-cancel-wrap');
+  if(!sel)return;
+  const nome=((sel.options[sel.selectedIndex]||{}).text||'').trim();
+  if(wrap) wrap.style.display=(nome==='Descartado')?'':'none';
+  if(wrapC)wrapC.style.display=(nome==='Contrato Cancelado')?'':'none';
 }
 async function mcTrocarQuadro(){
   const q=$('mc-quadro').value;
@@ -3939,6 +3978,8 @@ async function salvarCardCliente(id){
     const selL=$('mc-lista');
     const nomeDestino=selL?((selL.options[selL.selectedIndex]||{}).text||'').trim():'';
     if(nomeDestino==='Descartado') payload.motivo_descarte=vCampo('mc-motivo');
+    // Mesma regra do descarte: so viaja quando o destino e a lista dele.
+    if(nomeDestino==='Contrato Cancelado') payload.cancelamento_motivo=vCampo('mc-cancel-motivo');
   }
   const etqSel=mcEtqSelAtual.slice();
   // Sao dois botoes Salvar (topo e rodape) e a mesma funcao atende os

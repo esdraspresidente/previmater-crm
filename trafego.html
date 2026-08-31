@@ -256,6 +256,14 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 
     <div class="card">
       <div class="ctopo">
+        <div class="ctit">Contratos que caíram depois de assinados</div>
+      </div>
+      <div class="csub">Segue o período escolhido lá em cima. <b>Não é descarte de lead e por isso não entra no gráfico de cima:</b> aqui ela já tinha passado pela triagem, assinado e consumido trabalho. Cada linha destas é honorário que não vai entrar. <b>Sem direito descoberto no protocolo</b> é erro de triagem — mexe na regra de cálculo ou na pergunta que faltou. <b>Não pagou a GPS</b> e <b>nunca enviou a documentação</b> são de cobrança — mexem no acompanhamento.</div>
+      <div id="cancelados"></div>
+    </div>
+
+    <div class="card">
+      <div class="ctopo">
         <div class="ctit">Qual anúncio traz mãe elegível</div>
         <button class="btcsv" onclick="baixarAnuncios()">Exportar CSV</button>
       </div>
@@ -352,6 +360,7 @@ let LINHAS=[];           // uma linha por dia, direto da view
 let META=[];             // uma linha por dia, gasto do Meta
 let ESTOQUE=[];          // uma linha por etapa do funil
 let DESCARTES=[];        // uma linha por dia e por motivo de descarte
+let CANCELADOS=[];       // contratos assinados que cairam, por dia e motivo
 let ANUNCIOS=[];         // uma linha por criativo, ja agregada na view
 let VARIANTE='qtd';      // qtd = geral | qtd_pre | qtd_adm
 let PERIODO='7';         // hoje | ontem | 7 | 15 | 30
@@ -361,14 +370,16 @@ const PERIODOS=[['hoje','Hoje'],['ontem','Ontem'],['7','7 dias'],['15','15 dias'
 const COMPARACOES=[['0','Não comparar'],['1','Dia anterior'],['7','Semana anterior'],['15','Quinzena anterior'],['30','Mês anterior']];
 
 async function carregar(){
-  const [dia,estoque,meta,desc,anun]=await Promise.all([
+  const [dia,estoque,meta,desc,canc,anun]=await Promise.all([
     sb.from('vw_trafego_dia').select('dia,novos_contatos,contratos_enviados,contratos_assinados').order('dia',{ascending:true}).limit(400),
     sb.from('vw_trafego_estoque').select('ordem,lista,qtd,qtd_pre,qtd_adm').order('ordem',{ascending:true}).limit(30),
     sb.from('vw_trafego_meta_dia').select('dia,gasto,alcance,cliques,conversas').order('dia',{ascending:true}).limit(400),
     sb.from('vw_trafego_descartes').select('dia,codigo,rotulo,ordem,qtd').order('dia',{ascending:true}).limit(900),
+    sb.from('vw_contratos_cancelados').select('dia,codigo,rotulo,ordem,qtd').order('dia',{ascending:true}).limit(900),
     sb.from('vw_trafego_anuncio').select('criativo,leads,nunca_respondeu,descartada,elegivel,gasto,por_lead,por_elegivel,pct_descarte,nao_classificada').order('gasto',{ascending:false}).limit(200)
   ]);
   if(!desc.error && Array.isArray(desc.data)) DESCARTES=desc.data;
+  if(!canc.error && Array.isArray(canc.data)) CANCELADOS=canc.data;
   if(!anun.error && Array.isArray(anun.data)){ ANUNCIOS=anun.data; desenharAnuncios(); }
   if(!meta.error && Array.isArray(meta.data)) META=meta.data;
 
@@ -487,6 +498,7 @@ function aplicar(){
   // porque têm que se redesenhar a cada clique no período — igual aos
   // KPIs de cima.
   desenharDescartes();
+  desenharCancelados();
 }
 
 const brl=v=>'R$ '+Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -661,6 +673,35 @@ function desenharDescartes(){
          + '<div class="fqtd">'+v.qtd+'</div><div class="dpct">'+share+'%</div></div>';
   }).join('')
   + '<div class="vazio" style="margin-top:10px">'+total+' no período. Cliente que sair de Descartado deixa de contar aqui.</div>';
+}
+
+/* CONTRATO CANCELADO NAO E DESCARTE, e por isso tem gráfico proprio.
+   Mesmo desenho do de cima de proposito — quem le ja sabe interpretar
+   barra e percentual —, mas fonte, data e motivo separados: o painel do
+   trafego julga anuncio, e contrato assinado que cai nao diz nada sobre
+   o anuncio que trouxe a lead. Ela ja tinha convertido. */
+function desenharCancelados(){
+  const j=janela(PERIODO);
+  const soma={};
+  let total=0;
+  for(const l of CANCELADOS){
+    if(l.dia<j.ini||l.dia>j.fim) continue;
+    if(!soma[l.codigo]) soma[l.codigo]={rotulo:l.rotulo,ordem:l.ordem,qtd:0};
+    soma[l.codigo].qtd+=l.qtd||0;
+    total+=l.qtd||0;
+  }
+  if(!total){ $('cancelados').innerHTML='<div class="vazio">Nenhum contrato cancelado no período.</div>'; return; }
+  const linhas=Object.entries(soma).sort((a,b)=>b[1].qtd-a[1].qtd);
+  const teto=Math.max(1,...linhas.map(([,v])=>v.qtd));
+  $('cancelados').innerHTML=linhas.map(([cod,v])=>{
+    const pct=Math.round((v.qtd/teto)*100);
+    const share=Math.round((v.qtd/total)*100);
+    const cinza=cod==='NAO_INFORMADO'?' dbar-cinza':'';
+    return '<div class="fl"><div class="fnome">'+v.rotulo+'</div>'
+         + '<div class="fbar dbar'+cinza+'"><i style="width:'+pct+'%"></i></div>'
+         + '<div class="fqtd">'+v.qtd+'</div><div class="dpct">'+share+'%</div></div>';
+  }).join('')
+  + '<div class="vazio" style="margin-top:10px">'+total+' no período. Cartão que sair de Contrato Cancelado deixa de contar aqui.</div>';
 }
 
 /* Anuncio x funil real.

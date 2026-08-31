@@ -675,7 +675,11 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
    duas sao etapa 1, e e a etapa que diz em que ponto do funil a pessoa
    esta. */
 .seqg{background:var(--white);border:.5px solid var(--border);border-left:3px solid var(--sc,var(--gray));border-radius:0 var(--r) var(--r) 0;padding:10px 12px;margin:16px 0 8px;}
-.seqgt{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.seqgt{display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;user-select:none;}
+.seqgc{font-size:11px;color:var(--text3);transition:transform .15s;flex-shrink:0;}
+.seqg.fech .seqgc{transform:rotate(-90deg);}
+.seqg.fech{margin-bottom:6px;}
+.seqbody.fech{display:none;}
 .seqgn{font-size:14px;font-weight:700;color:var(--sc,var(--text));}
 .seqge{font-size:11px;color:var(--text3);margin-left:auto;white-space:nowrap;}
 .seqgp{display:flex;gap:4px;margin-top:8px;}
@@ -5683,6 +5687,25 @@ let FILA_AGRUP='seq';
    automacao ainda vale. So cobre os ultimos 3 dias: fora disso nao ha
    dado, e ai NAO se mostra aviso nenhum em vez de mostrar um errado. */
 let FILA_ULTIMA=new Map();
+/* FASE MINIMIZADA. Mesmo armazenamento das seções do menu: sobrevive ao
+   F5, que é o ponto — recolher tudo toda vez que a tela recarrega seria
+   trabalho repetido, não atalho. */
+function seqFechada(k){try{return localStorage.getItem('kl_seq_'+k)==='1';}catch(_){return false;}}
+function seqAlternar(k){
+  try{if(seqFechada(k))localStorage.removeItem('kl_seq_'+k);else localStorage.setItem('kl_seq_'+k,'1');}catch(_){}
+  renderFila();
+}
+/* Recolher/abrir todas de uma vez. Sem isto, deixar a tela no estado de
+   visão geral custaria um clique por sequência — e são até 26. */
+function seqTodas(fechar){
+  try{
+    (FILA_GRUPOS||[]).forEach(k=>{
+      if(fechar)localStorage.setItem('kl_seq_'+k,'1');else localStorage.removeItem('kl_seq_'+k);
+    });
+  }catch(_){}
+  renderFila();
+}
+let FILA_GRUPOS=[];
 let FILA_SEL=new Set();          // vencidas marcadas para reenvio em lote
 // Mapas de apoio do cartao da fila: qual sequencia, qual passo, qual braco.
 // Carregados junto com a fila em vez de virem por join aninhado, porque
@@ -6020,6 +6043,8 @@ function renderFila(){
   h+=`<div class="filaagr">
         <button class="${FILA_AGRUP==='seq'?'on':''}" onclick="FILA_AGRUP='seq';renderFila()">Por sequência</button>
         <button class="${FILA_AGRUP==='dia'?'on':''}" onclick="FILA_AGRUP='dia';renderFila()">Por dia</button>
+        ${FILA_AGRUP==='seq'?`<button style="margin-left:auto" onclick="seqTodas(true)">Recolher todas</button>
+        <button onclick="seqTodas(false)">Abrir todas</button>`:''}
       </div>`;
   const filtrada=filtrarFila(lista);
 
@@ -6145,6 +6170,7 @@ function agruparPorSequencia(lista){
   // pela atencao com o funil.
   blocos.sort((a,b)=>(a.etapa||99)-(b.etapa||99)||a.nome.localeCompare(b.nome));
 
+  FILA_GRUPOS=blocos.map(g=>g.chave);
   let h='';
   blocos.forEach(g=>{
     const[cor,bg]=corDaEtapa(g.etapa);
@@ -6166,14 +6192,23 @@ function agruparPorSequencia(lista){
     // porque e o motivo de abrir o bloco: se nenhuma perdeu, nao ha o
     // que revisar aqui.
     const venc=g.itens.filter(contextoVencido).length;
-    h+=`<div class="seqg" style="--sc:${cor};--sbg:${bg}">
-          <div class="seqgt"><span class="seqgn">${esc(g.nome)}</span>
+    const fech=seqFechada(g.chave);
+    /* A REGUA E O AVISO FICAM VISIVEIS COM O BLOCO FECHADO — de
+       proposito. Fechado é a visão geral: se sumisse o "14 no passo 3" e
+       o "3 com o contexto vencido", recolher esconderia justamente o que
+       diz se vale a pena abrir, e a tela voltaria a ser uma lista de
+       nomes de sequência. */
+    h+=`<div class="seqg ${fech?'fech':''}" style="--sc:${cor};--sbg:${bg}">
+          <div class="seqgt" onclick="seqAlternar('${esc(g.chave)}')">
+          <span class="seqgc">▼</span>
+          <span class="seqgn">${esc(g.nome)}</span>
           <span class="seqge">${g.itens.length}${g.etapa?' · etapa '+g.etapa:''}</span></div>
           ${regua}
           ${venc?`<div class="seqvenc">${venc} com o contexto vencido</div>`:''}
         </div>`;
-    h+=g.itens.slice().sort((a,b)=>new Date(a.data_hora_agendada||0)-new Date(b.data_hora_agendada||0))
-        .map(cardFila).join('');
+    h+=`<div class="seqbody ${fech?'fech':''}">`+
+       g.itens.slice().sort((a,b)=>new Date(a.data_hora_agendada||0)-new Date(b.data_hora_agendada||0))
+        .map(cardFila).join('')+`</div>`;
   });
   return h;
 }

@@ -3983,18 +3983,34 @@ function mcContratoLidosHtml(c) {
     const lido = String(L[chave]);
     const igual = String(atual || '').trim() === lido.trim();
     const rows = lido.length > 62 ? 3 : (lido.length > 34 ? 2 : 1);
+    /* O NOME PODE TER SIDO ESCRITO PELO PROPRIO LEITOR — item 316.
+
+       O subirNomeDoDocumento() do motor renomeia o CARD com o nome do
+       documento sem esperar conferencia (decisao de 31/08: nome de card
+       e rotulo de tela, o do contrato e que espera). Efeito colateral:
+       nos outros campos "igual" quer dizer duas fontes batendo, e no
+       nome, quando esta marca existe, quer dizer a MESMA fonte lida
+       duas vezes. Dizer "ja e o que esta no cadastro" ali era dar por
+       conferido justamente o campo onde o OCR ja passou por cima da
+       cliente — a Claudineia virou CLAUDINETA e nada na tela contava. */
+    const doLeitor = chave === 'nome_completo' && !!L.nome_do_card_veio_de_documento;
+    const anterior = String(L.nome_do_card_anterior || '').trim();
     return `<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-top:1px solid var(--border)">
       <div style="flex:0 0 128px;font-size:11px;color:var(--text3);padding-top:6px">${esc(rotulo)}</div>
       <div style="flex:1;min-width:0">
         <textarea id="mc-lido-${chave}" rows="${rows}" spellcheck="false" oninput="mcLidoEditou('${chave}')"
           style="width:100%;box-sizing:border-box;font-family:inherit;font-size:12.5px;font-weight:600;line-height:1.35;color:var(--text);background:var(--white);border:1px solid var(--border);border-radius:7px;padding:5px 7px;resize:vertical">${esc(lido)}</textarea>
-        <div style="font-size:10.5px;color:var(--text3);margin-top:2px">${
-          igual ? 'já é o que está no cadastro'
+        <div style="font-size:10.5px;color:${doLeitor ? 'var(--red)' : 'var(--text3)'};margin-top:2px">${
+          doLeitor ? (anterior
+              ? `este documento renomeou o cartão — a cliente tinha dito <b>${esc(anterior)}</b>`
+              : 'este documento renomeou o cartão; o nome do cadastro veio da própria leitura')
+            : igual ? 'já é o que está no cadastro'
             : atual ? `no cadastro: ${esc(String(atual))}`
             : 'campo vazio no cadastro'}</div>
         ${chave === 'cpf' ? `<div id="mc-lido-dv" style="display:none;font-size:10.5px;color:var(--red);margin-top:2px">dígito verificador não bate — confira o número</div>` : ''}
       </div>
       <div style="flex-shrink:0;display:flex;gap:5px;padding-top:4px">
+        ${(doLeitor && anterior) ? `<button class="btn btns" title="Traz de volta o nome que a cliente deu, para conferir antes de salvar" style="padding:3px 7px;font-size:10.5px" onclick="mcLidoAnterior()">anterior</button>` : ''}
         <button id="mc-reset-${chave}" class="btn btns" title="Voltar ao que a leitura trouxe" style="padding:3px 7px;font-size:10.5px;display:none" onclick="mcLidoRestaurar('${chave}')">↺</button>
         <button id="mc-usar-${chave}" class="btn btns" style="padding:3px 9px;font-size:10.5px${igual ? ';opacity:.45' : ''}" ${igual ? 'disabled' : ''} onclick="mcUsarLido('${chave}','${input}')">usar</button>
       </div>
@@ -4055,6 +4071,18 @@ function mcLidoEditou(chave) {
     const d = ta.value.replace(/\D/g, '');
     if (dv) dv.style.display = (d.length === 11 && !mcCpfDV(d)) ? '' : 'none';
   }
+}
+/* Traz de volta o nome que a cliente tinha dado, antes de o documento
+   renomear o card. NAO grava: cai no campo de cima para ser conferido e
+   segue o caminho normal, usar -> Salvar. So existe para o nome, porque
+   o nome e o unico campo que o leitor sobrescreve sem passar por aqui. */
+function mcLidoAnterior() {
+  const ta = $('mc-lido-nome_completo');
+  const ant = String((mcLidos && mcLidos.nome_do_card_anterior) || '').trim();
+  if (!ta || !ant) return;
+  ta.value = ant;
+  mcLidoEditou('nome_completo');
+  toast('Nome anterior no campo. Confira e clique em usar.');
 }
 /* Volta ao que o documento leu. Existe porque o campo agora e editavel:
    sem isto, uma tecla errada so se desfaz reabrindo o cartao. */

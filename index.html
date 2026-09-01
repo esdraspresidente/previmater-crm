@@ -4522,6 +4522,7 @@ async function dashCarregar(){
   }
   DASH=data;
   dashPintar();
+  dashReativacao();
 }
 
 const dshK=v=>{const n=Number(v)||0;return n>=1000?'R$ '+(n/1000).toFixed(1).replace('.',',')+'k':'R$ '+n.toFixed(0);};
@@ -4532,6 +4533,36 @@ function dshSaudacao(){
 function dshHoraCurta(iso){
   if(!iso)return'—';
   return new Date(iso).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+
+/* PLACAR DA REATIVACAO — carregado a parte, de proposito.
+   O resto do dashboard vem da RPC crm_dashboard, que e compartilhada.
+   Mexer nela para caber uma campanha temporaria mistura o permanente
+   com o passageiro; a view vw_reativacao_placar resolve numa linha e
+   some junto com o lote. Falha em silencio: placar que nao carrega nao
+   pode derrubar a tela inteira. */
+async function dashReativacao(){
+  const cx=$('dsh-reativ');if(!cx)return;
+  try{
+    const{data,error}=await sb.from('vw_reativacao_placar').select('*').limit(1).maybeSingle();
+    if(error||!data||!Number(data.no_lote)){cx.style.display='none';return;}
+    const alc=Number(data.alcancadas)||0,resp=Number(data.responderam)||0;
+    const pct=alc>0?Math.round((resp/alc)*100):0;
+    const mot=(data.por_motivo||[]).map(m=>`<span class="dsh-chip">${esc(m.motivo)} <b>${m.n}</b></span>`).join('');
+    cx.innerHTML=`
+      <div class="dsh-estt">
+        <div class="dsh-eyb">Reativação da base fria</div>
+        <div class="tot">${data.no_lote} no lote · ${data.agendadas} ainda por sair</div>
+      </div>
+      <div class="dsh-esg">
+        <div class="dsh-et ${alc?'on':'vazio'}"><div class="bola">${alc}</div><div class="nm">Alcançadas</div><div class="vl">receberam a 1ª</div></div>
+        <div class="dsh-et ${resp?'gold':'vazio'}"><div class="bola">${resp}</div><div class="nm">Responderam</div><div class="vl">${pct}% de quem recebeu</div></div>
+        <div class="dsh-et ${Number(data.descartadas)?'frio':'vazio'}"><div class="bola">${data.descartadas}</div><div class="nm">Descartadas</div><div class="vl">saíram do funil</div></div>
+        <div class="dsh-et ${Number(data.com_problema)?'frio':'vazio'}"><div class="bola">${data.com_problema}</div><div class="nm">Não saíram</div><div class="vl">erro ou vencida</div></div>
+      </div>
+      ${mot?`<div class="dsh-chips" style="margin-top:10px">${mot}</div>`:''}`;
+    cx.style.display='';
+  }catch(_){cx.style.display='none';}
 }
 
 function dashPintar(){
@@ -4569,6 +4600,8 @@ function dashPintar(){
       </div>
       <div class="dsh-esg">${dashEsteira(es,Number(din.honorario_medio)||0)}</div>
     </div>
+
+    <div class="dsh-est" id="dsh-reativ" style="display:none"></div>
 
     <div class="dsh-mov">
       <div class="dsh-movt">
@@ -5883,7 +5916,7 @@ let FILA_FREIOS={motor_ligado:'sim',samara_ligada:'sim'};
 /* Filtros da fila. Ficam fora do render para sobreviver à troca de aba:
    quem filtrou por "Hoje" não quer perder o filtro ao ir ver as com
    erro e voltar. */
-let FILA_F={periodo:'todos',origem:'todas',busca:''};
+let FILA_F={periodo:'todos',origem:'todas',sequencia:'todas',busca:''};
 
 function filaVoltarPara(status){
   if(status==='aguardando_aprovacao')return'aprovar';
@@ -6230,10 +6263,27 @@ function filtrosFilaHtml(lista){
       ${op('aviso_esdras','Aviso para você',FILA_F.origem)}
       ${op('abertura','Abertura',FILA_F.origem)}
     </select>
+    ${(()=>{
+      /* Filtro por sequencia. So aparece quando ha mais de uma na aba:
+         com uma so, o select seria um botao que nao faz nada.
+
+         AS OPCOES SAEM DA LISTA, nao de FILA_SEQ inteiro. FILA_SEQ tem
+         toda sequencia cadastrada, inclusive as que nao tem nada
+         agendado; oferecer todas faria o usuario filtrar por uma e
+         receber tela vazia sem entender por que. */
+      const ids=[...new Set(lista.map(a=>a.sequencia_id).filter(Boolean))];
+      if(ids.length<2 && FILA_F.sequencia==='todas') return '';
+      const nomeDe=id=>((FILA_SEQ[id]||{}).nome)||((FILA_SEQ[id]||{}).codigo)||'Sequência';
+      ids.sort((x,y)=>nomeDe(x).localeCompare(nomeDe(y),'pt-BR'));
+      return `<select onchange="FILA_F.sequencia=this.value;renderFila()">
+        ${op('todas','Toda sequência',FILA_F.sequencia)}
+        ${ids.map(id=>op(id,esc(nomeDe(id)),FILA_F.sequencia)).join('')}
+      </select>`;
+    })()}
     <input type="text" placeholder="Buscar cliente..." value="${escA(FILA_F.busca)}"
       oninput="FILA_F.busca=this.value;clearTimeout(window._fbt);window._fbt=setTimeout(renderFila,250)"/>
-    ${(FILA_F.periodo!=='todos'||FILA_F.origem!=='todas'||FILA_F.busca)
-      ?`<button class="btn btns" style="padding:7px 12px;font-size:12px" onclick="FILA_F={periodo:'todos',origem:'todas',busca:''};renderFila()">Limpar</button>`
+    ${(FILA_F.periodo!=='todos'||FILA_F.origem!=='todas'||FILA_F.sequencia!=='todas'||FILA_F.busca)
+      ?`<button class="btn btns" style="padding:7px 12px;font-size:12px" onclick="FILA_F={periodo:'todos',origem:'todas',sequencia:'todas',busca:''};renderFila()">Limpar</button>`
       :''}
     <div class="fhint" style="margin-left:auto">${lista.length} nesta aba</div>
   </div>`;
@@ -6251,6 +6301,11 @@ function filtrarFila(lista){
 
   return lista.filter(a=>{
     if(FILA_F.origem!=='todas'&&(a.tipo_automacao||'')!==FILA_F.origem)return false;
+
+    /* Sequencia. Item sem sequencia_id (Samara, aviso, abertura) sai
+       fora quando o filtro esta ligado: perguntar "so a reativacao" e
+       receber resposta da Samara junto seria ignorar a pergunta. */
+    if(FILA_F.sequencia!=='todas'&&(a.sequencia_id||'')!==FILA_F.sequencia)return false;
 
     if(busca){
       const c=a.crm_clientes||{};

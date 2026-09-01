@@ -3966,19 +3966,38 @@ function mcContratoLidosHtml(c) {
   }
   /* Linha a linha, com o que ESTA gravado ao lado do que a leitura leu.
      Mostrar os dois lados e o ponto: sem o valor atual, quem confere
-     nao sabe se esta aceitando ou sobrescrevendo. */
+     nao sabe se esta aceitando ou sobrescrevendo.
+
+     O VALOR LIDO E EDITAVEL — item 315. Antes era texto fixo, entao
+     erro de OCR (letra a mais no nome, rua trocada) obrigava a clicar
+     em "usar", rolar ate o campo la embaixo e consertar de novo. Como
+     a conferencia acontece OLHANDO O DOCUMENTO, o conserto tem que
+     caber no mesmo lugar em que o erro aparece.
+
+     O QUE E EDITADO NAO VOLTA PARA contrato_dados_lidos. Aquela coluna
+     e o registro do que a maquina leu, e e ela que diz se a leitura
+     acerta ou erra na fase probatoria; se a correcao humana entrasse
+     la, a leitura ficaria com nota 10 para sempre. Editar aqui muda so
+     o que vai para o campo do cadastro. */
   const linhas = campos.map(([chave, rotulo, input, atual]) => {
     const lido = String(L[chave]);
     const igual = String(atual || '').trim() === lido.trim();
-    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border)">
-      <div style="flex:0 0 128px;font-size:11px;color:var(--text3)">${esc(rotulo)}</div>
+    const rows = lido.length > 62 ? 3 : (lido.length > 34 ? 2 : 1);
+    return `<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-top:1px solid var(--border)">
+      <div style="flex:0 0 128px;font-size:11px;color:var(--text3);padding-top:6px">${esc(rotulo)}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:12.5px;font-weight:600;word-break:break-word">${esc(lido)}</div>
-        ${igual ? '<div style="font-size:10.5px;color:var(--text3)">já é o que está no cadastro</div>'
-          : atual ? `<div style="font-size:10.5px;color:var(--text3)">no cadastro: ${esc(String(atual))}</div>`
-          : '<div style="font-size:10.5px;color:var(--text3)">campo vazio no cadastro</div>'}
+        <textarea id="mc-lido-${chave}" rows="${rows}" spellcheck="false" oninput="mcLidoEditou('${chave}')"
+          style="width:100%;box-sizing:border-box;font-family:inherit;font-size:12.5px;font-weight:600;line-height:1.35;color:var(--text);background:var(--white);border:1px solid var(--border);border-radius:7px;padding:5px 7px;resize:vertical">${esc(lido)}</textarea>
+        <div style="font-size:10.5px;color:var(--text3);margin-top:2px">${
+          igual ? 'já é o que está no cadastro'
+            : atual ? `no cadastro: ${esc(String(atual))}`
+            : 'campo vazio no cadastro'}</div>
+        ${chave === 'cpf' ? `<div id="mc-lido-dv" style="display:none;font-size:10.5px;color:var(--red);margin-top:2px">dígito verificador não bate — confira o número</div>` : ''}
       </div>
-      ${igual ? '' : `<button class="btn btns" style="padding:3px 9px;font-size:10.5px;flex-shrink:0" onclick="mcUsarLido('${chave}','${input}')">usar</button>`}
+      <div style="flex-shrink:0;display:flex;gap:5px;padding-top:4px">
+        <button id="mc-reset-${chave}" class="btn btns" title="Voltar ao que a leitura trouxe" style="padding:3px 7px;font-size:10.5px;display:none" onclick="mcLidoRestaurar('${chave}')">↺</button>
+        <button id="mc-usar-${chave}" class="btn btns" style="padding:3px 9px;font-size:10.5px${igual ? ';opacity:.45' : ''}" ${igual ? 'disabled' : ''} onclick="mcUsarLido('${chave}','${input}')">usar</button>
+      </div>
     </div>`;
   }).join('');
   return `<div style="background:var(--yellow-bg,#fff8e1);border:1.5px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:12px">
@@ -3992,15 +4011,71 @@ function mcContratoLidosHtml(c) {
   </div>`;
 }
 /* Preenche o input e para por ai. Quem grava e o Salvar, como em todo
-   o resto do card. */
+   o resto do card.
+
+   O VALOR VEM DO CAMPO DA TELA, nao mais de mcLidos: se alguem
+   corrigiu o texto ali em cima, e a correcao que tem que descer. O
+   mcLidos continua sendo a fonte so quando o campo nao existe. */
 function mcUsarLido(chave, inputId) {
   if (!mcLidos || !mcLidos[chave]) return;
+  const src = $('mc-lido-' + chave);
+  const val = String(src ? src.value : mcLidos[chave]).trim();
+  if (!val) { toast('Campo vazio — nada para preencher', 'er'); return; }
+  /* O CPF era o unico campo com garantia automatica: o motor so grava
+     depois de passar no digito verificador. Deixar editar devolve o
+     risco que a leitura tinha tirado, entao a checagem volta aqui. */
+  if (chave === 'cpf') {
+    const d = val.replace(/\D/g, '');
+    if (d.length !== 11 || !mcCpfDV(d)) {
+      if (!confirm('Este CPF não passa no dígito verificador.\n\nUsar assim mesmo?')) return;
+    }
+  }
   const el = $(inputId);
   if (!el) { toast('Campo não está visível nesta etapa', 'er'); return; }
-  el.value = String(mcLidos[chave]);
+  el.value = val;
   if (chave === 'cpf' && typeof cpfMask === 'function') cpfMask(el);
   el.style.background = 'var(--yellow-bg,#fff8e1)';
   toast('Preenchido. Clique em Salvar para gravar.');
+}
+/* Digitou: o botao "usar" volta a valer (o texto deixou de ser igual
+   ao cadastro), o campo cresce junto com o texto e o CPF e conferido
+   na hora, antes de descer para o cadastro. */
+function mcLidoEditou(chave) {
+  const ta = $('mc-lido-' + chave);
+  if (!ta) return;
+  ta.style.height = 'auto';
+  ta.style.height = (ta.scrollHeight + 2) + 'px';
+  const orig = String((mcLidos && mcLidos[chave]) || '');
+  const r = $('mc-reset-' + chave);
+  if (r) r.style.display = (ta.value.trim() !== orig.trim()) ? '' : 'none';
+  const b = $('mc-usar-' + chave);
+  if (b) { b.disabled = !ta.value.trim(); b.style.opacity = b.disabled ? '.45' : ''; }
+  if (chave === 'cpf') {
+    const dv = $('mc-lido-dv');
+    const d = ta.value.replace(/\D/g, '');
+    if (dv) dv.style.display = (d.length === 11 && !mcCpfDV(d)) ? '' : 'none';
+  }
+}
+/* Volta ao que o documento leu. Existe porque o campo agora e editavel:
+   sem isto, uma tecla errada so se desfaz reabrindo o cartao. */
+function mcLidoRestaurar(chave) {
+  const ta = $('mc-lido-' + chave);
+  if (!ta || !mcLidos) return;
+  ta.value = String(mcLidos[chave] || '');
+  mcLidoEditou(chave);
+}
+/* Digito verificador do CPF. Repetido aqui de proposito: o frontend so
+   tinha mascara, e mascara aceita 111.111.111-11. */
+function mcCpfDV(d) {
+  if (!/^\d{11}$/.test(d) || /^(\d)\1{10}$/.test(d)) return false;
+  for (let t = 9; t < 11; t++) {
+    let soma = 0;
+    for (let i = 0; i < t; i++) soma += parseInt(d[i], 10) * ((t + 1) - i);
+    let dig = (soma * 10) % 11;
+    if (dig === 10) dig = 0;
+    if (dig !== parseInt(d[t], 10)) return false;
+  }
+  return true;
 }
 function mcUsarTodosLidos() {
   if (!mcLidos) return;

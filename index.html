@@ -3968,6 +3968,34 @@ function mcContratoLidosHtml(c) {
   ].filter(x => L && L[x[0]]);
   if (!campos.length && !conferido) return '';
   if (conferido) {
+    /* A CAIXA VERDE MENTIA — 02/09/2026, caso da Leonara.
+
+       Ela dizia "o contrato pode ser gerado" olhando so o carimbo da
+       conferencia. Mas quem gera e a varredura do motor, e ela exige
+       QUATRO campos preenchidos: nome, CPF, endereco completo e
+       telefone. O card da Leonara foi conferido as 16:07 com o CPF
+       nulo — a leitura do Haiku tinha trazido um CPF de 8 digitos, o
+       verificador barrou (certo), e o campo ficou vazio. A varredura
+       nem busca um card assim: ela filtra pelos quatro campos no
+       proprio select. Resultado: nenhum contrato, nenhum erro, nenhum
+       aviso. Silencio, e a tela ainda afirmando que estava tudo pronto.
+
+       O motor faz esse filtro no banco de proposito (v132: sem ele o
+       card era pego e recusado a cada minuto, enchendo o log). Entao
+       quem tem que falar e a tela — aqui, onde a pessoa esta olhando. */
+    const faltando = [
+      ['Nome completo', c.nome_completo],
+      ['CPF', c.cpf],
+      ['Endereço completo', c.endereco_completo],
+      ['Telefone', c.telefone_principal]
+    ].filter(x => !String(x[1] || '').trim()).map(x => x[0]);
+    if (faltando.length) {
+      return `<div style="background:var(--red-bg,#ffebee);border:1.5px solid var(--red,#c62828);border-radius:10px;padding:9px 12px;margin-bottom:11px;font-size:11.5px;color:var(--text2)">
+        <b>⚠ O contrato NÃO vai ser gerado.</b> Está marcado como conferido, mas ${faltando.length === 1 ? 'falta' : 'faltam'}
+        <b>${faltando.join(', ')}</b> — o motor só gera com nome, CPF, endereço completo e telefone preenchidos.
+        Preencha ${faltando.length === 1 ? 'o campo' : 'os campos'} abaixo e clique em Salvar; o contrato sai na rodada seguinte, sem precisar conferir de novo.
+      </div>`;
+    }
     return `<div style="background:var(--green-bg,#e8f5e9);border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;margin-bottom:11px;font-size:11.5px;color:var(--text2)">
       ✓ Dados do contrato conferidos em ${fD(String(conferido).slice(0,10))}. O contrato pode ser gerado.
     </div>`;
@@ -4156,7 +4184,26 @@ function mcUsarTodosLidos() {
    Grava direto porque nao e campo de formulario: e uma decisao, e
    decisao que depende de clicar em Salvar depois se perde. */
 async function mcMarcarConferido(id) {
-  if (!confirm('Confirmar que os dados do contrato foram conferidos contra os documentos?\n\nDepois disso o contrato pode ser gerado e este aviso some.')) return;
+  /* AVISA ANTES, e nao depois de o silencio acontecer. Le os INPUTS da
+     tela e nao o cadastro: quem esta conferindo acabou de digitar, e
+     o Salvar pode nem ter sido clicado ainda — cobrar pelo valor
+     antigo mandaria consertar o que ja esta consertado.
+
+     NAO BLOQUEIA. Marcar conferido sem ter o CPF em maos e legitimo:
+     o campo entra depois, e o contrato sai na rodada seguinte sozinho.
+     O que nao pode e a pessoa sair daqui achando que acabou. */
+  const falta = [
+    ['Nome completo', 'mc-nome'],
+    ['CPF', 'mc-cpf'],
+    ['Endereço completo', 'mc-endereco'],
+    ['Telefone', 'mc-tel']
+  ].filter(([, id2]) => { const el = $(id2); return !el || !String(el.value || '').trim(); }).map(x => x[0]);
+  const aviso = falta.length
+    ? '\n\nATENÇÃO: ' + (falta.length === 1 ? 'falta ' : 'faltam ') + falta.join(', ') +
+      '. O motor só gera o contrato com nome, CPF, endereço completo e telefone preenchidos — ' +
+      'sem isso nada é gerado e nada avisa. Preencha e clique em Salvar.'
+    : '';
+  if (!confirm('Confirmar que os dados do contrato foram conferidos contra os documentos?\n\nDepois disso o contrato pode ser gerado e este aviso some.' + aviso)) return;
   const { error } = await sb.from('crm_clientes').update({
     contrato_dados_conferido_em: new Date().toISOString(),
     contrato_dados_conferido_por: U ? U.id : null

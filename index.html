@@ -3993,15 +3993,23 @@ function mcContratoLidosHtml(c) {
        duas vezes. Dizer "ja e o que esta no cadastro" ali era dar por
        conferido justamente o campo onde o OCR ja passou por cima da
        cliente — a Claudineia virou CLAUDINETA e nada na tela contava. */
-    const doLeitor = chave === 'nome_completo' && !!L.nome_do_card_veio_de_documento;
+    const doLeitor = chave === 'nome_completo' && igual && !!L.nome_do_card_veio_de_documento;
     const anterior = String(L.nome_do_card_anterior || '').trim();
+    /* NOME QUE O MOTOR RECUSOU SUBIR — item 317. Desde a v123 o leitor
+       so completa o nome do cartao; quando o documento diz outra coisa,
+       ele nao renomeia e deixa a divergencia marcada aqui. E o contrario
+       do caso acima: la o cadastro tinha virado o texto do leitor sem
+       ninguem ver, aqui ninguem mexeu em nada e a conferencia e que
+       precisa saber que as duas fontes discordam. */
+    const conflito = chave === 'nome_completo' && !!L.nome_conflito_com_documento;
     return `<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-top:1px solid var(--border)">
       <div style="flex:0 0 128px;font-size:11px;color:var(--text3);padding-top:6px">${esc(rotulo)}</div>
       <div style="flex:1;min-width:0">
         <textarea id="mc-lido-${chave}" rows="${rows}" spellcheck="false" oninput="mcLidoEditou('${chave}')"
           style="width:100%;box-sizing:border-box;font-family:inherit;font-size:12.5px;font-weight:600;line-height:1.35;color:var(--text);background:var(--white);border:1px solid var(--border);border-radius:7px;padding:5px 7px;resize:vertical">${esc(lido)}</textarea>
-        <div style="font-size:10.5px;color:${doLeitor ? 'var(--red)' : 'var(--text3)'};margin-top:2px">${
-          doLeitor ? (anterior
+        <div style="font-size:10.5px;color:${(doLeitor || conflito) ? 'var(--red)' : 'var(--text3)'};margin-top:2px">${
+          conflito ? `o documento diz outro nome e o cartão <b>não</b> foi renomeado — no cadastro está <b>${esc(String(atual || '—'))}</b>. Confira qual está certo.`
+            : doLeitor ? (anterior
               ? `este documento renomeou o cartão — a cliente tinha dito <b>${esc(anterior)}</b>`
               : 'este documento renomeou o cartão; o nome do cadastro veio da própria leitura')
             : igual ? 'já é o que está no cadastro'

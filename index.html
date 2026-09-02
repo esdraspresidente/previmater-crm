@@ -6036,6 +6036,7 @@ let FILA_CAD={};                 // cadencia_id  -> {ordem, braco}
 let FILA_NPASSOS={};             // sequencia_id -> quantos passos distintos
 let FILA_BRACOS={};let FILA_ORDENS={};              // "sequencia_id|ordem" -> quantos bracos
 let FILA_SEMRESP=[];             // conversas em que a cliente falou por ultimo
+let FILA_MUDAS=[];               // conversas em que NOS falamos por ultimo e nada ficou agendado
 /* REATIVACAO NAO E AUTOMACAO DE FUNIL — aba propria, 02/09/2026.
 
    As quatro sequencias reativacao_* sao disparo em massa sobre base
@@ -6184,6 +6185,54 @@ async function pageFila(){
     });
     FILA_SEMRESP.sort((a,b)=>b.min-a.min);
   }
+  /* CONVERSA MUDA DOS DOIS LADOS — 02/09/2026.
+
+     A Sem resposta enxerga um caso só: a última mensagem é DELA. O caso
+     inverso não aparecia em tela nenhuma — a última mensagem é NOSSA, e
+     depois dela não ficou nada agendado. Do ponto de vista do sistema
+     está tudo certo: não há erro, não há linha travada, a fila está
+     limpa. E a conversa morreu ali.
+
+     Foi o que aconteceu com a Aline (a Samara respondeu "Perfeito,
+     anotei aqui" e nunca fez a terceira pergunta) e com a Tatiane ("deixa
+     eu confirmar direitinho" e nada depois). Em 14 dias, 29 conversas
+     terminaram assim — 15 delas depois de uma fala da Samara, sem
+     nenhuma sequência atrás.
+
+     O CRITÉRIO É "SEM NADA AGENDADO", e não o texto da mensagem. Tentar
+     adivinhar se a última fala tinha pergunta é chute; o que importa é
+     se existe alguma coisa marcada para acontecer depois dela. Se existe,
+     a conversa não morreu — ela está esperando. As pendentes vêm do
+     FILA_CACHE, que é a fila inteira desta tela.
+
+     FICA FORA quem já tem desfecho: descartada, arquivada e as listas de
+     fim de linha. Cadência que terminou porque a lead sumiu também
+     aparece aqui, e isso é de propósito — a diferença entre "a cadência
+     acabou" e "a Samara parou no meio" é o que você vê no texto, não
+     algo que a tela deva decidir sozinha. */
+  const temFila=new Set((FILA_CACHE||[]).map(a=>a.cliente_id).filter(Boolean));
+  const nossasIds=[];
+  ultimaDe.forEach((m,id)=>{if(m.direcao!=='entrada'&&!temFila.has(id))nossasIds.push(id);});
+  FILA_MUDAS=[];
+  if(nossasIds.length){
+    const{data:cliMudas}=await sb.from('crm_clientes')
+      .select('id,nome_completo,telefone_principal,lista_id,veredito,samara_pausada')
+      .in('id',nossasIds).is('arquivado_em',null).is('descartado_em',null).limit(1000);
+    (cliMudas||[]).forEach(c=>{
+      const m=ultimaDe.get(c.id);
+      const min=Math.floor((Date.now()-new Date(m.criado_em).getTime())/60000);
+      /* 2 HORAS, e não 15 minutos como a Sem resposta. Lá o relógio conta
+         contra um robô que devia ter respondido; aqui a última palavra
+         é nossa, e o normal é a cliente demorar para voltar. Antes de
+         duas horas isto seria uma lista de conversas em andamento. */
+      if(min<120)return;
+      FILA_MUDAS.push({id:c.id,nome:c.nome_completo||'(sem nome)',
+        fone:foneLegivel(c.telefone_principal),min:min,pausada:!!c.samara_pausada,
+        lista:mapaListas[c.lista_id]||'',veredito:c.veredito||'',
+        texto:String(m.previa||'').replace(/\s+/g,' ').slice(0,120)});
+    });
+    FILA_MUDAS.sort((a,b)=>b.min-a.min);
+  }
   FILA_FREIOS={motor_ligado:'sim',samara_ligada:'sim'};
   (vars||[]).forEach(v=>{FILA_FREIOS[v.chave]=(v.valor_texto||'sim').toLowerCase();});
   FILA_SEL.clear();
@@ -6328,6 +6377,7 @@ function renderFila(){
 
   h+='<div class="filatabs">'+
      aba('semresp','Sem resposta',FILA_SEMRESP.length,FILA_SEMRESP.length>0)+
+     aba('mudas','Paradas',FILA_MUDAS.length,FILA_MUDAS.length>0)+
      aba('aprovar','Aprovar',aprovar.length,true)+
      aba('agendadas','Agendadas',agendadas.length,false)+
      aba('vencidas','Vencidas',vencidas.length,vencidas.length>0)+
@@ -6339,6 +6389,27 @@ function renderFila(){
   // A aba Ritmo tambem nao lista automacoes: ela conta as que JA sairam.
   // Sai antes dos filtros pelo mesmo motivo que a Sem resposta.
   if(FILA_ABA==='ritmo'){ h+=ritmoHTML(); pc.innerHTML=h; if(!FILA_RITMO) carregarRitmo(); return; }
+
+  /* A aba Paradas, como a Sem resposta, lista PESSOAS e não linhas de
+     fila — sai antes dos filtros pelo mesmo motivo. */
+  if(FILA_ABA==='mudas'){
+    if(!FILA_MUDAS.length){
+      h+='<div class="emp"><div class="empt">Nenhuma conversa parada</div>'+
+         '<div class="emps">Toda conversa dos últimos 3 dias tem alguma coisa agendada atrás dela.</div></div>';
+    }else{
+      h+='<div class="filabox" style="margin-bottom:12px"><div class="filaboxl">O que é esta lista</div>'+
+         '<div class="fhint"><b>A última mensagem foi nossa e não sobrou nada agendado.</b> Não há erro, não há linha travada, '+
+         'a fila está limpa — e por isso mesmo estas conversas não apareciam em tela nenhuma. A Samara só volta a falar quando a cliente escreve, '+
+         'então enquanto ela não escrever, ninguém volta.<br><br>'+
+         'Aparece a partir de <b>2h</b> de silêncio (a Sem resposta usa 15 min, porque lá quem devia responder era o robô). '+
+         'Sai daqui sozinho assim que a cliente escrever ou assim que qualquer sequência for agendada para ela.<br><br>'+
+         'Leia o texto da última mensagem: se ela termina numa pergunta, a cliente é que sumiu. Se termina em '+
+         '"anotei aqui" ou "já te retorno", a Samara parou no meio e a conversa precisa de você.</div></div>';
+      h+=cartoesMudas(FILA_MUDAS);
+    }
+    pc.innerHTML=h;
+    return;
+  }
 
   // A aba Sem resposta sai antes do resto: ela nao lista automacoes, ela
   // lista PESSOAS esperando. Os filtros e o agrupamento por dia abaixo
@@ -6740,6 +6811,33 @@ async function filaConfirmarLote(){
    diagnostico de QUAL delas travou custa mais caro do que aplicar as
    tres. Cancelar sequencia pendente tambem e seguro: se a lead seguir
    sem responder, o motor reagenda pelo fluxo normal. */
+/* O cartão da aba Paradas. Irmão do cartoesSemResp, com duas colunas a
+   mais — a lista e o veredito — porque aqui a pergunta não é "quem está
+   esperando", é "onde essa conversa parou". Um card em Lead novo sem
+   veredito parou na triagem; um TEM_DIREITO em Aguardando documentos
+   parou na documentação, e são coisas diferentes de retomar. */
+function cartoesMudas(arr){
+  return arr.map(c=>{
+    const horas=c.min>=60?Math.floor(c.min/60)+'h'+String(c.min%60).padStart(2,'0'):c.min+' min';
+    const etq=[c.lista?'<span class="filapill">'+esc(c.lista)+'</span>':'',
+               c.veredito?'<span class="filapill yellow">'+esc(c.veredito)+'</span>':'',
+               c.pausada?'<span class="filapill yellow">Samara pausada</span>':''].join('');
+    return`<div class="filacard">
+      <div class="filahead">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700">${esc(c.nome)}</div>
+          <div class="fhint">${foneLink(c.fone)} · calada há ${horas}</div>
+        </div>
+        ${etq}
+      </div>
+      <p class="filabalao fhint">Última mensagem (nossa): ${esc(c.texto)}</p>
+      <div class="brow" style="margin-top:8px;gap:8px">
+        <button class="btn btns" style="padding:8px 15px;font-size:12px" onclick="abrirCardCliente('${c.id}')">Abrir cartão →</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function cartoesSemResp(arr){
   return arr.map(c=>{
     const horas=c.min>=60?Math.floor(c.min/60)+'h'+String(c.min%60).padStart(2,'0'):c.min+' min';

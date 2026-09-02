@@ -6036,6 +6036,23 @@ let FILA_CAD={};                 // cadencia_id  -> {ordem, braco}
 let FILA_NPASSOS={};             // sequencia_id -> quantos passos distintos
 let FILA_BRACOS={};let FILA_ORDENS={};              // "sequencia_id|ordem" -> quantos bracos
 let FILA_SEMRESP=[];             // conversas em que a cliente falou por ultimo
+/* REATIVACAO NAO E AUTOMACAO DE FUNIL — aba propria, 02/09/2026.
+
+   As quatro sequencias reativacao_* sao disparo em massa sobre base
+   parada (os 659 cards da lista Reativacao Trello), e nao a esteira de
+   quem esta em atendimento. Misturadas nas abas Aprovar/Agendadas/
+   Vencidas elas dominam a contagem pelo volume: 44 reativacoes ao lado
+   de 3 automacoes de cliente fazem o numero da aba parar de significar
+   "trabalho esperando por voce".
+
+   O CRITERIO E O CODIGO DA SEQUENCIA, nao a lista do card nem o nome.
+   Card de reativacao anda pelo funil assim que a mulher responde — ele
+   sai da lista Reativacao Trello e continua sendo reativacao. Quem
+   nasce reativacao morre reativacao, e e o codigo que diz isso. */
+function ehReativacao(a){
+  const s=FILA_SEQ[a.sequencia_id];
+  return !!s && String(s.codigo||'').indexOf('reativacao')===0;
+}
 /* O telefone vem do banco em formatos diferentes: uns ja formatados, uns
    so digitos com 55 na frente. Lido as pressas, 5579999451651 e uma
    parede de numeros e da para ler o DDD errado. */
@@ -6286,10 +6303,16 @@ function ritmoHTML(){
 
 function renderFila(){
   const pc=$('pc');
-  const aprovar=FILA_CACHE.filter(a=>a.status==='aguardando_aprovacao');
-  const agendadas=FILA_CACHE.filter(a=>a.status==='agendado'||a.status==='pausado');
-  const comErro=FILA_CACHE.filter(a=>a.status==='erro');
-  const vencidas=FILA_CACHE.filter(a=>a.status==='vencida');
+  /* AS QUATRO ABAS DE SEMPRE PASSAM A EXCLUIR REATIVACAO. Elas nao
+     somem: vao todas para a aba Reativações, com qualquer status. Se
+     ficassem nos dois lugares, a soma das abas deixaria de bater com a
+     fila e nao daria para saber se algo foi tratado duas vezes. */
+  const funil=FILA_CACHE.filter(a=>!ehReativacao(a));
+  const reativ=FILA_CACHE.filter(ehReativacao);
+  const aprovar=funil.filter(a=>a.status==='aguardando_aprovacao');
+  const agendadas=funil.filter(a=>a.status==='agendado'||a.status==='pausado');
+  const comErro=funil.filter(a=>a.status==='erro');
+  const vencidas=funil.filter(a=>a.status==='vencida');
 
   const aba=(id,rot,n,destaque)=>`<button class="filatab ${FILA_ABA===id?'on':''}" onclick="FILA_ABA='${id}';renderFila()">${rot}${n?`<span class="filatab-n ${destaque?'alerta':''}">${n}</span>`:''}</button>`;
 
@@ -6309,6 +6332,7 @@ function renderFila(){
      aba('agendadas','Agendadas',agendadas.length,false)+
      aba('vencidas','Vencidas',vencidas.length,vencidas.length>0)+
      aba('erro','Com erro',comErro.length,comErro.length>0)+
+     aba('reativ','Reativações',reativ.length,false)+
      aba('ritmo','Ritmo',0,false)+
      '</div>';
 
@@ -6344,9 +6368,30 @@ function renderFila(){
   }
 
 
-  const lista=FILA_ABA==='aprovar'?aprovar:(FILA_ABA==='erro'?comErro:(FILA_ABA==='vencidas'?vencidas:agendadas));
+  /* ABA REATIVAÇÕES. Mostra TODOS os status de uma vez, ao contrario das
+     outras quatro. O que se pergunta aqui nao e "o que precisa de
+     aprovação" — e "como esta indo o disparo da base do Trello", e essa
+     resposta e a lista inteira: o que ja saiu esperando, o que venceu e
+     o que falhou, junto. O status de cada linha continua aparecendo na
+     etiqueta do proprio cartão. */
+  const lista=FILA_ABA==='reativ'?reativ
+    :(FILA_ABA==='aprovar'?aprovar:(FILA_ABA==='erro'?comErro:(FILA_ABA==='vencidas'?vencidas:agendadas)));
 
-  if(FILA_ABA==='vencidas'&&vencidas.length){
+  if(FILA_ABA==='reativ'){
+    h+='<div class="filabox" style="margin-bottom:12px"><div class="filaboxl">O que é esta aba</div>'+
+       '<div class="fhint">Só as sequências de <b>reativação</b> — o resgate da base parada que veio do Trello. '+
+       'Elas <u>não aparecem mais</u> nas abas Aprovar, Agendadas, Vencidas e Com erro: são disparo em massa sobre base fria, '+
+       'não a esteira de quem está em atendimento, e misturadas faziam o número daquelas abas deixar de significar trabalho seu.<br><br>'+
+       'Aqui aparecem <b>todos os status juntos</b> (agendada, vencida, com erro, esperando aprovação) — a etiqueta de cada linha diz qual é. '+
+       'O ritmo do disparo continua sendo o da aba Ritmo, que é o mesmo para tudo que sai pelo número.</div></div>';
+  }
+
+  /* O reenvio em lote vale nas duas abas que mostram vencida: a Vencidas
+     do funil e a de Reativações. A conta de quantas ha e feita sobre a
+     aba aberta, senao "selecionar todas" na Reativações contaria as
+     vencidas do funil, que nem estao na tela. */
+  const vencidasDaAba=(FILA_ABA==='reativ'?reativ.filter(a=>a.status==='vencida'):vencidas);
+  if((FILA_ABA==='vencidas'||FILA_ABA==='reativ')&&vencidasDaAba.length){
     const n=FILA_SEL.size;
     const min=Math.max(0,Math.round((n-1)*2));
     h+=`<div class="filabox" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
@@ -6354,7 +6399,7 @@ function renderFila(){
         <div class="filaboxl">Reenvio em lote</div>
         <div class="fhint">Elas voltam para a fila e saem no ritmo normal, com ~2 min entre clientes.${n?` As ${n} selecionadas levam cerca de ${min} min para escoar.`:''}</div>
       </div>
-      <button class="btn btns" style="padding:8px 14px;font-size:12px" onclick="filaSelTodas()">${n===vencidas.length?'Desmarcar todas':'Selecionar todas'}</button>
+      <button class="btn btns" style="padding:8px 14px;font-size:12px" onclick="filaSelTodas()">${n===vencidasDaAba.length?'Desmarcar todas':'Selecionar todas'}</button>
       <button class="btn btnp" style="padding:8px 14px;font-size:12px" ${n?'':'disabled'} onclick="filaEnviarSelecionadas()">Enviar selecionadas (${n})</button>
     </div>`;
   }
@@ -6369,7 +6414,7 @@ function renderFila(){
   const filtrada=filtrarFila(lista);
 
   if(lista.length===0){
-    const vazio={aprovar:'Nada esperando aprovação',agendadas:'Nenhum envio agendado',vencidas:'Nada vencido',erro:'Nenhuma falha de envio'}[FILA_ABA];
+    const vazio={aprovar:'Nada esperando aprovação',agendadas:'Nenhum envio agendado',vencidas:'Nada vencido',erro:'Nenhuma falha de envio',reativ:'Nenhuma reativação na fila'}[FILA_ABA];
     h+=`<div class="emp"><div class="empt">${vazio}</div></div>`;
   }else if(filtrada.length===0){
     h+=`<div class="emp"><div class="empt">Nada com esses filtros</div>
@@ -6619,7 +6664,10 @@ function filaSelTodas(){
   /* Respeita o filtro: "selecionar todas" tem que significar as que
      estão na tela. Marcar em silêncio o que está escondido é reenviar
      mensagem sem ver para quem. */
-  const v=filtrarFila(FILA_CACHE.filter(a=>a.status==='vencida'));
+  /* E respeita a ABA: na Reativações so as reativacoes estao na tela, na
+     Vencidas so as do funil. Marcar o que a aba nao mostra e reenviar
+     mensagem sem ver para quem — o mesmo motivo do filtro acima. */
+  const v=filtrarFila(FILA_CACHE.filter(a=>a.status==='vencida'&&(FILA_ABA==='reativ'?ehReativacao(a):!ehReativacao(a))));
   if(FILA_SEL.size===v.length)FILA_SEL.clear();
   else v.forEach(a=>FILA_SEL.add(a.id));
   renderFila();

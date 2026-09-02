@@ -3005,7 +3005,20 @@ function renderCardClienteModal(c,etqSel,listas){
      ANTES de alguem pedir (medido em 31/08). Sem isso a proposta da
      leitura ficaria escondida justamente em quem mandou cedo. */
   const temContrato=!!(c.link_contrato||c.referencia1_nome||c.referencia1_telefone||c.referencia2_nome||c.referencia2_telefone||c.contrato_dados_lidos||c.endereco_completo);
-  const temInss=!!(c.cpf||c.senha_inss);
+  /* O CPF PRECISA APARECER NA ETAPA EM QUE ELE E EXIGIDO — 02/09/2026.
+
+     O campo CPF mora no Acesso INSS, que so abre na etapa 2 (contrato
+     enviado adiante) ou quando ja tem CPF/senha gravados. Mas quem gera
+     contrato e a etapa 1, Montar Contrato — e o motor exige CPF para
+     gerar. Ou seja: o card em que faltava o CPF era exatamente o card
+     em que o campo estava escondido, e a unica forma de preencher era
+     descobrir o botao "mostrar tudo". Foi o caso da Leonara.
+
+     A regra continua sendo por etapa; o que entra aqui e uma excecao
+     nomeada: conferencia marcada e um pedido explicito de gerar
+     contrato, e a partir dai todo campo que o gerador exige tem que
+     estar a mao. */
+  const temInss=!!(c.cpf||c.senha_inss||c.contrato_dados_conferido_em);
   const verContrato=mcVerSecao(ETAPA_CONTRATO,etapa,temContrato);
   const verInss=mcVerSecao(ETAPA_INSS,etapa,temInss);
   const verPag=mcVerSecao(ETAPA_PAGAMENTOS,etapa,pagHtml.temParc);
@@ -3984,16 +3997,27 @@ function mcContratoLidosHtml(c) {
        card era pego e recusado a cada minuto, enchendo o log). Entao
        quem tem que falar e a tela — aqui, onde a pessoa esta olhando. */
     const faltando = [
-      ['Nome completo', c.nome_completo],
-      ['CPF', c.cpf],
-      ['Endereço completo', c.endereco_completo],
-      ['Telefone', c.telefone_principal]
-    ].filter(x => !String(x[1] || '').trim()).map(x => x[0]);
+      ['Nome completo', 'mc-nome', c.nome_completo],
+      ['CPF', 'mc-cpf', c.cpf],
+      ['Endereço completo', 'mc-endereco', c.endereco_completo],
+      ['Telefone', 'mc-tel', c.telefone_principal]
+    ].filter(x => !String(x[2] || '').trim()).map(x => [x[0], x[1]]);
     if (faltando.length) {
+      /* "Preencha o campo abaixo" estava errado: dos quatro campos, so
+         o endereco fica neste bloco. O CPF esta no Acesso INSS, acima;
+         nome e telefone estao nos dados, mais acima ainda. Em vez de
+         descrever onde cada um mora, o aviso LEVA — um botao por campo
+         que falta, que rola ate o input de verdade e poe o cursor nele.
+
+         Botao que navega, e nao input novo aqui dentro: dois inputs
+         para o mesmo campo seriam dois caminhos de escrita para a mesma
+         coluna, que e como o CPF some sem ninguem entender. */
+      const botoes = faltando.map(f => `<button class="btn btns" style="padding:3px 9px;font-size:10.5px;margin:3px 4px 0 0" onclick="mcIrAoCampo('${f[1]}')">${f[0]} →</button>`).join('');
       return `<div style="background:var(--red-bg,#ffebee);border:1.5px solid var(--red,#c62828);border-radius:10px;padding:9px 12px;margin-bottom:11px;font-size:11.5px;color:var(--text2)">
         <b>⚠ O contrato NÃO vai ser gerado.</b> Está marcado como conferido, mas ${faltando.length === 1 ? 'falta' : 'faltam'}
-        <b>${faltando.join(', ')}</b> — o motor só gera com nome, CPF, endereço completo e telefone preenchidos.
-        Preencha ${faltando.length === 1 ? 'o campo' : 'os campos'} abaixo e clique em Salvar; o contrato sai na rodada seguinte, sem precisar conferir de novo.
+        <b>${faltando.map(f => f[0]).join(', ')}</b> — o motor só gera com nome, CPF, endereço completo e telefone preenchidos.
+        Clique para ir até ${faltando.length === 1 ? 'o campo' : 'os campos'}, preencha e salve; o contrato sai na rodada seguinte, sem precisar conferir de novo.
+        <div>${botoes}</div>
       </div>`;
     }
     return `<div style="background:var(--green-bg,#e8f5e9);border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;margin-bottom:11px;font-size:11.5px;color:var(--text2)">
@@ -4080,6 +4104,20 @@ function mcContratoLidosHtml(c) {
     </div>
   </div>`;
 }
+/* Rola ate o campo e poe o cursor nele, com um piscar para o olho
+   achar. Se o input nao existir, a secao dele esta escondida por etapa:
+   o "mostrar tudo" resolve, e o toast diz isso em vez de o botao nao
+   fazer nada — botao que nao responde parece tela quebrada. */
+function mcIrAoCampo(inputId) {
+  const el = $(inputId);
+  if (!el) { toast('O campo está numa seção escondida nesta etapa — clique em "mostrar tudo" no topo do cartão', 'er'); return; }
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.focus();
+  const antes = el.style.boxShadow;
+  el.style.boxShadow = '0 0 0 3px var(--red,#c62828)';
+  setTimeout(() => { el.style.boxShadow = antes; }, 1600);
+}
+
 /* Preenche o input e para por ai. Quem grava e o Salvar, como em todo
    o resto do card.
 

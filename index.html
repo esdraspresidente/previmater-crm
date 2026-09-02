@@ -3336,11 +3336,19 @@ function chatBadgeHtml(canal){
   if(canal==='whatsgw')return'<span class="chatbadge">WhatsGW · não oficial</span>';
   return'<span class="chatbadge nd">Canal não definido</span>';
 }
+/* A MESMA PAUSA TINHA DOIS EFEITOS DIFERENTES — 02/09/2026.
+   Este toggle, no cartao, so virava a flag: uma resposta da Samara ja
+   agendada saia assim mesmo, minutos depois de voce ter pausado. O da
+   Caixa de Entrada cancelava. Mesma caixinha, mesma coluna no banco,
+   comportamentos diferentes conforme a tela — agora os dois calam a
+   fala dela. Cobranca continua sendo assunto so do painel da Caixa de
+   Entrada, que e onde a pergunta e feita. */
 async function mcTogSamara(clienteId,pausada){
   const{error}=await sb.from('crm_clientes').update({samara_pausada:pausada}).eq('id',clienteId);
   if(error){toast('Erro ao salvar: '+error.message,'er');return;}
-  toast(pausada?'Samara pausada para esta cliente':'Samara reativada para esta cliente','ok');
-  registrarAtividade(clienteId,pausada?'pausou a Samara para esta cliente':'reativou a Samara para esta cliente');
+  const calada=pausada?await ibCalarFalaDaSamara(clienteId):0;
+  toast(pausada?'Samara pausada para esta cliente'+(calada?' · '+calada+' resposta(s) cancelada(s)':''):'Samara reativada para esta cliente','ok');
+  registrarAtividade(clienteId,pausada?'pausou a Samara para esta cliente'+(calada?' e cancelou '+calada+' resposta(s) agendada(s)':''):'reativou a Samara para esta cliente');
   if(mcAbaAtual==='coment')renderAtividadeFeed(clienteId);
 }
 function chatHoraMsg(m){
@@ -7649,6 +7657,22 @@ function ibRenderPainel(c){
   });
 }
 
+/* CALA A FALA DELA, e so a fala dela.
+   Resposta da Samara e abertura sao ELA falando com a cliente, e e
+   disso que a pausa trata. aviso_esdras e aviso_indicacao ficam de
+   fora de proposito: sao recados para VOCE, e cancelar um aviso seu
+   porque voce calou a robo nao faz sentido nenhum. */
+async function ibCalarFalaDaSamara(clienteId){
+  const{data,error}=await sb.from('crm_automacoes')
+    .update({status:'cancelado',motivo_cancelamento:'Samara pausada na conversa'})
+    .eq('cliente_id',clienteId)
+    .in('tipo_automacao',['samara','abertura'])
+    .in('status',['agendado','aguardando_aprovacao','pausado'])
+    .select('id');
+  if(error){console.error('[pausa] erro ao cancelar a fala da Samara:',error.message);return 0;}
+  return (data||[]).length;
+}
+
 /**
  * Liga e desliga a Samara nesta conversa.
  *
@@ -7656,32 +7680,85 @@ function ibRenderPainel(c){
  * automacao na Fila: aquilo segura UMA mensagem, isto para o
  * atendimento inteiro daquela cliente.
  *
- * Ao pausar, tambem cancela o que estava agendado — senao a conversa
- * fica em silencio agora e volta a falar sozinha daqui a duas horas.
+ * PAUSAR A SAMARA NAO E DESISTIR DA CLIENTE — 02/09/2026.
+ *
+ * Ate aqui, pausar cancelava TUDO que estivesse agendado, e "tudo"
+ * incluia a esteira de cobranca. Medido em 30 dias: 9 passos de
+ * pedir_documentacao, de 3 clientes, morreram assim. A Patricia
+ * escreveu "assim que chegar em casa te envio tudo certinho", a Samara
+ * foi pausada, os 3 lembretes foram junto, e ninguem nunca mais cobrou
+ * ela — o cartao segue em Aguardando documentos sem um documento. Sao
+ * 3 de 28 clientes que chegaram na documentacao no periodo, perdidas
+ * por efeito colateral de um botao que nao prometia isso.
+ *
+ * A COBRANCA VIROU PERGUNTA, e nao um padrao novo escolhido por mim.
+ * Os dois casos existem de verdade: quem pausa para assumir a conversa
+ * quer a cobranca viva, porque a cobranca nao e conversa; quem pausa
+ * uma lead nova para atender na mao nao quer a triagem1 falando por
+ * cima dele duas horas depois. Mesma solucao do ✕ da Fila (item 294):
+ * a pergunta e feita, com o numero de mensagens em cada opcao, e SO
+ * quando ha o que perguntar — sem cobranca pendente, pausa direto.
+ *
+ * A fala dela e cancelada nos dois caminhos, sem perguntar. E o que a
+ * pausa significa.
  */
 async function ibTogglePausa(clienteId,chave,pausar){
+  if(!pausar)return ibAplicarPausa(clienteId,chave,false,false);
+
+  /* As cobrancas vem do banco e nao do cache da tela: passo agendado
+     para semana que vem pode nao estar em IB_CONVS nenhum, e o numero
+     na pergunta tem que ser o numero de verdade. */
+  const{data:seqs}=await sb.from('crm_automacoes').select('id')
+    .eq('cliente_id',clienteId).eq('tipo_automacao','sequencia')
+    .in('status',['agendado','aguardando_aprovacao','pausado','vencida']);
+  const n=(seqs||[]).length;
+  if(!n)return ibAplicarPausa(clienteId,chave,true,false);
+
+  abrirModal(`
+    <div class="mbt">Pausar a Samara</div>
+    <div class="mbs">Ela para de responder esta cliente. Mas há <b>${n} mensagem(ns)</b> de cobrança agendada(s) — lembrete de documentação, de contrato ou de senha.</div>
+    <div class="fhint" style="margin-bottom:14px">Cobrança não é a Samara conversando: é a esteira lembrando quem parou no meio. Cancelar junto costuma deixar a cliente sem lembrete nenhum e sem nada na tela dizendo isso.</div>
+    <div class="brow" style="justify-content:flex-end;gap:9px;flex-wrap:wrap">
+      <button class="btn btns" onclick="fecharModal()">Voltar</button>
+      <button class="btnd" onclick="ibAplicarPausa('${clienteId}','${escA(chave)}',true,true)">Pausar e cancelar as ${n}</button>
+      <button class="btn btnp" onclick="ibAplicarPausa('${clienteId}','${escA(chave)}',true,false)">Pausar só a Samara</button>
+    </div>`);
+}
+
+async function ibAplicarPausa(clienteId,chave,pausar,matarCobranca){
+  fecharModal();
   const{error}=await sb.from('crm_clientes')
     .update({samara_pausada:pausar,samara_deve_continuar:false})
     .eq('id',clienteId);
   if(error){toast('Não consegui alterar: '+error.message,'er');return;}
 
-  let canceladas=0;
+  let calada=0,cobrancas=0;
   if(pausar){
-    const{data,error:e2}=await sb.from('crm_automacoes')
-      .update({status:'cancelado',motivo_cancelamento:'Samara pausada na conversa'})
-      .eq('cliente_id',clienteId)
-      .in('status',['agendado','aguardando_aprovacao','pausado'])
-      .select('id');
-    if(e2)console.error('[pausa] erro ao cancelar agendadas:',e2.message);
-    else canceladas=(data||[]).length;
+    calada=await ibCalarFalaDaSamara(clienteId);
+    if(matarCobranca){
+      /* Motivo proprio, diferente do da fala dela. Foi a leitura do
+         motivo em crm_automacoes que mostrou o vazamento; se os dois
+         casos gravarem a mesma frase, a proxima medicao nao consegue
+         separar "calei a robo" de "desisti de cobrar". */
+      const{data,error:e2}=await sb.from('crm_automacoes')
+        .update({status:'cancelado',motivo_cancelamento:'Samara pausada na conversa — cobrança cancelada junto, na mão'})
+        .eq('cliente_id',clienteId).eq('tipo_automacao','sequencia')
+        .in('status',['agendado','aguardando_aprovacao','pausado','vencida'])
+        .select('id');
+      if(e2)console.error('[pausa] erro ao cancelar cobrança:',e2.message);
+      else cobrancas=(data||[]).length;
+    }
   }
 
+  const detalhe=[calada?calada+' resposta(s) dela':'',cobrancas?cobrancas+' cobrança(s)':'']
+    .filter(Boolean).join(' e ');
   registrarAtividade(clienteId,pausar
-    ?'pausou a Samara nesta conversa'+(canceladas?' e cancelou '+canceladas+' envio(s) agendado(s)':'')
+    ?'pausou a Samara nesta conversa'+(detalhe?' e cancelou '+detalhe:'')
+      +(!matarCobranca?' (cobranças mantidas)':'')
     :'liberou a Samara para responder nesta conversa');
 
   toast(pausar
-    ?'Samara pausada'+(canceladas?' · '+canceladas+' envio(s) cancelado(s)':'')
+    ?'Samara pausada'+(cobrancas?' · '+cobrancas+' cobrança(s) cancelada(s)':' · cobranças mantidas')
     :'Samara liberada','ok');
 
   const conv=IB_CONVS.find(x=>x.chave===chave);

@@ -4153,7 +4153,7 @@ function mcIrAoCampo(inputId) {
    O VALOR VEM DO CAMPO DA TELA, nao mais de mcLidos: se alguem
    corrigiu o texto ali em cima, e a correcao que tem que descer. O
    mcLidos continua sendo a fonte so quando o campo nao existe. */
-function mcUsarLido(chave, inputId) {
+function mcUsarLido(chave, inputId, silencioso) {
   if (!mcLidos || !mcLidos[chave]) return;
   const src = $('mc-lido-' + chave);
   const val = String(src ? src.value : mcLidos[chave]).trim();
@@ -4172,7 +4172,10 @@ function mcUsarLido(chave, inputId) {
   el.value = val;
   if (chave === 'cpf' && typeof cpfMask === 'function') cpfMask(el);
   el.style.background = 'var(--yellow-bg,#fff8e1)';
-  toast('Preenchido. Clique em Salvar para gravar.');
+  /* SILENCIOSO quando quem chama e o "Marcar como conferido": ele
+     aplica ate cinco campos de uma vez e ja grava tudo em seguida, entao
+     cinco avisos dizendo "clique em Salvar" seriam cinco vezes errado. */
+  if (!silencioso) toast('Preenchido. Clique em Salvar para gravar.');
 }
 /* Digitou: o botao "usar" volta a valer (o texto deixou de ser igual
    ao cadastro), o campo cresce junto com o texto e o CPF e conferido
@@ -4241,6 +4244,48 @@ function mcCpfDV(d) {
   }
   return true;
 }
+/* O QUE O LEITOR ACHOU E O CADASTRO AINDA NAO TEM — 03/09/2026.
+
+   POR QUE ISTO EXISTE. O "Marcar como conferido" gravava o que estava
+   nos CAMPOS do cadastro, e o que o leitor leu nao mora neles: mora no
+   quadro amarelo, e so desce quando alguem clica em "usar", um por um.
+   No caso da Patricia (03/09 00:40) os cinco valores estavam certos na
+   tela, ela clicou em "usar" so no CPF e marcou conferido — o CPF
+   entrou, o endereco nao, e o quadro amarelo sumiu levando junto o
+   unico caminho para trazer o resto.
+
+   O ERRO DE DESENHO ERA PEDIR A MESMA DECISAO DUAS VEZES. Marcar
+   conferido OLHANDO a lista de valores propostos ja significa "estes
+   estao certos" — e aquele e o ultimo momento em que eles podem entrar,
+   porque depois do carimbo o quadro nao existe mais.
+
+   SO CAMPO VAZIO, e essa e a trava que mantem a regra de sempre: mao
+   humana ganha de leitura de maquina. Se o campo do cadastro tem
+   qualquer coisa, nao e tocado — quem quiser trocar continua tendo o
+   botao "usar", que sobrescreve de proposito.
+
+   LE O CAMPO DA TELA e nao o mcLidos: se voce corrigiu o texto ali em
+   cima (item 315), e a correcao que desce. Quem faz isso e o proprio
+   mcUsarLido, o mesmo caminho de sempre, inclusive o digito
+   verificador do CPF. */
+function mcLidosParaCamposVazios() {
+  if (!mcLidos) return [];
+  return [
+    ['nome_completo', 'Nome completo', 'mc-nome'],
+    ['cpf', 'CPF', 'mc-cpf'],
+    ['endereco_completo', 'Endereço completo', 'mc-endereco'],
+    ['endereco_cidade', 'Cidade', 'mc-endereco-cidade'],
+    ['endereco_uf', 'UF', 'mc-endereco-uf']
+  ].filter(f => {
+    if (!mcLidos[f[0]]) return false;
+    const el = $(f[2]);
+    /* Campo que nao existe no DOM esta numa secao escondida por etapa.
+       Nao da para preencher o que nao esta na tela, e inventar um input
+       aqui seria um segundo caminho de escrita para a mesma coluna. */
+    if (!el) return false;
+    return !String(el.value || '').trim();
+  });
+}
 function mcUsarTodosLidos() {
   if (!mcLidos) return;
   [['nome_completo','mc-nome'],['cpf','mc-cpf'],['endereco_completo','mc-endereco'],
@@ -4259,12 +4304,28 @@ async function mcMarcarConferido(id) {
      NAO BLOQUEIA. Marcar conferido sem ter o CPF em maos e legitimo:
      o campo entra depois, e o contrato sai na rodada seguinte sozinho.
      O que nao pode e a pessoa sair daqui achando que acabou. */
+  /* CONFERIR PASSOU A APLICAR — 03/09/2026.
+
+     Marcar conferido olhando os valores propostos JA E a decisao de que
+     eles estao certos. Exigir um clique em "usar" antes, campo por
+     campo, era pedir a mesma decisao duas vezes — e como o quadro
+     amarelo some depois do carimbo, quem esquecesse um campo perdia o
+     valor para sempre.
+
+     A LISTA E MONTADA ANTES DO confirm E APLICADA DEPOIS. Assim o aviso
+     diz exatamente o que vai ser escrito, e cancelar nao deixa a tela
+     mexida pelas costas. */ const aplicar = mcLidosParaCamposVazios();
+  const vaiEntrar = new Set(aplicar.map(f => f[2]));
   const falta = [
     ['Nome completo', 'mc-nome'],
     ['CPF', 'mc-cpf'],
     ['Endereço completo', 'mc-endereco'],
     ['Telefone', 'mc-tel']
-  ].filter(([, id2]) => { const el = $(id2); return !el || !String(el.value || '').trim(); }).map(x => x[0]);
+  ].filter(([, id2]) => {
+    if (vaiEntrar.has(id2)) return false; // vai ser preenchido daqui a pouco
+    const el = $(id2);
+    return !el || !String(el.value || '').trim();
+  }).map(x => x[0]);
   /* O texto mudou junto com o comportamento: antes ele mandava "preencha
      e clique em Salvar" porque este botao nao gravava nada. Agora grava,
      entao o que esta na tela ja vai junto — o que falta e o que esta
@@ -4274,7 +4335,15 @@ async function mcMarcarConferido(id) {
       'sem isso nada é gerado e nada avisa. O que já está preenchido na tela vai ser gravado agora; ' +
       'o resto pode entrar depois, e o contrato sai sozinho na rodada seguinte.'
     : '';
-  if (!confirm('Confirmar que os dados do contrato foram conferidos contra os documentos?\n\nDepois disso o contrato pode ser gerado e este aviso some.' + aviso)) return;
+  /* O QUE VAI ENTRAR APARECE NO AVISO, com o valor inteiro. E a ultima
+     tela em que esses valores existem lado a lado com o documento, e
+     "gravei 3 campos" nao deixa ninguem conferir nada. */ const entrando = aplicar.length
+    ? '\n\nVAI GRAVAR do que o leitor achou (só onde o cadastro está vazio):\n' +
+      aplicar.map(f => '  • ' + f[1] + ': ' + String(($('mc-lido-' + f[0]) ? $('mc-lido-' + f[0]).value : mcLidos[f[0]]) || '').trim()).join('\n')
+    : '';
+  if (!confirm('Confirmar que os dados do contrato foram conferidos contra os documentos?\n\nDepois disso o contrato pode ser gerado e este aviso some.' + entrando + aviso)) return;
+  /* Preenche os inputs SO AGORA, depois do OK. O patch abaixo continua
+     lendo os campos da tela — um caminho de escrita so, como sempre. */ aplicar.forEach(f => mcUsarLido(f[0], f[2], true));
   /* CARIMBAR SEM GRAVAR APAGAVA O TRABALHO — caso da Suellen, 02/09.
 
      O botao gravava so o carimbo e chamava abrirCardCliente(), que
@@ -4308,7 +4377,9 @@ async function mcMarcarConferido(id) {
   if (nomeNaTela) patch.nome_completo = nomeNaTela;
   const { error } = await sb.from('crm_clientes').update(patch).eq('id', id);
   if (error) { toast('Erro ao marcar: ' + error.message, 'er'); return; }
-  toast('Marcado como conferido.');
+  toast(aplicar.length
+    ? 'Conferido. ' + aplicar.length + (aplicar.length === 1 ? ' campo gravado' : ' campos gravados') + ' do que o leitor achou.'
+    : 'Marcado como conferido.');
   abrirCardCliente(id);
 }
 async function salvarCardCliente(id){

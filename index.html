@@ -3997,11 +3997,11 @@ function mcContratoLidosHtml(c) {
        card era pego e recusado a cada minuto, enchendo o log). Entao
        quem tem que falar e a tela — aqui, onde a pessoa esta olhando. */
     const faltando = [
-      ['Nome completo', 'mc-nome', c.nome_completo],
-      ['CPF', 'mc-cpf', c.cpf],
-      ['Endereço completo', 'mc-endereco', c.endereco_completo],
-      ['Telefone', 'mc-tel', c.telefone_principal]
-    ].filter(x => !String(x[2] || '').trim()).map(x => [x[0], x[1]]);
+      ['Nome completo', 'mc-nome', c.nome_completo, 'nome_completo'],
+      ['CPF', 'mc-cpf', c.cpf, 'cpf'],
+      ['Endereço completo', 'mc-endereco', c.endereco_completo, 'endereco_completo'],
+      ['Telefone', 'mc-tel', c.telefone_principal, null]
+    ].filter(x => !String(x[2] || '').trim()).map(x => [x[0], x[1], x[3]]);
     if (faltando.length) {
       /* "Preencha o campo abaixo" estava errado: dos quatro campos, so
          o endereco fica neste bloco. O CPF esta no Acesso INSS, acima;
@@ -4012,7 +4012,27 @@ function mcContratoLidosHtml(c) {
          Botao que navega, e nao input novo aqui dentro: dois inputs
          para o mesmo campo seriam dois caminhos de escrita para a mesma
          coluna, que e como o CPF some sem ninguem entender. */
-      const botoes = faltando.map(f => `<button class="btn btns" style="padding:3px 9px;font-size:10.5px;margin:3px 4px 0 0" onclick="mcIrAoCampo('${f[1]}')">${f[0]} →</button>`).join('');
+      /* O VALOR LIDO NAO PODE FICAR PRESO — caso da Suellen, 02/09.
+
+         O quadro amarelo com os valores lidos e os botoes "usar" so
+         aparece enquanto NAO esta conferido. Depois do carimbo ele some,
+         e com ele some o unico caminho para trazer o CPF de
+         contrato_dados_lidos ate o cadastro. Foi o que aconteceu: o
+         leitor tinha acertado o CPF, o carimbo foi dado, e o CPF ficou
+         trancado no jsonb — o Esdras teve de digitar na mao, olhando o
+         documento, um numero que o sistema ja tinha.
+
+         Entao quando o campo que falta E um que o leitor leu, o botao
+         nao so leva ate ele: leva JA PREENCHIDO. O mcUsarLido() continua
+         sendo o mesmo caminho de sempre (inclusive o digito verificador
+         do CPF), e continua parando no input — quem grava e o Salvar.
+         Telefone nao tem chave porque o leitor nao le telefone: ali o
+         botao segue so levando. */ const botoes = faltando.map(f => {
+        const temLido = f[2] && L && L[f[2]];
+        return temLido
+          ? `<button class="btn btns" style="padding:3px 9px;font-size:10.5px;margin:3px 4px 0 0" onclick="mcUsarLidoEIr('${f[2]}','${f[1]}')">Usar ${esc(f[0].toLowerCase())} que o leitor achou →</button>`
+          : `<button class="btn btns" style="padding:3px 9px;font-size:10.5px;margin:3px 4px 0 0" onclick="mcIrAoCampo('${f[1]}')">${f[0]} →</button>`;
+      }).join('');
       return `<div style="background:var(--red-bg,#ffebee);border:1.5px solid var(--red,#c62828);border-radius:10px;padding:9px 12px;margin-bottom:11px;font-size:11.5px;color:var(--text2)">
         <b>⚠ O contrato NÃO vai ser gerado.</b> Está marcado como conferido, mas ${faltando.length === 1 ? 'falta' : 'faltam'}
         <b>${faltando.map(f => f[0]).join(', ')}</b> — o motor só gera com nome, CPF, endereço completo e telefone preenchidos.
@@ -4108,6 +4128,15 @@ function mcContratoLidosHtml(c) {
    achar. Se o input nao existir, a secao dele esta escondida por etapa:
    o "mostrar tudo" resolve, e o toast diz isso em vez de o botao nao
    fazer nada — botao que nao responde parece tela quebrada. */
+/* Preenche com o que o leitor leu e leva ate o campo, na ordem. As
+   duas coisas ja existiam separadas; junta-las e o que faz o valor lido
+   continuar alcancavel depois que o quadro amarelo some. Preenche
+   primeiro para o campo ja estar com o valor quando o olho chegar
+   nele. */
+function mcUsarLidoEIr(chave, inputId) {
+  mcUsarLido(chave, inputId);
+  mcIrAoCampo(inputId);
+}
 function mcIrAoCampo(inputId) {
   const el = $(inputId);
   if (!el) { toast('O campo está numa seção escondida nesta etapa — clique em "mostrar tudo" no topo do cartão', 'er'); return; }
@@ -4236,16 +4265,48 @@ async function mcMarcarConferido(id) {
     ['Endereço completo', 'mc-endereco'],
     ['Telefone', 'mc-tel']
   ].filter(([, id2]) => { const el = $(id2); return !el || !String(el.value || '').trim(); }).map(x => x[0]);
-  const aviso = falta.length
+  /* O texto mudou junto com o comportamento: antes ele mandava "preencha
+     e clique em Salvar" porque este botao nao gravava nada. Agora grava,
+     entao o que esta na tela ja vai junto — o que falta e o que esta
+     vazio de verdade, e e isso que o aviso tem que dizer. */ const aviso = falta.length
     ? '\n\nATENÇÃO: ' + (falta.length === 1 ? 'falta ' : 'faltam ') + falta.join(', ') +
       '. O motor só gera o contrato com nome, CPF, endereço completo e telefone preenchidos — ' +
-      'sem isso nada é gerado e nada avisa. Preencha e clique em Salvar.'
+      'sem isso nada é gerado e nada avisa. O que já está preenchido na tela vai ser gravado agora; ' +
+      'o resto pode entrar depois, e o contrato sai sozinho na rodada seguinte.'
     : '';
   if (!confirm('Confirmar que os dados do contrato foram conferidos contra os documentos?\n\nDepois disso o contrato pode ser gerado e este aviso some.' + aviso)) return;
-  const { error } = await sb.from('crm_clientes').update({
+  /* CARIMBAR SEM GRAVAR APAGAVA O TRABALHO — caso da Suellen, 02/09.
+
+     O botao gravava so o carimbo e chamava abrirCardCliente(), que
+     rebusca a ficha no banco e remonta o cartao. Tudo que estivesse nos
+     campos e ainda nao tivesse sido salvo morria ali. Quem clica em
+     "usar" no CPF lido e depois neste botao — que e o azul, o primeiro,
+     a esquerda, a ordem natural de clique — via a tela dizer "falta o
+     CPF" trinta segundos depois de confirmar que o CPF estava certo.
+
+     ENTAO ELE GRAVA OS QUATRO CAMPOS DO CONTRATO junto com o carimbo,
+     num UPDATE so. Nao e um segundo caminho de escrita: sao os MESMOS
+     inputs do Salvar, lidos no mesmo instante, escritos numa vez so —
+     e o carimbo sem os campos e que era meia gravacao.
+
+     vCampo() e nao $().value, pela mesma razao de sempre: com a secao
+     escondida por etapa o input nem existe, e undefined some do JSON em
+     vez de gravar null por cima do que ja estava la.
+
+     O NOME SO ENTRA SE TIVER TEXTO. Ele e obrigatorio na ficha, entao
+     null ali seria pior que nao mexer — e quem chegou neste botao ja
+     tem nome, porque o cartao nao abre sem ele. */ const patch = {
     contrato_dados_conferido_em: new Date().toISOString(),
-    contrato_dados_conferido_por: U ? U.id : null
-  }).eq('id', id);
+    contrato_dados_conferido_por: U ? U.id : null,
+    cpf: vCampo('mc-cpf'),
+    endereco_completo: vCampo('mc-endereco'),
+    endereco_cidade: vCampo('mc-endereco-cidade'),
+    endereco_uf: vCampo('mc-endereco-uf'),
+    telefone_principal: vCampo('mc-tel')
+  };
+  const nomeNaTela = $('mc-nome') ? $('mc-nome').value.trim() : '';
+  if (nomeNaTela) patch.nome_completo = nomeNaTela;
+  const { error } = await sb.from('crm_clientes').update(patch).eq('id', id);
   if (error) { toast('Erro ao marcar: ' + error.message, 'er'); return; }
   toast('Marcado como conferido.');
   abrirCardCliente(id);

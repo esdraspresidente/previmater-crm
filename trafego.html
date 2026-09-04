@@ -108,6 +108,21 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 .bbar{width:100%;max-width:34px;background:linear-gradient(180deg,#00B4D8,#0A9396);border-radius:5px 5px 0 0;min-height:3px;}
 .blab{font-size:9px;color:var(--text3);font-weight:600;}
 
+/* mapa de calor de horario — item 441 */
+.hmwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
+.hmgrid{display:grid;grid-template-columns:34px repeat(24,minmax(22px,1fr)) 46px;gap:2px;min-width:660px;}
+.hmh{font-size:9px;color:var(--text3);font-weight:700;text-align:center;padding-bottom:2px;}
+.hmd{font-size:10px;color:var(--text2);font-weight:700;display:flex;align-items:center;}
+.hmc{aspect-ratio:1;border-radius:4px;background:#F3FAFA;display:flex;align-items:center;justify-content:center;
+     font-size:9px;font-weight:700;color:#0D2B2B;min-height:22px;}
+.hmc.z{color:#C8E3E3;}
+.hmt{font-size:10px;font-weight:800;color:var(--text2);display:flex;align-items:center;justify-content:flex-end;padding-right:2px;}
+.hmleg{display:flex;align-items:center;gap:7px;margin-top:12px;font-size:10px;color:var(--text3);font-weight:600;}
+.hmleg i{width:17px;height:11px;border-radius:3px;display:block;}
+.hmres{font-size:12px;color:var(--text2);line-height:1.6;margin-top:14px;
+       background:#F3FAFA;border-radius:10px;padding:11px 13px;}
+.hmres b{color:var(--text);}
+
 /* funil */
 .fl{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #F0F7F7;}
 .fl:last-child{border-bottom:none;}
@@ -205,6 +220,18 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
       <div class="csub">Pessoa que mandou a primeira mensagem naquele dia. Um número por pessoa, não por mensagem.</div>
       <div class="linha7" id="linha7">—</div>
       <div class="bars" id="bars"></div>
+    </div>
+
+    <div class="card">
+      <div class="ctopo">
+        <div class="ctit">A que horas as leads chegam</div>
+        <button class="btcsv" onclick="baixarHorarios()">Exportar CSV</button>
+      </div>
+      <div class="csub">Hora da <b>primeira</b> mensagem de cada pessoa, no horário de Brasília — é quando ela chega, não quando conversa. Segue o período escolhido lá em cima.</div>
+      <div class="fbotoes" id="fhmodo" style="margin-bottom:14px;"></div>
+      <div class="hmwrap"><div class="hmgrid" id="heat"></div></div>
+      <div class="hmleg" id="heatleg"></div>
+      <div class="hmres" id="heatres">—</div>
     </div>
 
     <div class="card">
@@ -357,6 +384,8 @@ async function abrir(){
 // Supabase é cobrado por tráfego de saída.
 // ------------------------------------------------------------
 let LINHAS=[];           // uma linha por dia, direto da view
+let HORAS=[];            // uma linha por dia, com o array das 24 horas
+let HMODO='total';       // 'total' ou 'media' — ver desenharHeat()
 let META=[];             // uma linha por dia, gasto do Meta
 let ESTOQUE=[];          // uma linha por etapa do funil
 let DESCARTES=[];        // uma linha por dia e por motivo de descarte
@@ -370,14 +399,19 @@ const PERIODOS=[['hoje','Hoje'],['ontem','Ontem'],['7','7 dias'],['15','15 dias'
 const COMPARACOES=[['0','Não comparar'],['1','Dia anterior'],['7','Semana anterior'],['15','Quinzena anterior'],['30','Mês anterior']];
 
 async function carregar(){
-  const [dia,estoque,meta,desc,canc,anun]=await Promise.all([
+  const [dia,hora,estoque,meta,desc,canc,anun]=await Promise.all([
     sb.from('vw_trafego_dia').select('dia,novos_contatos,contratos_enviados,contratos_assinados').order('dia',{ascending:true}).limit(400),
+    /* Uma linha por dia com as 24 horas num array. Linha por hora seria
+       mais simples de ler e estouraria o corte de 1.000 do PostgREST em
+       uns três meses — calado, mostrando meio mapa. */
+    sb.from('vw_trafego_hora').select('dia,dow,total,horas').order('dia',{ascending:true}).limit(400),
     sb.from('vw_trafego_estoque').select('ordem,lista,qtd,qtd_pre,qtd_adm').order('ordem',{ascending:true}).limit(30),
     sb.from('vw_trafego_meta_dia').select('dia,gasto,alcance,cliques,conversas').order('dia',{ascending:true}).limit(400),
     sb.from('vw_trafego_descartes').select('dia,codigo,rotulo,ordem,qtd').order('dia',{ascending:true}).limit(900),
     sb.from('vw_contratos_cancelados').select('dia,codigo,rotulo,ordem,qtd').order('dia',{ascending:true}).limit(900),
     sb.from('vw_trafego_anuncio').select('criativo,leads,nunca_respondeu,descartada,elegivel,gasto,por_lead,por_elegivel,pct_descarte,nao_classificada').order('gasto',{ascending:false}).limit(200)
   ]);
+  if(!hora.error && Array.isArray(hora.data)) HORAS=hora.data;
   if(!desc.error && Array.isArray(desc.data)) DESCARTES=desc.data;
   if(!canc.error && Array.isArray(canc.data)) CANCELADOS=canc.data;
   if(!anun.error && Array.isArray(anun.data)){ ANUNCIOS=anun.data; desenharAnuncios(); }
@@ -388,6 +422,7 @@ async function carregar(){
   // aqui — nenhum clique no filtro volta ao banco.
   if(!dia.error && Array.isArray(dia.data)){ LINHAS=dia.data; montarFiltros(); aplicar(); }
   if(!estoque.error && Array.isArray(estoque.data)){ ESTOQUE=estoque.data; montarVariantes(); desenharFunil(); }
+  montarModosHeat();
 }
 
 // ---------- datas ----------
@@ -499,6 +534,9 @@ function aplicar(){
   // KPIs de cima.
   desenharDescartes();
   desenharCancelados();
+  // O mapa de calor segue o mesmo período dos KPIs, pelo mesmo motivo
+  // dos descartes: redesenha a cada clique, não uma vez no carregar.
+  desenharHeat(j);
 }
 
 const brl=v=>'R$ '+Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -615,6 +653,168 @@ function desenharDias(quantos){
          + '<div class="bbar" style="height:'+alt+'px"></div>'
          + '<div class="blab">'+fmtBR(l.dia)+'</div></div>';
   }).join('');
+}
+
+/* ============================================================
+   MAPA DE CALOR DE HORÁRIO — item 441
+
+   A pergunta do Rafa é «que hora entra mais lead, e que dia da semana
+   entra mais», para ele saber quando o anúncio precisa estar rodando
+   forte e o Esdras saber quando precisa estar disponível.
+
+   TOTAL E MÉDIA SÃO BOTÕES SEPARADOS, e não escolha minha, porque as
+   duas mentem em situações diferentes. Numa janela de 15 dias entram
+   três segundas e duas terças: pelo TOTAL a segunda ganha só por
+   aparecer uma vez a mais. Pela MÉDIA a comparação é justa, mas um dia
+   isolado de pico vira «média alta» com uma amostra só. O padrão é
+   total, que é o número que existe de fato; a média está a um clique
+   para quando a pergunta for comparar dia com dia.
+
+   A ESCALA DE COR É POR MÁXIMO DA JANELA, não fixa. Com 476 contatos em
+   24 dias a célula média fica abaixo de 1 — escala fixa pintaria o mapa
+   inteiro de branco e não diria nada.
+   ============================================================ */
+const DOW_NOME=['dom','seg','ter','qua','qui','sex','sáb'];
+const HMODOS=[['total','Total no período'],['media','Média por dia']];
+
+/** As linhas de horário dentro da janela, já somadas por dia da semana e
+ *  hora. Devolve também quantas vezes cada dia da semana apareceu, que é
+ *  o divisor da média — e o que impede comparar 3 segundas com 2 terças. */
+function somarHoras(ini,fim){
+  const soma=Array.from({length:7},()=>new Array(24).fill(0));
+  const ocorrencias=new Array(7).fill(0);
+  let total=0;
+  for(const l of HORAS){
+    if(l.dia<ini||l.dia>fim) continue;
+    const d=Number(l.dow)||0;
+    ocorrencias[d]++;
+    const h=Array.isArray(l.horas)?l.horas:[];
+    for(let i=0;i<24;i++){ const v=Number(h[i])||0; soma[d][i]+=v; total+=v; }
+  }
+  return {soma,ocorrencias,total};
+}
+
+function montarModosHeat(){
+  const el=$('fhmodo');
+  if(!el) return;
+  el.innerHTML=HMODOS.map(([v,r])=>
+    '<button class="fb'+(v===HMODO?' on':'')+'" data-v="'+v+'">'+r+'</button>').join('');
+  el.querySelectorAll('.fb').forEach(b=>b.onclick=()=>{HMODO=b.dataset.v;montarModosHeat();aplicar();});
+}
+
+/* Cor da célula. Fundo claro fixo e a tinta só na opacidade: assim o
+   zero não vira buraco branco no meio da grade e o número continua
+   legível em cima de qualquer intensidade. */
+function corHeat(v,teto){
+  if(!v) return 'background:#F3FAFA';
+  const f=Math.min(1,v/teto);
+  return 'background:rgba(10,147,150,'+(0.10+f*0.80).toFixed(3)+');color:'+(f>0.55?'#fff':'#0D2B2B');
+}
+
+function desenharHeat(j){
+  const box=$('heat');
+  if(!box) return;
+  const{soma,ocorrencias,total}=somarHoras(j.ini,j.fim);
+  const media=HMODO==='media';
+  const val=(d,h)=>{
+    if(!media) return soma[d][h];
+    return ocorrencias[d]? soma[d][h]/ocorrencias[d] : 0;
+  };
+  const rot=v=>{
+    if(!v) return '0';
+    if(!media) return String(Math.round(v));
+    return v>=1 ? v.toFixed(1).replace('.',',') : v.toFixed(1).replace('.',',');
+  };
+  let teto=0;
+  for(let d=0;d<7;d++) for(let h=0;h<24;h++) teto=Math.max(teto,val(d,h));
+  teto=teto||1;
+
+  let html='<div class="hmh"></div>';
+  for(let h=0;h<24;h++) html+='<div class="hmh">'+h+'</div>';
+  html+='<div class="hmh">dia</div>';
+  for(let d=0;d<7;d++){
+    html+='<div class="hmd">'+DOW_NOME[d]+'</div>';
+    let linha=0;
+    for(let h=0;h<24;h++){
+      const v=val(d,h);
+      linha+=v;
+      const t=DOW_NOME[d]+' '+String(h).padStart(2,'0')+'h — '+rot(v)+(media?' por dia':'');
+      html+='<div class="hmc'+(v?'':' z')+'" style="'+corHeat(v,teto)+'" title="'+t+'">'+rot(v)+'</div>';
+    }
+    html+='<div class="hmt">'+rot(linha)+'</div>';
+  }
+  box.innerHTML=html;
+
+  $('heatleg').innerHTML='<span>menos</span>'
+    +[0.10,0.30,0.50,0.70,0.90].map(o=>'<i style="background:rgba(10,147,150,'+o+')"></i>').join('')
+    +'<span>mais</span><span style="margin-left:auto">'
+    +(media?'média por ocorrência do dia da semana':'total no período')+'</span>';
+
+  escreverResumoHeat(soma,ocorrencias,total,j);
+}
+
+/* O mapa mostra tudo; esta frase diz o que fazer com ele. Sem ela o
+   card vira decoração: ninguém lê 168 células procurando o pico. */
+function escreverResumoHeat(soma,ocorrencias,total,j){
+  const el=$('heatres');
+  if(!el) return;
+  if(!total){ el.innerHTML='Nenhum contato novo nesse período.'; return; }
+  const porHora=new Array(24).fill(0);
+  for(let d=0;d<7;d++) for(let h=0;h<24;h++) porHora[h]+=soma[d][h];
+
+  /* O melhor BLOCO de três horas, e não a melhor hora sozinha. Com este
+     volume a hora campeã muda de semana para semana por acaso; a faixa
+     de três horas é estável e é a unidade em que se decide escala de
+     anúncio e plantão de atendimento. */
+  let melhorIni=0,melhorSoma=-1;
+  for(let h=0;h<=21;h++){
+    const s=porHora[h]+porHora[h+1]+porHora[h+2];
+    if(s>melhorSoma){ melhorSoma=s; melhorIni=h; }
+  }
+  const pctFaixa=Math.round((melhorSoma/total)*100);
+
+  const comercial=porHora.slice(8,19).reduce((a,b)=>a+b,0);
+  const noite=porHora.slice(19,24).reduce((a,b)=>a+b,0);
+  const madrugada=porHora.slice(0,6).reduce((a,b)=>a+b,0);
+
+  const medias=[];
+  for(let d=0;d<7;d++) if(ocorrencias[d]) medias.push([d,soma[d].reduce((a,b)=>a+b,0)/ocorrencias[d],ocorrencias[d]]);
+  medias.sort((x,y)=>y[1]-x[1]);
+  const cheio=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+  const melhorD=medias[0], piorD=medias[medias.length-1];
+  const poucaAmostra=medias.some(m=>m[2]<3);
+
+  el.innerHTML=
+     '<b>'+total+'</b> contatos novos entre '+fmtBR(j.ini)+' e '+fmtBR(j.fim)+'. '
+    +'A faixa mais cheia é <b>'+melhorIni+'h às '+(melhorIni+3)+'h</b>, com '+pctFaixa+'% de tudo.<br>'
+    +'Comercial (8h–19h): <b>'+Math.round(comercial/total*100)+'%</b> · '
+    +'noite (19h–meia-noite): <b>'+Math.round(noite/total*100)+'%</b> · '
+    +'madrugada (0h–6h): <b>'+Math.round(madrugada/total*100)+'%</b>.'
+    +(melhorD&&piorD&&melhorD[0]!==piorD[0]
+      ? '<br>Por dia da semana, <b>'+cheio[melhorD[0]]+'</b> traz mais ('
+        +melhorD[1].toFixed(1).replace('.',',')+' por dia) e <b>'+cheio[piorD[0]]+'</b> menos ('
+        +piorD[1].toFixed(1).replace('.',',')+' por dia).'
+      : '')
+    +(j.fim===hojeISO()&&j.ini!==j.fim
+      ? '<br>Hoje ainda está correndo e entra parcial — o dia da semana de hoje aparece mais fraco do que é.'
+      : '')
+    +(poucaAmostra
+      ? '<br><span style="color:var(--yellow)">Algum dia da semana aparece menos de 3 vezes nesta janela — comparar dia com dia aqui ainda é chute. Aumente o período.</span>'
+      : '');
+}
+
+function baixarHorarios(){
+  const j=janela(PERIODO);
+  const{soma,ocorrencias}=somarHoras(j.ini,j.fim);
+  /* baixar() recebe linha como ARRAY e ele mesmo escapa cada campo com o
+     csvCampo — juntar com ponto e vírgula aqui passaria a linha inteira
+     como um campo só. */
+  const linhas=[['dia_semana','ocorrencias_no_periodo','hora','contatos','media_por_dia']];
+  for(let d=0;d<7;d++) for(let h=0;h<24;h++){
+    const m=ocorrencias[d]? soma[d][h]/ocorrencias[d] : 0;
+    linhas.push([DOW_NOME[d],ocorrencias[d],h,soma[d][h],num(m,2)]);
+  }
+  baixar('horarios_'+j.ini+'_a_'+j.fim+'.csv',linhas);
 }
 
 const VARIANTES=[['qtd','Geral'],['qtd_pre','PRÉ'],['qtd_adm','ADM']];

@@ -2025,6 +2025,47 @@ function mcCarimbo(ts){
    proximo dia util. Espelha o prazoEfetivoGPS do motor — os dois
    precisam concordar, senao a tela promete um dia e a cobranca sai em
    outro. */
+/* CONFERENCIA DA LINHA DIGITAVEL — espelho do linhaGpsConfere do motor.
+   Os dois precisam concordar: se a tela aceitar um numero que o motor
+   recusa, o campo fica preenchido e o balao do codigo nunca sai, sem
+   ninguem entender por que. Sao 48 digitos em quatro blocos de 11 mais
+   verificador; testa modulo 10 e modulo 11 e aceita se um fechar os
+   quatro, para nao depender do identificador de valor. */
+function mcDvMod10(b){
+  let soma=0;
+  for(let i=b.length-1,pos=0;i>=0;i--,pos++){
+    let v=Number(b[i])*(pos%2===0?2:1);
+    if(v>9)v-=9;
+    soma+=v;
+  }
+  return (10-soma%10)%10;
+}
+function mcDvMod11(b){
+  const pesos=[2,3,4,5,6,7,8,9];
+  let soma=0;
+  for(let i=b.length-1,pos=0;i>=0;i--,pos++)soma+=Number(b[i])*pesos[pos%8];
+  const d=11-soma%11;
+  return (d===10||d===11||d===0||d===1)?0:d;
+}
+function mcLinhaGpsConfere(dig){
+  if(!/^\d{48}$/.test(dig||''))return false;
+  for(const dv of [mcDvMod10,mcDvMod11]){
+    let ok=true;
+    for(let b=0;b<4;b++){
+      if(String(dv(dig.slice(b*12,b*12+11)))!==dig[b*12+11]){ok=false;break;}
+    }
+    if(ok)return true;
+  }
+  return false;
+}
+/* So para ler na tela. O que vai para a cliente e para o banco continua
+   sendo a sequencia crua de 48 digitos, sem espaco: e ela que se cola no
+   aplicativo. */
+function mcLinhaGpsBonita(dig){
+  const d=String(dig||'').replace(/\D/g,'');
+  if(d.length!==48)return d;
+  return [d.slice(0,12),d.slice(12,24),d.slice(24,36),d.slice(36,48)].join(' ');
+}
 function mcPrazoGps(iso){
   const p=String(iso||'').slice(0,10).split('-');
   if(p.length!==3)return null;
@@ -2067,14 +2108,122 @@ function mcGpsHtml(c){
   const pago = c.gps_paga_em
     ? `<button class="btn btns" style="padding:4px 10px;font-size:11px" onclick="marcarGpsPaga('${c.id}',false)">Desfazer pagamento</button>`
     : `<button class="btn btnp" style="padding:4px 10px;font-size:11px" onclick="marcarGpsPaga('${c.id}',true)">Marcar guia paga</button>`;
+  /* A LINHA DIGITAVEL. O motor le do PDF e confere os quatro
+     verificadores antes de gravar aqui; quando nao consegue, o campo
+     fica vazio com a nota no card e este e o lugar de digitar na mao.
+     O que a cliente recebe e exatamente o que esta neste campo. */
+  const linhaCrua=String(c.gps_linha_digitavel||'').replace(/\D/g,'');
+  const linhaOk=mcLinhaGpsConfere(linhaCrua);
+  let dicaLinha;
+  if(!linhaCrua){
+    dicaLinha = c.gps_linha_lida_em
+      ? '<span style="color:var(--orange,#b26a00)">Não consegui ler o código do PDF. Digite aqui para ele ir junto com a guia.</span>'
+      : 'Vou ler o código do PDF na próxima rodada.';
+  }else if(!linhaOk){
+    dicaLinha = '<span style="color:var(--red,#c62828)">Este número não fecha o dígito verificador — confira antes, porque assim ele NÃO é enviado.</span>';
+  }else{
+    dicaLinha = '✅ Confere. Vai numa mensagem sozinha, depois da guia, para a cliente conseguir copiar.';
+  }
+  const campoLinha = c.gps_anexo ? `
+    <div class="fld" style="grid-column:1/-1">
+      <label>Linha digitável do código de barras</label>
+      <input type="text" id="mc-gps-linha" inputmode="numeric" placeholder="48 dígitos"
+             value="${escA(mcLinhaGpsBonita(linhaCrua))}" oninput="mcLinhaGpsDica(this)"/>
+      <div class="fhint" id="mc-gps-linhadica" style="margin-top:3px">${dicaLinha}</div>
+    </div>` : '';
+  /* ENVIO AVULSO. Manda a guia e, se o numero conferir, o codigo logo
+     atras — os dois pela mesma fila do motor, na ordem certa. NAO
+     carimba gps_enviada_em de proposito: o carimbo cancelaria a
+     mensagem automatica que explica o prazo, e quem clica aqui esta
+     reenviando, nao substituindo a esteira. */
+  const enviar = c.gps_anexo
+    ? `<button class="btn btns" style="padding:4px 10px;font-size:11px" onclick="enviarGuiaGPSAgora('${c.id}')">Enviar guia no chat</button>`
+    : '';
   return mcSecao('gps','🧾 Contribuição (GPS)',`
     <div class="fg">
       <div class="fld"><label>Guia</label>${anexo}</div>
       <div class="fld"><label>Vencimento na guia</label><input type="date" id="mc-gps-venc" value="${escA(String(c.gps_vencimento||'').slice(0,10))}"/></div>
+      ${campoLinha}
     </div>
     <div class="fhint" style="margin-top:7px;color:${cor}">${estado}</div>
     <div class="fhint" style="margin-top:4px">É uma contribuição só, nunca mensalidade. Paga depois do vencimento, ela conta para aposentadoria e não para o salário-maternidade.</div>`,
-    {acoes:(c.gps_anexo?pago:'')});
+    {acoes:(c.gps_anexo?enviar+' '+pago:'')});
+}
+/* A conferencia aparece enquanto se digita, e nao depois de salvar:
+   quem digita 48 numeros a mao erra, e descobrir isso no dia do
+   vencimento nao adianta mais. */
+function mcLinhaGpsDica(el){
+  const d=$('mc-gps-linhadica');
+  if(!d)return;
+  const dig=String(el.value||'').replace(/\D/g,'');
+  if(!dig){d.innerHTML='Digite os 48 dígitos, ou deixe vazio para a guia sair sem o código.';return;}
+  if(dig.length!==48){d.innerHTML='<span style="color:var(--text3)">'+dig.length+' de 48 dígitos.</span>';return;}
+  d.innerHTML=mcLinhaGpsConfere(dig)
+    ? '✅ Confere.'
+    : '<span style="color:var(--red,#c62828)">Não fecha o dígito verificador — confira o número na guia.</span>';
+}
+/* ENVIO AVULSO DA GUIA. Duas linhas na fila de saida, na ordem: o PDF e
+   depois o codigo sozinho. A ordem e garantida por criado_em, que e como
+   a fila manual ordena — por isso os dois inserts sao sequenciais e nao
+   um insert de duas linhas. */
+async function enviarGuiaGPSAgora(clienteId){
+  if(!mcChatCanal){toast('Defina o Canal WhatsApp da cliente antes de enviar','er');return;}
+  if(!mcChatChave){toast('Esta cliente não tem telefone válido cadastrado','er');return;}
+  const{data:c,error:ec}=await sb.from('crm_clientes')
+    .select('gps_anexo,gps_vencimento,gps_linha_digitavel,gps_enviada_em').eq('id',clienteId).single();
+  if(ec||!c){toast('Erro ao ler o card: '+(ec?ec.message:''),'er');return;}
+  if(!c.gps_anexo){toast('Não há guia anexada neste card','er');return;}
+  /* O campo da tela ganha do banco: se o Esdras acabou de digitar o
+     numero e ainda nao salvou, e esse que ele quer mandar. */
+  const daTela=$('mc-gps-linha')?String($('mc-gps-linha').value||'').replace(/\D/g,''):'';
+  const linha=daTela||String(c.gps_linha_digitavel||'').replace(/\D/g,'');
+  const linhaOk=mcLinhaGpsConfere(linha);
+  const ext=(String(c.gps_anexo).split('.').pop()||'pdf').toLowerCase();
+  const nome='Guia INSS '+(c.gps_vencimento?mcDataBR(c.gps_vencimento).replace(/\//g,'-'):'PreviMater')+'.'+ext;
+  let aviso='Enviar a guia para a cliente agora?';
+  aviso += linhaOk
+    ? '\n\nVai a guia e, na mensagem seguinte, o código de barras sozinho.'
+    : (linha
+       ? '\n\nATENÇÃO: o número digitado não fecha o dígito verificador. Vai SÓ a guia, sem o código.'
+       : '\n\nVai só a guia — não há código de barras conferido neste card.');
+  if(!c.gps_enviada_em)aviso+='\n\nA mensagem automática com a explicação do prazo continua marcada para sair; isto aqui não substitui ela.';
+  if(!confirm(aviso))return;
+  const base='crm:'+Date.now()+':'+Math.random().toString(36).slice(2,8);
+  const{error}=await sb.from('crm_mensagens').insert({
+    cliente_id:clienteId,
+    telefone_chave:mcChatChave,
+    telefone_bruto:mcChatTel||null,
+    canal:mcChatCanal,
+    direcao:'saida',
+    autor_tipo:'humano',
+    usuario_id:U.id,
+    tipo:anexoEhImagem(nome)?'imagem':'documento',
+    midia_caminho:c.gps_anexo,
+    midia_nome:nome,
+    midia_mime:mimeDoNome(nome),
+    id_externo:base+':guia',
+    status:'pendente_envio'
+  });
+  if(error){toast('Erro ao enfileirar a guia: '+error.message,'er');return;}
+  if(linhaOk){
+    const{error:el}=await sb.from('crm_mensagens').insert({
+      cliente_id:clienteId,
+      telefone_chave:mcChatChave,
+      telefone_bruto:mcChatTel||null,
+      canal:mcChatCanal,
+      direcao:'saida',
+      autor_tipo:'humano',
+      usuario_id:U.id,
+      tipo:'texto',
+      texto:linha,
+      id_externo:base+':codigo',
+      status:'pendente_envio'
+    });
+    if(el)toast('A guia foi enfileirada, mas o código não: '+el.message,'er');
+  }
+  toast(linhaOk?'Guia e código na fila — saem em até 1 minuto':'Guia na fila — sai em até 1 minuto','ok');
+  if(mcAbaAtual==='chat'){mcChatAssinatura='';carregarChat(clienteId);}
+  registrarAtividade(clienteId,'enviou a guia da contribuição'+(linhaOk?' com o código de barras':'')+' para a cliente');
 }
 async function uploadGuiaGPS(input,clienteId){
   const f=(input.files||[])[0];input.value='';
@@ -2082,7 +2231,10 @@ async function uploadGuiaGPS(input,clienteId){
   const caminho=`${clienteId}/gps/${Date.now()}_${f.name.replace(/[^\w.\-]/g,'_')}`;
   const{error:eu}=await sb.storage.from(ANEXO_BUCKET).upload(caminho,f);
   if(eu){toast('Erro ao enviar a guia: '+eu.message,'er');return;}
-  const{error}=await sb.from('crm_clientes').update({gps_anexo:caminho}).eq('id',clienteId);
+  /* Guia nova, numero novo. Zerar tambem o carimbo e o que faz o motor
+     ler o PDF de novo — sem isso ele veria o carimbo antigo e nunca
+     tentaria. */
+  const{error}=await sb.from('crm_clientes').update({gps_anexo:caminho,gps_linha_digitavel:null,gps_linha_lida_em:null}).eq('id',clienteId);
   if(error){toast('Erro ao gravar a guia: '+error.message,'er');return;}
   toast('Guia anexada','ok');
   registrarAtividade(clienteId,'anexou a guia da contribuição');
@@ -2090,7 +2242,7 @@ async function uploadGuiaGPS(input,clienteId){
 }
 async function removerGuiaGPS(clienteId){
   if(!confirm('Remover a guia deste card?\n\nSe ela já foi enviada, a mensagem que a cliente recebeu continua lá, mas o link para de funcionar.'))return;
-  const{error}=await sb.from('crm_clientes').update({gps_anexo:null}).eq('id',clienteId);
+  const{error}=await sb.from('crm_clientes').update({gps_anexo:null,gps_linha_digitavel:null,gps_linha_lida_em:null}).eq('id',clienteId);
   if(error){toast('Erro ao remover: '+error.message,'er');return;}
   toast('Guia removida','ok');
   registrarAtividade(clienteId,'removeu a guia da contribuição');
@@ -4608,6 +4760,14 @@ async function salvarCardCliente(id){
        e undefined some do JSON em vez de gravar null por cima de uma
        guia que ja estava marcada. Mesma armadilha do CPF. */
     gps_vencimento:vCampo('mc-gps-venc'),
+    /* So digitos: o campo aceita espaco para dar para conferir na tela,
+       mas o que vai para a cliente e para o banco e a sequencia crua —
+       e ela que se cola no aplicativo do banco. */
+    gps_linha_digitavel:(function(){
+      const v=vCampo('mc-gps-linha');
+      if(v===undefined)return undefined;
+      return (String(v||'').replace(/\D/g,''))||null;
+    })(),
     documento_pendente:$('mc-docpend').value.trim()||null,
     valor_beneficio_esperado:m2f($('mc-vb'))||null,
     valor_honorarios:m2f($('mc-vh'))||null,

@@ -2024,18 +2024,14 @@ function mcGpsHtml(c){
   const pago = c.gps_paga_em
     ? `<button class="btn btns" style="padding:4px 10px;font-size:11px" onclick="marcarGpsPaga('${c.id}',false)">Desfazer pagamento</button>`
     : `<button class="btn btnp" style="padding:4px 10px;font-size:11px" onclick="marcarGpsPaga('${c.id}',true)">Marcar guia paga</button>`;
-  return `<div class="mcsens" style="background:var(--bg2,#f6f7f8);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="font-size:12px;font-weight:700;color:var(--text2)">🧾 Contribuição (GPS)</div>
-      ${c.gps_anexo?pago:''}
-    </div>
+  return mcSecao('gps','🧾 Contribuição (GPS)',`
     <div class="fg">
       <div class="fld"><label>Guia</label>${anexo}</div>
       <div class="fld"><label>Vencimento na guia</label><input type="date" id="mc-gps-venc" value="${escA(String(c.gps_vencimento||'').slice(0,10))}"/></div>
     </div>
     <div class="fhint" style="margin-top:7px;color:${cor}">${estado}</div>
-    <div class="fhint" style="margin-top:4px">É uma contribuição só, nunca mensalidade. Paga depois do vencimento, ela conta para aposentadoria e não para o salário-maternidade.</div>
-  </div>`;
+    <div class="fhint" style="margin-top:4px">É uma contribuição só, nunca mensalidade. Paga depois do vencimento, ela conta para aposentadoria e não para o salário-maternidade.</div>`,
+    {acoes:(c.gps_anexo?pago:'')});
 }
 async function uploadGuiaGPS(input,clienteId){
   const f=(input.files||[])[0];input.value='';
@@ -2933,19 +2929,16 @@ function mcTriagemHtml(dados){
   // mesmo, com o nome cru. Melhor feio que escondido.
   const sobrando=Object.keys(d).filter(k=>!PROIBIDAS.includes(String(k).toLowerCase())&&!TRIAGEM_ROTULOS.some(([r])=>r===k)&&String(d[k]??'').trim()!=='');
   if(!conhecidas.length&&!sobrando.length){
-    return `<div class="mcsens" style="background:var(--bg2,#f6f7f8);border:1.5px dashed var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
-      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px">🔎 Triagem</div>
-      <div class="fhint">A Samara ainda não coletou nada desta cliente.</div>
-    </div>`;
+    return mcSecao('triagem','🔎 Triagem',
+      `<div class="fhint">A Samara ainda não coletou nada desta cliente.</div>`,
+      {estilo:'background:var(--bg2,#f6f7f8);border:1.5px dashed var(--border)'});
   }
   const linha=(rot,val)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:13px">
       <span style="color:var(--text3)">${esc(rot)}</span><b>${esc(String(val))}</b></div>`;
-  return `<div class="mcsens" style="background:var(--bg2,#f6f7f8);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
-    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">🔎 Triagem — o que a Samara coletou</div>
+  return mcSecao('triagem','🔎 Triagem — o que a Samara coletou',`
     ${conhecidas.map(([k,rot])=>linha(rot,d[k])).join('')}
     ${sobrando.map(k=>linha(k,d[k])).join('')}
-    <div class="fhint" style="margin-top:7px">Coletado na conversa. Para corrigir, fale com a cliente ou ajuste em <code>samara_dados</code>.</div>
-  </div>`;
+    <div class="fhint" style="margin-top:7px">Coletado na conversa. Para corrigir, fale com a cliente ou ajuste em <code>samara_dados</code>.</div>`);
 }
 /* De qual anuncio esta mae veio.
    Bloco SO DE LEITURA, e de proposito: o dado e carimbado pelo webhook
@@ -2973,19 +2966,76 @@ function blocoAnuncioHtml(c){
       ? `<div class="fhint" style="margin-top:7px">Atribuição no Meta vale por mais ${faltam} dia${faltam===1?'':'s'}.</div>`
       : `<div class="fhint" style="margin-top:7px">Passou dos 7 dias do clique: mudança de etapa daqui em diante não conta mais para o anúncio.</div>`;
   }
-  return `<div class="mcsens" style="background:var(--bg2,#f6f7f8);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
-    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">📣 Veio de anúncio</div>
+  return mcSecao('anuncio','📣 Veio de anúncio',`
     ${linha('Anúncio (ID)',c.anuncio_id)}
     ${linha('Plataforma',app)}
     ${c.anuncio_codigo?linha('Código no texto',c.anuncio_codigo):''}
     ${linha('Clicou em',quando)}
     ${janela}
-    <div class="fhint" style="margin-top:5px">Preenchido sozinho na primeira mensagem. O nome do criativo está no painel de tráfego.</div>
+    <div class="fhint" style="margin-top:5px">Preenchido sozinho na primeira mensagem. O nome do criativo está no painel de tráfego.</div>`);
+}
+/* SECOES QUE FECHAM — 04/09/2026.
+
+   O cartao empilha ate seis blocos coloridos (Triagem, Acesso INSS,
+   Contrato, Contribuicao, Pagamentos, Veio de anuncio) e em card
+   antigo isso vira rolagem longa para chegar num campo de duas linhas.
+   Cada bloco agora fecha no clique do titulo.
+
+   FECHA COM display:none, NAO tira do DOM. Salvar e "Marcar como
+   conferido" leem os INPUTS da tela: bloco removido do DOM viraria
+   campo inexistente, e campo inexistente e exatamente a armadilha do
+   CPF da Denise (03/09) — o aviso cobrava um campo que a tela nao
+   tinha e o UPDATE gravava undefined. Escondido continua sendo lido.
+
+   O ESTADO E POR CARTAO e mora no navegador. E preferencia de tela, nao
+   dado do negocio: nao vale uma coluna no banco nem um UPDATE por
+   clique. A contrapartida esta assumida — o que for fechado no
+   computador nao chega fechado no celular. */
+let mcSecCliente=null, mcSecEstado={};
+function mcSecCarregar(id){
+  mcSecCliente=id; mcSecEstado={};
+  try{ mcSecEstado=JSON.parse(localStorage.getItem('mcsec:'+id)||'{}')||{}; }catch(e){ mcSecEstado={}; }
+}
+function mcSecFechada(chave){ return mcSecEstado[chave]===1; }
+function mcSecTogglar(chave){
+  const corpo=$('mcsec-corpo-'+chave), seta=$('mcsec-seta-'+chave);
+  if(!corpo) return;
+  const fechando = corpo.style.display!=='none';
+  corpo.style.display = fechando?'none':'';
+  if(seta) seta.textContent = fechando?'\u25b8':'\u25be';
+  /* So grava o que foge do padrao: aberto e o normal, entao a chave sai
+     do objeto ao reabrir. Assim o localStorage nao vira lista de 37 mil
+     cartoes dizendo "esta como sempre esteve". */
+  if(fechando) mcSecEstado[chave]=1; else delete mcSecEstado[chave];
+  try{ if(mcSecCliente) localStorage.setItem('mcsec:'+mcSecCliente, JSON.stringify(mcSecEstado)); }catch(e){}
+}
+/* Casca unica dos blocos coloridos. Existia copiada seis vezes, com a
+   mesma borda e o mesmo padding em cada uma — trocar a seta em seis
+   lugares e como as seis versoes divergem. */
+function mcSecao(chave,titulo,corpo,opts){
+  const o=opts||{};
+  const fech=mcSecFechada(chave);
+  const estilo=o.estilo||'background:var(--bg2,#f6f7f8);border:1.5px solid var(--border)';
+  /* O ALERTA SOBE PARA O TITULO. Aviso que so existe dentro da caixa
+     fechada e aviso que nao existe: o card da Leonara ja mostrou o que
+     custa o contrato nao ser gerado em silencio. */
+  const alerta=o.alerta?`<span title="${escA(o.alerta)}" style="font-size:12px">\u26a0</span>`:'';
+  return `<div class="mcsens" style="${estilo};border-radius:12px;padding:13px 14px;margin-bottom:13px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <button type="button" onclick="mcSecTogglar('${chave}')" title="Fechar ou abrir este bloco"
+        style="display:flex;align-items:center;gap:6px;flex:1;background:none;border:none;padding:0;margin:0;cursor:pointer;text-align:left;font-size:12px;font-weight:700;color:var(--text2);font-family:inherit">
+        <span id="mcsec-seta-${chave}" style="font-size:10px;color:var(--text3)">${fech?'\u25b8':'\u25be'}</span>
+        <span>${titulo}</span>${alerta}
+      </button>
+      ${o.acoes||''}
+    </div>
+    <div id="mcsec-corpo-${chave}" style="margin-top:10px${fech?';display:none':''}">${corpo}</div>
   </div>`;
 }
 function renderCardClienteModal(c,etqSel,listas){
   mcOriginal={nome_completo:c.nome_completo,quadro:c.quadro,lista_id:c.lista_id};
   mcClienteId=c.id;mcMencoes=[];mcEtqSelAtual=etqSel.slice();
+  mcSecCarregar(c.id);
   const listaAtual=listas.find(l=>l.id===c.lista_id);
   const optQ=QPERM.map(q=>`<option value="${q}" ${c.quadro===q?'selected':''}>${QUADROS[q].rotulo}</option>`).join('');
   const optL=listas.map(l=>`<option value="${l.id}" ${c.lista_id===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
@@ -3018,10 +3068,25 @@ function renderCardClienteModal(c,etqSel,listas){
      nomeada: conferencia marcada e um pedido explicito de gerar
      contrato, e a partir dai todo campo que o gerador exige tem que
      estar a mao. */
-  const temInss=!!(c.cpf||c.senha_inss||c.contrato_dados_conferido_em);
+  /* O CPF LIDO PRECISA DE ONDE CAIR — 04/09/2026, caso da Denise.
+     A excecao acima abria o bloco para quem ja tinha CPF, senha ou
+     carimbo. Faltava o caso do meio: leitor achou o CPF, cadastro
+     ainda nao tem. Como o input mc-cpf so existia com o bloco aberto,
+     o botao "usar" respondia "campo nao esta visivel nesta etapa", o
+     "Marcar como conferido" contava o CPF como faltando e o UPDATE
+     gravava undefined. Para o campo aparecer era preciso ja ter o
+     valor que so podia entrar por ele. */
+  const temInss=!!(c.cpf||c.senha_inss||c.contrato_dados_conferido_em||(c.contrato_dados_lidos&&c.contrato_dados_lidos.cpf));
   const verContrato=mcVerSecao(ETAPA_CONTRATO,etapa,temContrato);
   const verInss=mcVerSecao(ETAPA_INSS,etapa,temInss);
   const verPag=mcVerSecao(ETAPA_PAGAMENTOS,etapa,pagHtml.temParc);
+  /* CHAMADO AQUI, e nao dentro do template, porque o titulo do bloco
+     precisa saber se ha aviso: com o Contrato fechado, o sinal no
+     cabecalho e a unica pista que sobra de que o contrato nao vai ser
+     gerado. Zerar mcLidos quando o bloco nao aparece evita o cartao
+     seguinte herdar a leitura do anterior. */
+  const lidosHtml=verContrato?mcContratoLidosHtml(c):(mcLidos=null,'');
+  const alertaContrato=lidosHtml.includes('NÃO vai ser gerado')?'Falta campo para o contrato ser gerado':'';
   const temGps=!!(c.gps_vencimento||c.gps_anexo||c.gps_paga_em);
   const verGps=mcVerSecao(ETAPA_GPS,etapa,temGps);
   const ocultas=[!verContrato&&'Contrato',!verInss&&'Acesso INSS',!verGps&&'Contribuição',!verPag&&'Pagamentos'].filter(Boolean);
@@ -3092,8 +3157,7 @@ function renderCardClienteModal(c,etqSel,listas){
 
     ${mcTriagemHtml(c.samara_dados)}
 
-    ${!verInss?'':`<div class="mcsens" style="background:var(--teal-l);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
-          <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">🔐 Acesso INSS</div>
+    ${!verInss?'':mcSecao('inss','🔐 Acesso INSS',`
           <div class="fg">
             <div class="fld"><label>CPF</label><input type="text" id="mc-cpf" value="${escA(c.cpf)}" oninput="cpfMask(this)"/></div>
             <div class="fld"><label>Senha INSS</label>
@@ -3103,11 +3167,36 @@ function renderCardClienteModal(c,etqSel,listas){
                 <button type="button" onclick="mcTogSenha(this)" style="position:absolute;right:7px;top:0;bottom:0;background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px" title="Mostrar/ocultar">👁</button>
               </div>
             </div>
+          </div>`,
+      {estilo:'background:var(--teal-l);border:1.5px solid var(--border)'})}
+        <!-- QUADRO, LISTA, CONTATO E AS DUAS DATAS SUBIRAM — 04/09/2026.
+             Sao os campos que se olha em todo atendimento, e estavam
+             embaixo de quatro blocos coloridos que so interessam em uma
+             etapa cada. A DN e a DS decidem o direito: ficar abaixo do
+             Pagamentos era rolar o cartao inteiro para conferir a conta.
+             O resto seguiu na ordem de sempre. -->
+        <div class="fg" style="margin-bottom:13px">
+          <div class="fld"><label>Quadro</label><select id="mc-quadro" onchange="mcTrocarQuadro()">${optQ}</select></div>
+          <div class="fld"><label>Lista</label><select id="mc-lista" onchange="mcListaChange()">${optL}</select></div>
+          <div class="fld" id="mc-motivo-wrap" style="${ehDescartado?'':'display:none'}">
+            <label>Motivo do descarte</label>
+            <select id="mc-motivo">${optMotivo}</select>
+            <div class="fhint">Aparece sozinho quando a lista vira Descartado. É o que vira barra no painel do tráfego — sem ele a lead conta como "sem motivo".</div>
           </div>
-        </div>`}
-        ${!verContrato?'':`<div class="mcsens" style="background:var(--rose-l);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
-          <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">📄 Contrato</div>
-          ${mcContratoLidosHtml(c)}
+          <div class="fld" id="mc-cancel-wrap" style="${ehCancelado?'':'display:none'}">
+            <label>Motivo do cancelamento</label>
+            <select id="mc-cancel-motivo">${optCancel}</select>
+            <div class="fhint">Aparece sozinho quando a lista vira Contrato Cancelado. É contrato assinado que caiu — conta no relatório de cancelamentos, não no painel do tráfego.</div>
+          </div>
+          <div class="fld"><label>Telefone</label><input type="text" id="mc-tel" value="${escA(c.telefone_principal)}"/></div>
+          <div class="fld"><label>Canal WhatsApp</label><select id="mc-canal" onchange="mcCanalChange()">${optCanal}</select></div>
+          <div class="fld"><label>Origem</label><select id="mc-origem">${optOrig}</select></div>
+          <div class="fld"><label>DN do bebê</label><input type="date" id="mc-dn" value="${c.data_nascimento_bebe||''}"/>
+            <div class="fhint">Enquanto não nasceu, a data prevista vai aqui mesmo. Quando nascer, corrija neste campo.</div></div>
+          <div class="fld"><label>DS (saída do último emprego)</label><input type="date" id="mc-ds" value="${c.data_saida_emprego||''}"/></div>
+        </div>
+        ${!verContrato?'':mcSecao('contrato','📄 Contrato',`
+          ${lidosHtml}
           <div class="fld ff" style="margin-bottom:11px"><label>Endereço completo</label>
             <input type="text" id="mc-endereco" value="${escA(c.endereco_completo)}" placeholder="Rua, número, bairro, cidade, UF, CEP"/>
             <div class="fhint">Linha corrida: é um campo só no formulário da Autentica.</div>
@@ -3125,39 +3214,18 @@ function renderCardClienteModal(c,etqSel,listas){
             <div class="fld"><label>Referência 1 · telefone</label><input type="text" id="mc-ref1-tel" value="${escA(c.referencia1_telefone)}"/></div>
             <div class="fld"><label>Referência 2 · nome</label><input type="text" id="mc-ref2-nome" value="${escA(c.referencia2_nome)}"/></div>
             <div class="fld"><label>Referência 2 · telefone</label><input type="text" id="mc-ref2-tel" value="${escA(c.referencia2_telefone)}"/></div>
-          </div>
-        </div>`}
+          </div>`,
+      {estilo:'background:var(--rose-l);border:1.5px solid var(--border)',alerta:alertaContrato})}
         ${!verGps?'':mcGpsHtml(c)}
-        ${!verPag?'':`<div class="mcsens" style="background:var(--yellow-bg);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:13px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${pagHtml.temParc?'10px':'0'}">
-            <div style="font-size:12px;font-weight:700;color:var(--text2)">💰 Pagamentos</div>
-            <div style="display:flex;gap:6px">
+        ${!verPag?'':mcSecao('pagamentos','💰 Pagamentos',pagHtml.html,
+      {estilo:'background:var(--yellow-bg);border:1.5px solid var(--border)',
+       acoes:`<div style="display:flex;gap:6px">
               <button class="btn btnp" style="padding:4px 10px;font-size:11px" onclick="fecharModal();location.hash='#/recebimento/novo/${c.id}'">+ Cadastrar pagamento</button>
               <button class="btn btns" style="padding:4px 10px;font-size:11px" onclick="fecharModal();location.hash='#/quadro/financeiro'">Ver no Financeiro →</button>
-            </div>
-          </div>
-          ${pagHtml.html}
-        </div>`}
+            </div>`})}
         ${!ocultas.length?'':`<button class="mcsecmais" onclick="mcAlternarSecoes()">+ mostrar ${ocultas.join(', ')} assim mesmo</button>`}
         ${!(mcMostrarTudo)?'':`<button class="mcsecmais" onclick="mcAlternarSecoes()">− esconder de novo o que ainda não é desta etapa</button>`}
         <div class="fg" style="margin-bottom:13px">
-          <div class="fld"><label>Quadro</label><select id="mc-quadro" onchange="mcTrocarQuadro()">${optQ}</select></div>
-          <div class="fld"><label>Lista</label><select id="mc-lista" onchange="mcListaChange()">${optL}</select></div>
-          <div class="fld" id="mc-motivo-wrap" style="${ehDescartado?'':'display:none'}">
-            <label>Motivo do descarte</label>
-            <select id="mc-motivo">${optMotivo}</select>
-            <div class="fhint">Aparece sozinho quando a lista vira Descartado. É o que vira barra no painel do tráfego — sem ele a lead conta como "sem motivo".</div>
-          </div>
-          <div class="fld" id="mc-cancel-wrap" style="${ehCancelado?'':'display:none'}">
-            <label>Motivo do cancelamento</label>
-            <select id="mc-cancel-motivo">${optCancel}</select>
-            <div class="fhint">Aparece sozinho quando a lista vira Contrato Cancelado. É contrato assinado que caiu — conta no relatório de cancelamentos, não no painel do tráfego.</div>
-          </div>
-        </div>
-        <div class="fg" style="margin-bottom:13px">
-          <div class="fld"><label>Telefone</label><input type="text" id="mc-tel" value="${escA(c.telefone_principal)}"/></div>
-          <div class="fld"><label>Canal WhatsApp</label><select id="mc-canal" onchange="mcCanalChange()">${optCanal}</select></div>
-          <div class="fld"><label>Origem</label><select id="mc-origem">${optOrig}</select></div>
           <!-- INDICADA POR — trazido do formulario cru em 26/08/2026.
                Era o unico campo que so existia la, e e obrigatorio para o
                card sair da lista Chamar indicada: e este nome que a Samara
@@ -3170,9 +3238,6 @@ function renderCardClienteModal(c,etqSel,listas){
             ${c.indicado_por?'<div class="fhint"><span class="lgcli" onclick="abrirCardCliente(\''+c.indicado_por+'\')">abrir o card de '+esc(c.indicado_por_nome||'quem indicou')+' &rarr;</span></div>':''}
             <div class="fhint" id="mc-indhint"></div>
           </div>
-          <div class="fld"><label>DN do bebê</label><input type="date" id="mc-dn" value="${c.data_nascimento_bebe||''}"/>
-            <div class="fhint">Enquanto não nasceu, a data prevista vai aqui mesmo. Quando nascer, corrija neste campo.</div></div>
-          <div class="fld"><label>DS (saída do último emprego)</label><input type="date" id="mc-ds" value="${c.data_saida_emprego||''}"/></div>
           <div class="fld"><label>Bloqueio INSS até</label><input type="date" id="mc-bloqueio" value="${c.data_desbloqueio_inss||''}" onchange="mcBloqueioChange()"/>
             <div id="mc-bloqueio-top" style="margin-top:6px">${bloqueioBadgeHtml(c.data_desbloqueio_inss)}</div></div>
           <div class="fld"><label>Documento pedido pelo INSS</label><input type="text" id="mc-docpend" placeholder="ex: certidão de nascimento" value="${escA(c.documento_pendente)}"/>

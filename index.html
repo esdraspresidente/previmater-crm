@@ -5133,6 +5133,38 @@ function atualizarHintIndicadora(p){
   if(!nome.trim()){h.innerHTML='Obrigatório para o card sair da lista <b>Chamar indicada</b>: é este nome que a Samara usa no primeiro contato.';return;}
   h.innerHTML=id?'<span class="indvinc">✓ vinculada ao card dela</span> — a indicação fica registrada para o pagamento dos R$200.':'Sem vínculo com card: o nome entra na mensagem, mas não gera rastro para o pagamento.';
 }
+/* NUMERO REPETIDO — 04/09/2026, caso da Bianca.
+
+   O banco tem uniq_crm_clientes_telefone_chave, e quem batia nele via
+   "duplicate key value violates unique constraint" na cara. Erro de
+   Postgres cru nao diz o que fazer, e principalmente NAO DIZ QUEM ja
+   esta com o numero: o cartao da Bianca era de 2024, estava arquivado
+   desde 13/08 na lista Descartado, e cartao arquivado nao aparece em
+   busca de quadro nenhuma. Ou seja: a informacao que resolvia estava
+   escondida das duas maneiras possiveis.
+
+   PROCURA PELOS 8 ULTIMOS DIGITOS, e nao pela chave montada aqui. A
+   normalizacao do telefone_chave e do banco (tira o 55, tira o nono
+   digito) e repetir essa regra no frontend criaria uma segunda versao
+   dela para divergir depois. O sufixo acha o mesmo numero escrito de
+   qualquer jeito — com DDI, sem DDI, com 9, sem 9.
+
+   INCLUI ARQUIVADO de proposito: e justamente o caso que a busca comum
+   nao mostra, e o unico que a pessoa nao tem como descobrir sozinha. */
+async function clienteMesmoTelefone(tel,exceto){
+  const d=String(tel||'').replace(/\D/g,'');
+  if(d.length<8)return null;
+  const{data}=await sb.from('crm_clientes')
+    .select('id,nome_completo,quadro,arquivado_em,telefone_principal')
+    .ilike('telefone_chave','%'+d.slice(-8)).limit(5);
+  const achados=(data||[]).filter(x=>x.id!==exceto);
+  return achados.length?achados[0]:null;
+}
+function avisoNumeroRepetido(ex){
+  return 'Este telefone já é da cliente '+(ex.nome_completo||'sem nome')+
+    (ex.arquivado_em?' — cartão ARQUIVADO em '+new Date(ex.arquivado_em).toLocaleDateString('pt-BR')+', por isso ele não aparece nas buscas do quadro':' (quadro '+(ex.quadro||'?')+')')+
+    '.\n\nNão dá para ter dois cartões com o mesmo número. Abrir o cartão dela agora?';
+}
 async function salvarCliente(id){
   const btn=$('btn-salvar'),nome=$('f-nome').value.trim();
   if(!nome){toast('Preencha o nome completo','er');return;}
@@ -5161,10 +5193,33 @@ async function salvarCliente(id){
   Object.keys(payload).forEach(k=>{if(payload[k]===undefined)delete payload[k];});
   const etqSel=[...document.querySelectorAll('#etp .ett.on')].map(e=>e.getAttribute('data-etq'));
   btn.disabled=true;btn.textContent='Salvando...';
+  /* Pergunta antes de tentar: assim o aviso vem com nome e com saida, em
+     vez de a pessoa descobrir pelo erro do banco. */
+  if(payload.telefone_principal){
+    const ex=await clienteMesmoTelefone(payload.telefone_principal,id);
+    if(ex){
+      btn.disabled=false;btn.textContent=id?'Salvar alterações':'Criar cliente';
+      if(confirm(avisoNumeroRepetido(ex)))abrirCardCliente(ex.id);
+      return;
+    }
+  }
   let cid=id,error,ehNovo=!id;
   if(id){({error}=await sb.from('crm_clientes').update(payload).eq('id',id));}
   else{const r=await sb.from('crm_clientes').insert(payload).select('id').single();error=r.error;if(r.data)cid=r.data.id;}
-  if(error){toast('Erro ao salvar: '+error.message,'er');btn.disabled=false;btn.textContent=id?'Salvar alterações':'Criar cliente';return;}
+  if(error){
+    btn.disabled=false;btn.textContent=id?'Salvar alterações':'Criar cliente';
+    /* Rede de seguranca: a checagem acima nao cobre a corrida (dois
+       cadastros no mesmo minuto) nem numero escrito de forma que o
+       sufixo nao pegue. Aqui o banco ja recusou — traduzir. */
+    if(error.code==='23505'&&String(error.message).includes('telefone_chave')){
+      const ex=await clienteMesmoTelefone(payload.telefone_principal,id);
+      if(ex&&confirm(avisoNumeroRepetido(ex)))abrirCardCliente(ex.id);
+      else if(!ex)toast('Este telefone já está em outro cartão. Não dá para ter dois cartões com o mesmo número.','er');
+      return;
+    }
+    toast('Erro ao salvar: '+error.message,'er');
+    return;
+  }
   await sb.from('crm_clientes_etiquetas').delete().eq('cliente_id',cid);
   if(etqSel.length)await sb.from('crm_clientes_etiquetas').insert(etqSel.map(e=>({cliente_id:cid,etiqueta_id:e})));
   finCarregado=false;

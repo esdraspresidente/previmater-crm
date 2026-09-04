@@ -7180,6 +7180,7 @@ function filtrosFilaHtml(lista){
       ${op('sequencia','Sequência',FILA_F.origem)}
       ${op('aviso_esdras','Aviso para você',FILA_F.origem)}
       ${op('abertura','Abertura',FILA_F.origem)}
+      ${op('mensagem_avulsa','Mensagem agendada',FILA_F.origem)}
     </select>
     ${(()=>{
       /* Filtro por sequencia. So aparece quando ha mais de uma na aba:
@@ -7585,7 +7586,7 @@ function cardFila(a){
   const c=a.crm_clientes||{};
   const nome=c.nome_completo||'(sem nome)';
   const quando=a.data_hora_agendada?tempoRel(a.data_hora_agendada):'';
-  let origem=a.tipo_automacao==='samara'?'Samara':(a.tipo_automacao==='abertura'?'Abertura':(a.tipo_automacao==='aviso_esdras'?'Aviso para você':'Sequência'));
+  let origem=a.tipo_automacao==='samara'?'Samara':(a.tipo_automacao==='abertura'?'Abertura':(a.tipo_automacao==='aviso_esdras'?'Aviso para você':(a.tipo_automacao==='mensagem_avulsa'?'Mensagem agendada':'Sequência')));
 
   // QUAL SEQUENCIA E QUAL PASSO. Antes o cartao dizia so "Sequência", e
   // aprovar as de cobranca era decidir no escuro: as tres tentativas da
@@ -8883,10 +8884,14 @@ const SEQ_PESO={aguardando_aprovacao:5,erro:4,agendado:3,vencida:3,pausado:2};
 function mcAgruparSequencias(linhas,nomes,totais){
   const grupos={};
   linhas.forEach(a=>{
-    const chave=a.sequencia_id||('avulsa:'+(a.tipo_automacao||'?'));
+    const chave=a.tipo_automacao==='mensagem_avulsa'
+      ? 'msg:'+a.id
+      : (a.sequencia_id||('avulsa:'+(a.tipo_automacao||'?')));
     if(!grupos[chave]){
       grupos[chave]={
-        nome:a.sequencia_id?(nomes[a.sequencia_id]||'Sequência sem nome'):(a.tipo_automacao||'Avulsa'),
+        nome:a.tipo_automacao==='mensagem_avulsa'
+          ? 'Mensagem agendada'
+          : (a.sequencia_id?(nomes[a.sequencia_id]||'Sequência sem nome'):(a.tipo_automacao||'Avulsa')),
         total:a.sequencia_id?(totais[a.sequencia_id]||0):0,
         peso:0,estado:'fim',ordem:a.ordem||0,quando:null,motivo:null,ultima:null,id:null
       };
@@ -8973,6 +8978,14 @@ function mcRenderSequencias(){
      Até aqui toda sequência nascia de gatilho automático. Não havia como
      dizer "manda a promo_500 para esta aqui". */
   html+=`<button class="seqverfim" style="border-top:1px solid var(--border2)" onclick="mcAbrirDisparo()">＋ disparar uma sequência na mão</button>`;
+  /* AGENDAR UMA MENSAGEM — item 440.
+     Ao lado do disparo de sequência porque a pergunta é a mesma («o que
+     vai sair para ela?»), mas o caminho é oposto: o disparo escreve em
+     sequencia_solicitada e deixa o motor montar tudo, e aqui o CRM cria
+     a linha direto. Pode fazer isso porque não há nada de sequência para
+     duplicar — não tem passo, nem atraso útil, nem sorteio de braço, nem
+     mover_para. Só um texto e um horário que você escolheu. */
+  html+=`<button class="seqverfim" onclick="mcAbrirAgendarMsg()">＋ agendar uma mensagem</button>`;
   box.innerHTML=html+'</div>';
 }
 function mcSeqTogFim(){mcSeqMostrarFim=!mcSeqMostrarFim;mcRenderSequencias();}
@@ -8997,6 +9010,143 @@ let DISP_ALVO=null,DISP_VOLTA_CARTAO=false;
 
 /* Atalho do cartao: quem esta aberto e o alvo, e a volta e para ele. */
 function mcAbrirDisparo(){return abrirDisparoSequencia(mcClienteId,true);}
+
+/* ============================================================
+   AGENDAR UMA MENSAGEM — item 440, 04/09/2026
+
+   Nasceu de uma cliente que respondeu ao descarte dizendo que estava com
+   a filha no hospital e que ia chamar depois. Não existia onde guardar
+   isso: ou você mandava agora, no momento errado, ou confiava na
+   memória para lembrar de terça que vem.
+
+   POR QUE ENTRA EM crm_automacoes e não numa tabela nova. Tudo que vai
+   sair para alguém precisa aparecer no mesmo lugar — a Fila de
+   Automações — com o mesmo cancelar e o mesmo histórico. E a esteira do
+   motor já busca qualquer tipo_automacao que não seja aviso, então não
+   foi preciso consulta nova: o tipo entra e ela pega.
+
+   O QUE É DIFERENTE DE SEQUÊNCIA, tudo decidido em 04/09:
+     - sai na HORA MARCADA, sem empurrar para a janela de atendimento;
+     - vale 24h em vez dos 120 min da cadência;
+     - sobrevive a desfecho, porque o cancelarTodasAsSequencias do motor
+       só mata tipo 'sequencia'. Card descartado não perde o que você
+       agendou — e é para descartada que isto costuma ser escrito.
+   ============================================================ */
+/* As chaves que o motor sabe trocar. Chave que ele não conhece faz a
+   mensagem inteira parar como erro na fila no dia do envio, e descobrir
+   isso na terça de manhã é tarde: a conferência é aqui, na hora de
+   escrever. */
+const MSG_CHAVES_OK=['primeiro_nome','primeiro-nome','nome_completo'];
+function msgChavesRuins(txt){
+  const achadas=String(txt||'').match(/\{[^}]*\}/g)||[];
+  return [...new Set(achadas.map(x=>x.slice(1,-1).trim()).filter(k=>!MSG_CHAVES_OK.includes(k)))];
+}
+/* Duas horas à frente, arredondado, como sugestão inicial. Abrir o modal
+   com a data de hoje vazia obrigaria a preencher os dois campos sempre,
+   e o caso comum é «daqui a pouco» ou «amanhã de manhã». */
+function msgQuandoPadrao(){
+  const d=new Date(Date.now()+2*3600000);
+  d.setMinutes(0,0,0);
+  const p=n=>String(n).padStart(2,'0');
+  return{data:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`,hora:`${p(d.getHours())}:00`};
+}
+function mcAbrirAgendarMsg(){return abrirAgendarMensagem(mcClienteId,true);}
+let MSG_ALVO=null,MSG_VOLTA_CARTAO=false;
+async function abrirAgendarMensagem(clienteId,voltarParaCartao){
+  if(!clienteId)return;
+  MSG_ALVO=clienteId;MSG_VOLTA_CARTAO=!!voltarParaCartao;
+  const{data:c,error}=await sb.from('crm_clientes')
+    .select('nome_completo,telefone_chave,descartado_em').eq('id',clienteId).single();
+  if(error||!c){toast('Erro ao ler o card: '+(error?error.message:''),'er');return;}
+  if(!c.telefone_chave){toast('Esta cliente não tem telefone válido cadastrado','er');return;}
+  const q=msgQuandoPadrao();
+  const primeiro=String(c.nome_completo||'').trim().split(/\s+/)[0]||'';
+  abrirModal(`
+    <div class="mbt">Agendar uma mensagem</div>
+    <div class="mbs">Vai para ${esc(c.nome_completo||'esta cliente')}, no dia e na hora que você marcar. Não é sequência: é este texto, uma vez só.</div>
+    ${c.descartado_em?'<div class="fhint" style="margin-bottom:10px">Este cartão está descartado. A mensagem sai assim mesmo — o descarte não cancela o que foi agendado à mão.</div>':''}
+    <div class="fld" style="margin-bottom:10px">
+      <label>Mensagem</label>
+      <textarea id="msg-texto" rows="6" placeholder="Oi ${esc(primeiro)}, tudo bem?" oninput="msgConferir()"></textarea>
+      <div class="fhint" id="msg-dica" style="margin-top:3px">Pode usar <b>{primeiro_nome}</b> e <b>{nome_completo}</b>.</div>
+    </div>
+    <div class="fg">
+      <div class="fld"><label>Dia</label><input type="date" id="msg-data" value="${q.data}" oninput="msgConferir()"/></div>
+      <div class="fld"><label>Hora</label><input type="time" id="msg-hora" value="${q.hora}" oninput="msgConferir()"/></div>
+    </div>
+    <label class="fhint" style="display:flex;align-items:center;gap:7px;margin-top:10px;cursor:pointer">
+      <input type="checkbox" id="msg-calada" checked/>
+      <span>Só enviar se ela continuar calada — se responder antes, a mensagem se cancela sozinha</span>
+    </label>
+    <div class="fhint" id="msg-erro" style="margin-top:8px;color:var(--red,#c62828)"></div>
+    <div class="brow" style="justify-content:flex-end;gap:9px;margin-top:14px">
+      <button class="btn btns" onclick="msgFechar()">Voltar</button>
+      <button class="btn btnp" id="msg-ok" onclick="msgAgendar()">Agendar</button>
+    </div>`,true);
+  if(MSG_VOLTA_CARTAO)FILA_VOLTAR=clienteId;
+  msgConferir();
+}
+function msgFechar(){
+  if(MSG_VOLTA_CARTAO&&MSG_ALVO)abrirCardCliente(MSG_ALVO);
+  else fecharModal();
+  MSG_ALVO=null;MSG_VOLTA_CARTAO=false;
+}
+/* Confere enquanto escreve, e não no clique: o botão desligado com o
+   motivo escrito embaixo diz o que falta, e um alert depois de escrever
+   seis linhas só diz que você perdeu tempo. */
+function msgConferir(){
+  const err=$('msg-erro'),bt=$('msg-ok');
+  if(!err||!bt)return null;
+  const txt=($('msg-texto')?$('msg-texto').value:'').trim();
+  const dia=$('msg-data')?$('msg-data').value:'';
+  const hora=$('msg-hora')?$('msg-hora').value:'';
+  let quando=null,motivo='';
+  if(!txt)motivo='Escreva a mensagem.';
+  else if(!dia||!hora)motivo='Escolha o dia e a hora.';
+  else{
+    quando=new Date(`${dia}T${hora}:00`);
+    if(isNaN(quando.getTime()))motivo='Dia ou hora inválidos.';
+    else if(quando.getTime()<=Date.now())motivo='Esse horário já passou.';
+  }
+  if(!motivo){
+    const ruins=msgChavesRuins(txt);
+    if(ruins.length)motivo='O motor não conhece '+ruins.map(k=>'{'+k+'}').join(', ')+' — a mensagem pararia como erro no dia do envio.';
+  }
+  err.textContent=motivo;
+  bt.disabled=!!motivo;
+  bt.style.opacity=motivo?'.5':'';
+  return motivo?null:{txt,quando};
+}
+async function msgAgendar(){
+  const v=msgConferir();
+  if(!v)return;
+  const alvo=MSG_ALVO;
+  if(!alvo)return;
+  const soCalada=$('msg-calada')&&$('msg-calada').checked;
+  const bt=$('msg-ok');if(bt){bt.disabled=true;bt.textContent='Agendando...';}
+  /* aprovado:true porque a decisão já é sua — você escreveu o texto e
+     escolheu a hora. Deixar em aguardando_aprovacao pediria a mesma
+     confirmação duas vezes, que é o erro do item 338. */
+  const{error}=await sb.from('crm_automacoes').insert({
+    cliente_id:alvo,
+    tipo_automacao:'mensagem_avulsa',
+    data_hora_agendada:v.quando.toISOString(),
+    status:'agendado',
+    aprovado:true,
+    aprovado_por:U.id,
+    aprovado_em:new Date().toISOString(),
+    texto_montado:v.txt,
+    flags:soCalada?'[SO_SE_CALADA]':null
+  });
+  if(error){
+    toast('Erro ao agendar: '+error.message,'er');
+    if(bt){bt.disabled=false;bt.textContent='Agendar';}
+    return;
+  }
+  toast('Mensagem agendada para '+v.quando.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}),'ok');
+  registrarAtividade(alvo,'agendou uma mensagem para '+v.quando.toLocaleString('pt-BR'));
+  msgFechar();
+}
 
 async function abrirDisparoSequencia(clienteId,voltarParaCartao){
   const alvo=clienteId;

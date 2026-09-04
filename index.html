@@ -1082,10 +1082,24 @@ function escA(s){return s?String(s).replace(/"/g,'&quot;'):'';}
 function toast(m,t){const e=$('toast');e.textContent=m;e.className='v '+(t||'ok');clearTimeout(e._t);e._t=setTimeout(()=>e.className='',2600);}
 function togSB(){$('sb').classList.toggle('o');$('ov').classList.toggle('o');}
 let mcPreviewAberto=false;
+/* O VISUALIZADOR DE ANEXO NAO PODE CUSTAR A ABA — 04/09/2026.
+   Fechar o anexo chama abrirCardCliente(), que remonta o cartao do
+   zero: a aba voltava para a de sempre e a lista de anexos sumia. Quem
+   estava conferindo cinco documentos tinha de achar a aba de novo a
+   cada arquivo. Guardar a aba antes de abrir custa uma variavel.
+   A lista serve para navegar de um anexo ao outro sem fechar. */
+let MC_ANEXOS=[], mcPreviewIdx=-1, mcPreviewVoltarAba=null;
 function fecharModal(){$('modal').classList.add('h');mcPreviewAberto=false;if(typeof gravCancelar==='function')gravCancelar();if(typeof mcMostrarVeu==='function'){mcDropProf=0;mcMostrarVeu(false);}if(typeof pararChatPoll==='function')pararChatPoll();}
 function fecharSeFundo(e){if(e.target===e.currentTarget)fecharInteligente();}
 function fecharInteligente(){
-  if(mcPreviewAberto&&mcClienteId){mcPreviewAberto=false;abrirCardCliente(mcClienteId);return;}
+  if(mcPreviewAberto&&mcClienteId){
+    mcPreviewAberto=false;
+    const aba=mcPreviewVoltarAba;mcPreviewVoltarAba=null;
+    /* abrirCardCliente e async e remonta o cartao inteiro: a aba so
+       existe depois que ele terminar, por isso o then. */
+    Promise.resolve(abrirCardCliente(mcClienteId)).then(()=>{if(aba&&typeof mcAba==='function')mcAba(aba);});
+    return;
+  }
   /* Fechou clicando no fundo: se havia um cartao esperando para voltar,
      devolve o cartao em vez de sumir com tudo — e o mesmo que o botao
      Voltar faz. */
@@ -1378,6 +1392,11 @@ document.addEventListener('keydown',e=>{
     const a=document.activeElement;
     if(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'||a.isContentEditable))return;
     e.preventDefault();
+    /* COM O ANEXO ABERTO A SETA E DO ANEXO. Trocar de cartao por baixo
+       de um documento aberto e trocar o assunto sem avisar: o que esta
+       na tela e o arquivo, e e nele que a seta tem que mexer. O cartao
+       volta a andar assim que o visualizador fecha. */
+    if(mcPreviewAberto){mcPreviewNavegar(e.key==='ArrowLeft'?-1:1);return;}
     mcNavegar(e.key==='ArrowLeft'?-1:1);
     return;
   }
@@ -1895,12 +1914,15 @@ async function carregarAnexos(clienteId){
   const{data,error}=await sb.from('crm_anexos').select('*').eq('cliente_id',clienteId).order('criado_em',{ascending:false});
   const bn=$('mctab-n-anexos');
   if(bn){const n=(!error&&data)?data.length:0;bn.textContent=n;bn.classList.toggle('h',n===0);}
-  if(error||!data||!data.length){cont.innerHTML='<div class="fhint">Nenhum anexo ainda.</div>';return;}
-  cont.innerHTML=data.map(a=>`
+  if(error||!data||!data.length){MC_ANEXOS=[];cont.innerHTML='<div class="fhint">Nenhum anexo ainda.</div>';return;}
+  /* MESMA ORDEM DA TELA: o indice do clique e a posicao aqui, entao o
+     "proximo" do visualizador e o proximo da lista que voce esta vendo. */
+  MC_ANEXOS=data.map(a=>({caminho:a.caminho_storage,nome:a.nome_arquivo}));
+  cont.innerHTML=data.map((a,ia)=>`
     <div class="anexoitem">
       <div class="anexoicone" id="anexothumb-${a.id}">${anexoEhImagem(a.nome_arquivo)?'🖼':'📄'}</div>
       <div style="flex:1;min-width:0">
-        <div class="anexonome" onclick="visualizarAnexo('${escA(a.caminho_storage)}','${escA(a.nome_arquivo)}');return false" title="Visualizar">${esc(a.nome_arquivo)}</div>
+        <div class="anexonome" onclick="visualizarAnexo('${escA(a.caminho_storage)}','${escA(a.nome_arquivo)}',${ia});return false" title="Visualizar">${esc(a.nome_arquivo)}</div>
         <div class="anexometa">${fmtBytes(a.tamanho_bytes)} · ${tempoRel(a.criado_em)}</div>
       </div>
       <div class="anexoacoes">
@@ -1920,7 +1942,7 @@ async function carregarAnexos(clienteId){
     if(s&&el)el.innerHTML=`<img src="${escA(s.signedUrl)}" alt=""/>`;
   });
 }
-async function visualizarAnexo(caminho,nome){
+async function visualizarAnexo(caminho,nome,idx){
   const{data,error}=await sb.storage.from(ANEXO_BUCKET).createSignedUrl(caminho,180);
   if(error||!data){toast('Não foi possível abrir o arquivo','er');return;}
   const url=data.signedUrl,ext=anexoExt(nome);
@@ -1928,8 +1950,29 @@ async function visualizarAnexo(caminho,nome){
   if(anexoEhImagem(nome))corpo=`<img src="${escA(url)}" style="width:100%;border-radius:12px;display:block"/>`;
   else if(ext==='pdf')corpo=`<iframe src="${escA(url)}" style="width:100%;height:72vh;border:none;border-radius:10px"></iframe>`;
   else corpo=`<div class="emp"><div class="empi">📄</div><div class="empt">Pré-visualização não disponível para este tipo de arquivo</div><a href="${escA(url)}" target="_blank" class="btn btnp" style="display:inline-block;margin-top:8px;text-decoration:none">Abrir / baixar arquivo</a></div>`;
+  /* So na PRIMEIRA abertura: passar de um anexo para o outro reabre o
+     modal, e sobrescrever aqui gravaria a aba do proprio preview. */
+  if(!mcPreviewAberto)mcPreviewVoltarAba=(typeof mcAbaAtual!=='undefined')?mcAbaAtual:null;
   mcPreviewAberto=true;
-  abrirModal(`<button class="mbc" onclick="fecharInteligente()">×</button><div class="mbt">${esc(nome)}</div><div class="mbs">&nbsp;</div>${corpo}`,true);
+  mcPreviewIdx=(typeof idx==='number')?idx:MC_ANEXOS.findIndex(a=>a.caminho===caminho);
+  /* A barra so aparece quando ha para onde ir E quando se sabe onde se
+     esta: aberto pelo botao "Ver" da guia GPS o arquivo nem esta na
+     lista de anexos, e "0 de 5" seria mentira. */
+  const temNav=MC_ANEXOS.length>1&&mcPreviewIdx>=0;
+  const nav=temNav?`<div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:11px">
+      <button class="btn btns" style="padding:5px 12px" ${mcPreviewIdx<=0?'disabled':''} onclick="mcPreviewNavegar(-1)">‹ Anterior</button>
+      <span class="fhint">${mcPreviewIdx+1} de ${MC_ANEXOS.length}</span>
+      <button class="btn btns" style="padding:5px 12px" ${mcPreviewIdx>=MC_ANEXOS.length-1?'disabled':''} onclick="mcPreviewNavegar(1)">Próximo ›</button>
+    </div>`:'';
+  abrirModal(`<button class="mbc" onclick="fecharInteligente()">×</button><div class="mbt">${esc(nome)}</div><div class="mbs">&nbsp;</div>${nav}${corpo}`,true);
+}
+/* Anda na lista sem passar pelo cartao. Para nas pontas em vez de dar a
+   volta: com 30 anexos, voltar ao primeiro sem querer e perder o lugar. */
+function mcPreviewNavegar(d){
+  if(!MC_ANEXOS.length||mcPreviewIdx<0)return;
+  const i=mcPreviewIdx+d;
+  if(i<0||i>=MC_ANEXOS.length)return;
+  visualizarAnexo(MC_ANEXOS[i].caminho,MC_ANEXOS[i].nome,i);
 }
 async function uploadAnexo(input,clienteId){
   const files=[...input.files];

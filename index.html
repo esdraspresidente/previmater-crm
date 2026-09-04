@@ -3488,6 +3488,41 @@ function rotuloMidia(m){
    dia sozinha (item 251). Mesmo assim: loading=lazy so busca o que
    esta visivel, e audio e video vao com preload=none, ou seja nao
    baixam nada ate alguem apertar o play. */
+/* O CHAT ABRE NO FIM E FICA LA — 04/09/2026.
+
+   Ja havia um feed.scrollTop=feed.scrollHeight depois do innerHTML, e
+   ele funcionava: o problema e o que acontece DEPOIS. A midia entra por
+   createSignedUrl, que e assincrono — quando a primeira imagem aparece,
+   o feed cresce por baixo do scroll que ja tinha sido posto no fim, e a
+   conversa fica exibindo o comeco. Quanto mais anexo, mais alto para.
+
+   Entao nao basta rolar uma vez: fica colado enquanto a midia entra, e
+   solta no instante em que voce rola para cima para ler algo antigo —
+   caso contrario a proxima imagem carregada arrancaria a tela da sua
+   mao. Os 80px de folga sao para o "estou no fim" sobreviver ao
+   arredondamento de zoom do navegador. */
+function chatGrudarNoFim(feed){
+  if(!feed)return;
+  const fim=()=>{feed.scrollTop=feed.scrollHeight;};
+  fim();
+  /* Ouvintes uma vez so por elemento: a Caixa de Entrada recarrega o
+     feed a cada 15s, e sem a trava seria mais um ouvinte por rodada. */
+  if(!feed.dataset.gruda){
+    feed.dataset.gruda='1';
+    feed.addEventListener('scroll',()=>{
+      const noFim=feed.scrollHeight-feed.scrollTop-feed.clientHeight<80;
+      feed.dataset.solto=noFim?'':'1';
+    });
+    /* load NAO borbulha: capturar na descida e o unico jeito de saber
+       que uma <img> la dentro terminou. */
+    feed.addEventListener('load',()=>{if(!feed.dataset.solto)fim();},true);
+  }
+  feed.dataset.solto='';
+  /* Reforcos para o intervalo entre o innerHTML e o primeiro load:
+     fonte, audio sem preload e imagem que veio do cache nao disparam
+     load a tempo. */
+  [60,300,1000].forEach(ms=>setTimeout(()=>{if(!feed.dataset.solto)fim();},ms));
+}
 async function chatCarregarMidias(feed){
   if(!feed)return;
   const alvos=Array.from(feed.querySelectorAll('[data-midia]')).filter(el=>!el.dataset.pronto);
@@ -3593,8 +3628,8 @@ async function carregarChat(clienteId,silencioso){
     html+=`<div class="chatb ${cls}"${motivo}>${chatCorpoMsg(m)}<span class="chatb-meta">${esc(autor)}${chatHoraMsg(m)}${pend}</span></div>`;
   });
   feed.innerHTML=html;
-  feed.scrollTop=feed.scrollHeight;
   chatCarregarMidias(feed);
+  chatGrudarNoFim(feed);
 }
 /* ENTER MANDA, SHIFT+ENTER PULA LINHA.
    Vale para os dois chats (cartao e Caixa de Entrada), que sao conversa
@@ -8214,8 +8249,8 @@ async function ibCarregarChat(c,silencioso){
     html+=`<div class="chatb ${cls}"${motivo}>${chatCorpoMsg(m)}<span class="chatb-meta">${esc(autor)}${chatHoraMsg(m)}${pend}</span></div>`;
   });
   feed.innerHTML=html;
-  feed.scrollTop=feed.scrollHeight;
   chatCarregarMidias(feed);
+  chatGrudarNoFim(feed);
 }
 function pararInboxChatPoll(){if(ibChatTimer){clearInterval(ibChatTimer);ibChatTimer=null;}}
 /* ============================================================

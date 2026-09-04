@@ -154,6 +154,16 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 .apale{color:var(--text3);}
 .aforte{font-weight:800;color:var(--teal);}
 .aravo{font-size:10px;color:var(--yellow);font-weight:700;display:block;margin-top:2px;}
+.afmt{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 6px;border-radius:4px;background:#F0F7F7;color:var(--text3);}
+.adesc{display:block;font-size:11px;font-weight:400;color:var(--text3);margin-top:2px;}
+/* Resumo do teste que motivou tudo: estatico qualifica melhor que video?
+   Fica ACIMA da tabela porque e a unica pergunta que o Rafael faz todo
+   dia; a tabela responde qual peca, este bloco responde qual familia. */
+.aresumo{display:flex;gap:10px;margin:0 0 16px;}
+.arbox{flex:1;border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
+.arbox b{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;}
+.arbig{font-size:18px;font-weight:800;color:var(--teal);font-variant-numeric:tabular-nums;}
+.armini{font-size:11px;color:var(--text3);margin-top:2px;}
 .rodape{text-align:center;font-size:11px;color:var(--text3);margin-top:18px;line-height:1.6;}
 </style>
 </head>
@@ -291,10 +301,10 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 
     <div class="card">
       <div class="ctopo">
-        <div class="ctit">Qual anúncio traz mãe elegível</div>
+        <div class="ctit">Qual criativo traz mãe elegível</div>
         <button class="btcsv" onclick="baixarAnuncios()">Exportar CSV</button>
       </div>
-      <div class="csub">Foto do total desde 18/08, quando o anúncio de origem passou a ser gravado em cada lead — <b>não segue o filtro de período lá em cima</b>. O <b>custo por lead</b> é o número que o Gerenciador do Meta mostra, e ele engana: o algoritmo aprendeu a achar quem abre conversa, não quem tem direito. O que decide é o <b>custo por elegível</b>.</div>
+      <div class="csub">Foto do total desde 18/08, quando o anúncio de origem passou a ser gravado em cada lead — <b>não segue o filtro de período lá em cima</b>. Cada linha é um <b>código de criativo</b>, somando todas as cópias dele em qualquer campanha ou conjunto: subir anúncio novo com criativo antigo não zera mais o histórico. O <b>custo por lead</b> é o número que o Gerenciador do Meta mostra, e ele engana: o algoritmo aprendeu a achar quem abre conversa, não quem tem direito. O que decide é o <b>custo por elegível</b>.</div>
       <div id="anuncios"></div>
     </div>
 
@@ -409,7 +419,11 @@ async function carregar(){
     sb.from('vw_trafego_meta_dia').select('dia,gasto,alcance,cliques,conversas').order('dia',{ascending:true}).limit(400),
     sb.from('vw_trafego_descartes').select('dia,codigo,rotulo,ordem,qtd').order('dia',{ascending:true}).limit(900),
     sb.from('vw_contratos_cancelados').select('dia,codigo,rotulo,ordem,qtd').order('dia',{ascending:true}).limit(900),
-    sb.from('vw_trafego_anuncio').select('criativo,leads,nunca_respondeu,descartada,elegivel,gasto,por_lead,por_elegivel,pct_descarte,nao_classificada').order('gasto',{ascending:false}).limit(200)
+    /* Uma linha por CODIGO de criativo desde 04/09 (item 443), nao mais
+       por nome do anuncio. `anuncios` diz de quantos anuncios aquela
+       linha e feita, e e o que prova para o Rafael que a cifra dele nao
+       se perdeu quando o id mudou. */
+    sb.from('vw_trafego_anuncio').select('codigo,criativo,criativo_desc,formato,anuncios,anuncios_novos_sem_csv,leads,nunca_respondeu,descartada,elegivel,gasto,por_lead,por_elegivel,pct_descarte,nao_classificada').order('gasto',{ascending:false}).limit(200)
   ]);
   if(!hora.error && Array.isArray(hora.data)) HORAS=hora.data;
   if(!desc.error && Array.isArray(desc.data)) DESCARTES=desc.data;
@@ -923,40 +937,91 @@ function desenharCancelados(){
 function desenharAnuncios(){
   if(!ANUNCIOS.length){ $('anuncios').innerHTML='<div class="vazio">Nenhuma lead com anúncio identificado ainda.</div>'; return; }
   const real=v=>v==null?'—':'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-  let leads=0, eleg=0, gasto=0, semBalde=0;
-  const linhas=ANUNCIOS.map(a=>{
-    leads+=a.leads||0; eleg+=a.elegivel||0; gasto+=Number(a.gasto)||0; semBalde+=a.nao_classificada||0;
+
+  /* Criativo que gastou e nao trouxe lead nenhum sai da tabela e vira uma
+     linha de rodape. Ele PRECISA aparecer em algum lugar — e dinheiro
+     gasto — mas ocupando linha na tabela empurraria para baixo os cinco
+     que decidem a verba, e sao esses que o Rafael abre a tela para ver. */
+  const comLead = ANUNCIOS.filter(a=>(a.leads||0)>0);
+  const semLead = ANUNCIOS.filter(a=>!(a.leads||0) && Number(a.gasto)>0);
+
+  let leads=0, eleg=0, gasto=0, semBalde=0, novosSemCsv=0;
+  const fmt={};   // estatico/video: o corte que o teste do Rafael pergunta
+  for(const a of ANUNCIOS){
+    leads+=a.leads||0; eleg+=a.elegivel||0; gasto+=Number(a.gasto)||0;
+    semBalde+=a.nao_classificada||0; novosSemCsv+=a.anuncios_novos_sem_csv||0;
+    const f=a.formato||'sem formato';
+    if(!fmt[f]) fmt[f]={leads:0,eleg:0,gasto:0,desc:0};
+    fmt[f].leads+=a.leads||0; fmt[f].eleg+=a.elegivel||0;
+    fmt[f].gasto+=Number(a.gasto)||0; fmt[f].desc+=a.descartada||0;
+  }
+
+  /* Mesma trava de volume da tabela, e aqui ela vale mais: comparar duas
+     familias com 3 elegiveis de cada lado convida a cortar metade da
+     verba por causa de ruido. */
+  const resumo = Object.entries(fmt).sort((a,b)=>b[1].gasto-a[1].gasto).map(([f,v])=>{
+    const pe = v.eleg>0 ? real(v.gasto/v.eleg) : '—';
+    const pd = v.leads>0 ? Math.round(100*v.desc/v.leads)+'% descarte' : 'sem lead';
+    return '<div class="arbox"><b>'+f+'</b><div class="arbig">'+pe+'</div>'
+         + '<div class="armini">por elegível · '+v.eleg+' de '+v.leads+' leads · '+pd+'</div>'
+         + (v.eleg<3?'<div class="aravo">poucos elegíveis — ainda não dá para concluir</div>':'')
+         + '</div>';
+  }).join('');
+
+  const linhas=comLead.map(a=>{
     const pouco=(a.elegivel||0)<3;
-    return '<tr><td>'+a.criativo
+    return '<tr><td>'+(a.codigo||'—')
          + (pouco?'<span class="aravo">poucos elegíveis — ainda não dá para concluir</span>':'')
-         + '</td><td>'+(a.leads||0)+'</td><td>'+(a.pct_descarte==null?'—':a.pct_descarte+'%')+'</td>'
+         + (a.criativo_desc?'<span class="adesc">'+a.criativo_desc+((a.anuncios||1)>1?' · '+a.anuncios+' anúncios':'')+'</span>':'')
+         + '</td><td><span class="afmt">'+(a.formato||'—')+'</span></td>'
+         + '<td>'+(a.leads||0)+'</td><td>'+(a.pct_descarte==null?'—':a.pct_descarte+'%')+'</td>'
          + '<td>'+(a.elegivel||0)+'</td>'
          + '<td class="apale">'+real(a.por_lead)+'</td>'
          + '<td class="'+(pouco?'apale':'aforte')+'">'+real(a.por_elegivel)+'</td></tr>';
   }).join('');
+
   const geral = eleg>0 ? real(gasto/eleg) : '—';
+  const gastoSemLead = semLead.reduce((t,a)=>t+Number(a.gasto),0);
+
   $('anuncios').innerHTML =
-      '<table class="atab"><thead><tr><th>Criativo</th><th>Leads</th><th>Descarte</th>'
+      '<div class="aresumo">'+resumo+'</div>'
+    + '<table class="atab"><thead><tr><th>Criativo</th><th>Formato</th><th>Leads</th><th>Descarte</th>'
     + '<th>Elegíveis</th><th>Por lead</th><th>Por elegível</th></tr></thead><tbody>'
     + linhas + '</tbody></table>'
     + '<div class="vazio" style="margin-top:10px">'+leads+' leads atribuídas · '+eleg+' elegíveis · '
     + real(gasto)+' investido · <b>'+geral+' por elegível</b> no geral.<br>'
     + 'Lead que chegou por indicação não entra aqui, mesmo tendo vindo depois de um anúncio. '
     + 'Card arquivado continua contando: arquivar organiza a tela, não desfaz o que o anúncio trouxe.</div>'
+    /* Gasto sem retorno nenhum. Some da tabela e nao pode sumir da conta:
+       ate 04/09 esse dinheiro nao aparecia em lugar nenhum da tela,
+       porque a view antiga partia dos leads e anuncio sem lead nao
+       entrava no join. */
+    + (semLead.length ? '<div class="vazio">'+semLead.length
+        + (semLead.length===1?' criativo gastou':' criativos gastaram')+' '+real(gastoSemLead)
+        + ' sem trazer lead nenhuma: '+semLead.map(a=>a.codigo).join(', ')+'.</div>' : '')
     /* Lista que ninguém classificou aparece aqui em vez de evaporar do
        numerador. Acontece quando se cria lista nova no kanban: até
        alguém encaixar, a lead conta em "leads" e em nada mais. */
     + (semBalde ? '<div class="vazio" style="color:var(--yellow);font-weight:700">'
         + semBalde + (semBalde===1?' lead está':' leads estão')
-        + ' numa lista que este relatório ainda não sabe classificar — não entra em elegível nem em descartada. Criou lista nova no kanban? Me avise para encaixar.</div>' : '');
+        + ' numa lista que este relatório ainda não sabe classificar — não entra em elegível nem em descartada. Criou lista nova no kanban? Me avise para encaixar.</div>' : '')
+    /* Nao acende por anuncio velho resolvido pelo nome — aqueles ja
+       sairam do Gerenciador e nenhum CSV novo os traz de volta, entao o
+       aviso viveria aceso e ninguem leria. Acende so quando ha anuncio
+       GASTANDO agora que o de-para nao conhece, que e a unica situacao
+       com conserto: pedir o CSV atualizado. */
+    + (novosSemCsv ? '<div class="vazio" style="color:var(--yellow);font-weight:700">'
+        + novosSemCsv + (novosSemCsv===1?' anúncio está rodando':' anúncios estão rodando')
+        + ' sem constar no de-para de criativos — está sendo agrupado pelo nome do anúncio. Peça ao Rafael o CSV atualizado.</div>' : '');
 }
 
 function baixarAnuncios(){
-  const linhas=[['Criativo','Leads','Nunca respondeu','Descartadas','Elegiveis','Nao classificadas','Gasto','Por lead','Por elegivel','% descarte']];
-  for(const a of ANUNCIOS) linhas.push([a.criativo,a.leads||0,a.nunca_respondeu||0,a.descartada||0,
+  const linhas=[['Codigo','Descricao','Formato','Anuncios','Leads','Nunca respondeu','Descartadas','Elegiveis','Nao classificadas','Gasto','Por lead','Por elegivel','% descarte']];
+  for(const a of ANUNCIOS) linhas.push([a.codigo,a.criativo_desc||'',a.formato||'',a.anuncios||1,
+                                        a.leads||0,a.nunca_respondeu||0,a.descartada||0,
                                         a.elegivel||0,a.nao_classificada||0,a.gasto||0,
                                         a.por_lead||'',a.por_elegivel||'',a.pct_descarte||0]);
-  baixar('previmater-anuncios-'+hojeISO()+'.csv',linhas);
+  baixar('previmater-criativos-'+hojeISO()+'.csv',linhas);
 }
 
 // ------------------------------------------------------------

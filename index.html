@@ -2915,8 +2915,13 @@ const TRIAGEM_ROTULOS=[
   ['pedido_negado','Pedido já negado'],
   ['adocao','Adoção']
 ];
-function mcTriagemHtml(dados){
+function mcTriagemHtml(dados,chave){
   const d=dados||{};
+  /* Chave propria por lugar: o mesmo bloco aparece no cartao e no painel
+     da Caixa de Entrada, e os dois ficam no DOM ao mesmo tempo quando o
+     cartao abre por cima da conversa. Ids iguais fariam um clique fechar
+     o bloco errado. */
+  const ch=chave||'triagem';
   // Credencial nunca aparece aqui. O motor já barra na entrada, mas
   // card antigo pode ter senha gravada de antes da trava — e este painel
   // fica aberto para quem passar pela tela.
@@ -2929,13 +2934,13 @@ function mcTriagemHtml(dados){
   // mesmo, com o nome cru. Melhor feio que escondido.
   const sobrando=Object.keys(d).filter(k=>!PROIBIDAS.includes(String(k).toLowerCase())&&!TRIAGEM_ROTULOS.some(([r])=>r===k)&&String(d[k]??'').trim()!=='');
   if(!conhecidas.length&&!sobrando.length){
-    return mcSecao('triagem','🔎 Triagem',
+    return mcSecao(ch,'🔎 Triagem',
       `<div class="fhint">A Samara ainda não coletou nada desta cliente.</div>`,
       {estilo:'background:var(--bg2,#f6f7f8);border:1.5px dashed var(--border)'});
   }
   const linha=(rot,val)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:13px">
       <span style="color:var(--text3)">${esc(rot)}</span><b>${esc(String(val))}</b></div>`;
-  return mcSecao('triagem','🔎 Triagem — o que a Samara coletou',`
+  return mcSecao(ch,'🔎 Triagem — o que a Samara coletou',`
     ${conhecidas.map(([k,rot])=>linha(rot,d[k])).join('')}
     ${sobrando.map(k=>linha(k,d[k])).join('')}
     <div class="fhint" style="margin-top:7px">Coletado na conversa. Para corrigir, fale com a cliente ou ajuste em <code>samara_dados</code>.</div>`);
@@ -7917,6 +7922,7 @@ function ibRenderPainel(c){
     const chips=etqSel.map(id=>{const t=ETQ.find(x=>x.id===id);return t?`<span class="chip" style="background:${escA(t.cor)}">${esc(t.nome)}</span>`:'';}).join('')||'<div class="fhint">Sem etiquetas</div>';
     const pausada=cli.samara_pausada===true;
     ibPintarSamara(cli);
+    mcSecCarregar(cli.id);
     p.innerHTML=`<button class="ib-fechar-painel" onclick="ibToggleDetalhes()">✕ Fechar</button>
       <div class="inb-panel-title">Samara</div>
       <div style="padding:11px 12px;border-radius:10px;margin-bottom:6px;background:${pausada?'var(--yellow-bg)':'var(--teal-l)'};border:1.5px solid var(--border)">
@@ -7933,6 +7939,13 @@ function ibRenderPainel(c){
            sem motivo. Mesma funcao, mesmo pedido no banco — muda so para
            onde a tela volta depois. -->
       <a class="inb-cta" style="margin-top:8px" onclick="abrirDisparoSequencia('${cli.id}',false)">＋ Disparar uma sequência na mão</a>
+      <!-- O QUE A SAMARA JA COLETOU, aqui e nao so no cartao — 04/09/2026.
+           E o que decide o direito (DN, DS, seguro-desemprego) e e do que
+           se precisa para escrever a proxima mensagem. Abrir o cartao
+           inteiro para conferir uma data era desvio puro. Mesmo bloco,
+           mesma funcao — muda so a chave da secao, para o fechar de la
+           nao fechar o de ca. -->
+      <div style="margin-top:22px">${mcTriagemHtml(cli.samara_dados,'triagem_ib')}</div>
       <div class="inb-panel-title" style="margin-top:22px">Zona de risco</div>
       <div class="fhint" style="margin-bottom:10px">Apaga a cliente, o cartão, a conversa e tudo que estiver agendado para ela. Não dá para desfazer.</div>
       <button class="btnd" style="width:100%" onclick="ibExcluirTudo('${escA(c.chave)}')">Excluir cliente e conversa</button>`;

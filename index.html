@@ -5206,9 +5206,39 @@ async function pageDash(){
   pc.innerHTML='<div class="emp">Carregando...</div>';
   await dashCarregar();
 }
+/* TROCAR O PERIODO NAO RECARREGA O DASHBOARD INTEIRO — 04/09/2026.
+
+   O clique em Dia/Semana/Quinzena/Mes chamava dashCarregar(), que refaz
+   a RPC crm_dashboard: 42 subconsultas, serie de 14 dias sobre
+   crm_mensagens, vw_cards_parados, pm_parcelas mes a mes, funil, feed —
+   e mais a consulta do placar da reativacao logo em seguida. Medido em
+   04/09: 320 ms so de execucao no banco, fora rede e o JSON inteiro
+   voltando. NADA disso muda com o periodo: o unico bloco que muda e o
+   movimento. A RPC crm_dashboard_movimento devolve so ele.
+
+   E O BOTAO RESPONDE ANTES DA RESPOSTA. Sem isso a tela ficava
+   identica ate os numeros chegarem, e clique sem retorno parece erro —
+   a pessoa clica de novo. Agora o segmento marca na hora e os numeros
+   antigos esmaecem enquanto os novos nao chegam. */
 async function dashTrocarPeriodo(p){
+  if(DASH_PER===p)return;
   DASH_PER=p;
-  await dashCarregar();
+  dashPintar();                       // o botao selecionado muda no mesmo instante
+  const bloco=document.querySelector('.dsh-mvg');
+  if(bloco)bloco.style.opacity='.4';
+  const{data,error}=await sb.rpc('crm_dashboard_movimento',{p_periodo:p});
+  /* Clicou em outro periodo enquanto este voltava: a resposta velha nao
+     pode sobrescrever a escolha nova. */
+  if(DASH_PER!==p)return;
+  if(error){
+    if(bloco)bloco.style.opacity='';
+    toast('Não consegui trocar o período: '+error.message,'er');
+    return;
+  }
+  DASH.movimento=data.movimento;
+  DASH.periodo=data.periodo;
+  DASH.movimento_desde=data.movimento_desde;
+  dashPintar();
 }
 async function dashCarregar(){
   const{data,error}=await sb.rpc('crm_dashboard',{p_periodo:DASH_PER});

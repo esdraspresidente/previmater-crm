@@ -3993,20 +3993,38 @@ async function executarBuscaGlobal(termo){
   const alvo=$('gb-resultados');
   if(!alvo)return;
   const escQ=v=>String(v).replace(/"/g,'\\"');
-  const digits=termo.replace(/\D/g,'');
-  const conds=[
-    `nome_completo.ilike."%${escQ(termo)}%"`,
-    `telefone_principal.ilike."%${escQ(termo)}%"`,
-    `cpf.ilike."%${escQ(termo)}%"`,
-    `observacoes.ilike."%${escQ(termo)}%"`,
-    `trello_url.ilike."%${escQ(termo)}%"`
-  ];
-  if(digits.length>=3)conds.push(`telefone_chave.ilike."%${digits}%"`);
-  const{data,error}=await sb.from('crm_clientes')
-    .select('id,nome_completo,telefone_principal,quadro,arquivado_em')
-    .or(conds.join(','))
-    .order('nome_completo')
-    .limit(25);
+  /* BUSCA POR PEDACOS — 04/09/2026, caso da Bianca.
+
+     Antes o termo inteiro ia como uma frase so: "BIANCA 3629" virava
+     ilike '%BIANCA 3629%' e nao achava nada, porque essa sequencia nao
+     existe em campo nenhum. E o cadastro antigo da Bianca estava
+     gravado com OUTRO nome ("Bianca indicacao 3677 Franciele Santos"),
+     entao procurar pelo nome completo de hoje tambem nao achava — o
+     unico ponto em comum entre os dois cadastros era o telefone.
+
+     Agora cada pedaco e uma condicao: TODOS precisam bater, cada um em
+     QUALQUER campo. "BIANCA 3629" acha quem tem Bianca no nome E 3629
+     no telefone. Chamar .or() varias vezes e o que produz esse E — no
+     PostgREST cada filtro encadeado entra como AND com os anteriores.
+
+     Pedaco de uma letra fica de fora: "Ana C" traria a base inteira. */
+  const pedacos=termo.trim().split(/\s+/).filter(t=>t.length>=2).slice(0,4);
+  const alvos=pedacos.length?pedacos:[termo];
+  let q=sb.from('crm_clientes')
+    .select('id,nome_completo,telefone_principal,quadro,arquivado_em');
+  alvos.forEach(t=>{
+    const d=t.replace(/\D/g,'');
+    const conds=[
+      `nome_completo.ilike."%${escQ(t)}%"`,
+      `telefone_principal.ilike."%${escQ(t)}%"`,
+      `cpf.ilike."%${escQ(t)}%"`,
+      `observacoes.ilike."%${escQ(t)}%"`,
+      `trello_url.ilike."%${escQ(t)}%"`
+    ];
+    if(d.length>=3)conds.push(`telefone_chave.ilike."%${d}%"`);
+    q=q.or(conds.join(','));
+  });
+  const{data,error}=await q.order('nome_completo').limit(25);
   if(!$('gb-resultados')||$('gb-input')&&$('gb-input').value.trim()!==termo)return;
   if(error){alvo.innerHTML='<div class="fhint" style="text-align:center;padding:14px 0">Erro ao buscar: '+esc(error.message)+'</div>';return;}
   if(!data||!data.length){alvo.innerHTML='<div class="fhint" style="text-align:center;padding:14px 0">Nada encontrado</div>';return;}
@@ -7954,11 +7972,17 @@ async function clCarregar(reset){
   // 'todos' = todos mesmo, inclusive arquivados
 
   if(CL_BUSCA){
-    const t=CL_BUSCA.replace(/[%,()]/g,'');
-    const digitos=t.replace(/\D/g,'');
-    const conds=[`nome_completo.ilike.%${t}%`];
-    if(digitos.length>=3){conds.push(`telefone_chave.ilike.%${digitos}%`);conds.push(`cpf.ilike.%${digitos}%`);}
-    q=q.or(conds.join(','));
+    /* Mesma regra da lupa: cada pedaco e uma condicao e todos precisam
+       bater. Duas telas buscando de jeitos diferentes e a pessoa
+       aprender que "achou numa e nao na outra" e normal. */
+    const limpo=CL_BUSCA.replace(/[%,()]/g,'');
+    const pedacos=limpo.trim().split(/\s+/).filter(t=>t.length>=2).slice(0,4);
+    (pedacos.length?pedacos:[limpo]).forEach(t=>{
+      const d=t.replace(/\D/g,'');
+      const conds=[`nome_completo.ilike.%${t}%`,`telefone_principal.ilike.%${t}%`];
+      if(d.length>=3){conds.push(`telefone_chave.ilike.%${d}%`);conds.push(`cpf.ilike.%${d}%`);}
+      q=q.or(conds.join(','));
+    });
   }
 
   const de=CL_PAGINA*CL_PAGE;

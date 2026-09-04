@@ -3544,27 +3544,54 @@ function rotuloMidia(m){
    caso contrario a proxima imagem carregada arrancaria a tela da sua
    mao. Os 80px de folga sao para o "estou no fim" sobreviver ao
    arredondamento de zoom do navegador. */
+/* QUEM ROLA NEM SEMPRE E O FEED — 04/09/2026, correcao da primeira
+   tentativa.
+
+   No cartao o .chatfeed rola sozinho (max-height:420px). Na Caixa de
+   Entrada o CSS faz .inb-chat-body .chatfeed{max-height:none} e quem
+   rola e o PAI. Mandar scrollTop para o feed la nao move nada: ele nao
+   tem para onde rolar. Por isso o cartao obedecia e a Caixa de Entrada
+   continuava abrindo no comeco.
+
+   Entao a caixa e procurada, e nao presumida: sobe do feed ate achar
+   quem tem overflow auto/scroll E de fato transborda. Procura de novo a
+   cada chamada porque a altura muda quando a midia entra — o que nao
+   transbordava no primeiro milissegundo transborda depois. */
+function chatCaixaQueRola(feed){
+  let n=feed;
+  while(n&&n!==document.body){
+    const o=getComputedStyle(n).overflowY;
+    if((o==='auto'||o==='scroll')&&n.scrollHeight>n.clientHeight+2)return n;
+    n=n.parentElement;
+  }
+  return feed;
+}
 function chatGrudarNoFim(feed){
   if(!feed)return;
-  const fim=()=>{feed.scrollTop=feed.scrollHeight;};
+  const fim=()=>{const cx=chatCaixaQueRola(feed);cx.scrollTop=cx.scrollHeight;};
   fim();
+  const cx=chatCaixaQueRola(feed);
   /* Ouvintes uma vez so por elemento: a Caixa de Entrada recarrega o
-     feed a cada 15s, e sem a trava seria mais um ouvinte por rodada. */
-  if(!feed.dataset.gruda){
-    feed.dataset.gruda='1';
-    feed.addEventListener('scroll',()=>{
-      const noFim=feed.scrollHeight-feed.scrollTop-feed.clientHeight<80;
-      feed.dataset.solto=noFim?'':'1';
+     feed a cada 15s, e sem a trava seria mais um ouvinte por rodada.
+     A marca fica na CAIXA, que e quem recebe o scroll. */
+  if(!cx.dataset.gruda){
+    cx.dataset.gruda='1';
+    cx.addEventListener('scroll',()=>{
+      const noFim=cx.scrollHeight-cx.scrollTop-cx.clientHeight<80;
+      cx.dataset.solto=noFim?'':'1';
     });
     /* load NAO borbulha: capturar na descida e o unico jeito de saber
        que uma <img> la dentro terminou. */
-    feed.addEventListener('load',()=>{if(!feed.dataset.solto)fim();},true);
+    cx.addEventListener('load',()=>{if(!cx.dataset.solto)fim();},true);
   }
-  feed.dataset.solto='';
+  cx.dataset.solto='';
   /* Reforcos para o intervalo entre o innerHTML e o primeiro load:
      fonte, audio sem preload e imagem que veio do cache nao disparam
      load a tempo. */
-  [60,300,1000].forEach(ms=>setTimeout(()=>{if(!feed.dataset.solto)fim();},ms));
+  [60,300,1000].forEach(ms=>setTimeout(()=>{
+    const c2=chatCaixaQueRola(feed);
+    if(!c2.dataset.solto)c2.scrollTop=c2.scrollHeight;
+  },ms));
 }
 async function chatCarregarMidias(feed){
   if(!feed)return;

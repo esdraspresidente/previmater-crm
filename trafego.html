@@ -741,6 +741,20 @@ const HMODOS=[['total','Total no período'],['media','Média por dia'],['dia','D
 const HDOWS=[['','Todos'],['0','dom'],['1','seg'],['2','ter'],['3','qua'],['4','qui'],['5','sex'],['6','sáb']];
 
 function dowDe(dataISO){ return new Date(dataISO+'T12:00:00Z').getUTCDay(); }
+
+/* Hora cheia de Brasília, 0 a 23. Mesmo motivo do hojeISO(): a hora do
+   aparelho não serve, e às 21h em Brasília o UTC já virou o dia. */
+function horaBR(){
+  return Number(new Date().toLocaleString('en-GB',
+    {timeZone:'America/Sao_Paulo',hour:'2-digit',hourCycle:'h23'}));
+}
+/** Soma das horas de 0 até `ate`, inclusive. */
+function acumuladoAte(linha,ate){
+  const h=Array.isArray(linha.horas)?linha.horas:[];
+  let t=0;
+  for(let i=0;i<=ate && i<24;i++) t+=Number(h[i])||0;
+  return t;
+}
 function inicioDosDados(){ return LINHAS.length? LINHAS[0].dia : '2026-08-12'; }
 
 /** Linhas da janela, da mais recente para a mais antiga.
@@ -1002,7 +1016,24 @@ function escreverResumoDias(linhas,j){
   }
   if(mesmos.length>=2) txt += ' Média dos '+mesmos.length+' '+nomeDow+'s anteriores: <b>'+media.toFixed(1).replace('.',',')+'</b>.';
 
-  if(topo.dia===hojeISO()) txt += '<br>O dia de hoje ainda está correndo: ele é comparado inteiro contra um dia que já fechou, então aparece mais fraco do que vai terminar.';
+  /* DIA QUE AINDA ESTÁ CORRENDO CONTRA DIA QUE JÁ FECHOU É COMPARAÇÃO
+     TORTA, e é justamente hoje que alguém olha para decidir se o dia
+     está ruim. Aqui os dois são cortados na MESMA hora: se às 19h
+     entraram 8 e no sábado passado tinham entrado 16 até as 19h, a
+     queda é real; se tinham entrado 8, o dia só está normal e o resto
+     ainda vai chegar. */
+  if(topo.dia===hojeISO()){
+    txt += '<br>O dia ainda está correndo.';
+    if(ant){
+      const ate=horaBR();
+      const hoje=acumuladoAte(topo,ate);
+      const antes=acumuladoAte(ant,ate);
+      txt += ' <b>Até as '+ate+'h</b>: '+hoje+' hoje contra <b>'+antes+'</b> no '+nomeDow
+           +' anterior na mesma hora'
+           +(antes? ' ('+(hoje>=antes?'+':'−')+Math.round(Math.abs(hoje-antes)/antes*100)+'%)' : '')
+           +' — essa é a comparação que vale enquanto o dia não fecha.';
+    }
+  }
   if(linhas.length===1 && HDOW==='') txt += '<br>A janela tem um dia só. Aumente o período, ou filtre por dia da semana, para ver mais linhas.';
 
   el.innerHTML=txt;

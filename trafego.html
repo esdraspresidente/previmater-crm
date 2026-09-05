@@ -112,6 +112,13 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 /* mapa de calor de horario — item 441 */
 .hmwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
 .hmgrid{display:grid;grid-template-columns:34px repeat(24,minmax(22px,1fr)) 46px;gap:2px;min-width:660px;}
+/* No modo dia a dia a primeira coluna carrega "sáb 05/09" e a última
+   carrega o total mais a diferença — as duas precisam de mais espaço. */
+.hmgrid.pordia{grid-template-columns:62px repeat(24,minmax(22px,1fr)) 66px;min-width:700px;}
+.hmdd{font-size:10px;color:var(--text2);font-weight:700;display:flex;align-items:center;line-height:1.2;}
+.hmdd.hoje{color:var(--teal);}
+.hmt .dl{font-size:9px;font-weight:800;margin-left:3px;}
+.hmt .dl.sobe{color:var(--green);} .hmt .dl.desce{color:var(--red);} .hmt .dl.igual{color:var(--text3);}
 .hmh{font-size:9px;color:var(--text3);font-weight:700;text-align:center;padding-bottom:2px;}
 .hmd{font-size:10px;color:var(--text2);font-weight:700;display:flex;align-items:center;}
 .hmc{aspect-ratio:1;border-radius:4px;background:#F3FAFA;display:flex;align-items:center;justify-content:center;
@@ -249,7 +256,8 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
         <button class="btcsv" onclick="baixarHorarios()">Exportar CSV</button>
       </div>
       <div class="csub">Hora da <b>primeira</b> mensagem de cada pessoa, no horário de Brasília — é quando ela chega, não quando conversa. Segue o período escolhido lá em cima.</div>
-      <div class="fbotoes" id="fhmodo" style="margin-bottom:14px;"></div>
+      <div class="fbotoes" id="fhmodo" style="margin-bottom:10px;"></div>
+      <div class="fbotoes" id="fhdow" style="margin-bottom:14px;display:none;"></div>
       <div class="hmwrap"><div class="hmgrid" id="heat"></div></div>
       <div class="hmleg" id="heatleg"></div>
       <div class="hmres" id="heatres">—</div>
@@ -406,7 +414,8 @@ async function abrir(){
 // ------------------------------------------------------------
 let LINHAS=[];           // uma linha por dia, direto da view
 let HORAS=[];            // uma linha por dia, com o array das 24 horas
-let HMODO='total';       // 'total' ou 'media' — ver desenharHeat()
+let HMODO='total';       // 'total', 'media' ou 'dia' — ver desenharHeat()
+let HDOW='';             // filtro de dia da semana no modo 'dia'; '' = todos
 let META=[];             // uma linha por dia, gasto do Meta
 let ESTOQUE=[];          // uma linha por etapa do funil
 let DESCARTES=[];        // uma linha por dia e por motivo de descarte
@@ -714,7 +723,55 @@ function desenharDias(quantos){
    inteiro de branco e não diria nada.
    ============================================================ */
 const DOW_NOME=['dom','seg','ter','qua','qui','sex','sáb'];
-const HMODOS=[['total','Total no período'],['media','Média por dia']];
+const HMODOS=[['total','Total no período'],['media','Média por dia'],['dia','Dia a dia']];
+
+/* POR QUE O MODO DIA A DIA EXISTE.
+   Os dois primeiros modos empilham a semana: numa janela de 30 dias os
+   quatro sábados viram UMA linha, total ou média. Isso responde «que
+   hora entra lead» e não responde «este sábado foi pior que o sábado
+   passado», que é a pergunta de quem olha o dia que acabou de acontecer.
+   Aqui cada DATA é uma linha, a mais recente em cima, e o filtro de dia
+   da semana deixa quatro sábados um embaixo do outro.
+
+   A DIFERENÇA É CONTRA A OCORRÊNCIA ANTERIOR DO MESMO DIA DA SEMANA, e
+   ela é procurada em TODO o histórico, não só dentro da janela: com
+   «Hoje» selecionado a janela tem uma linha só, e é exatamente aí que a
+   comparação com o sábado passado interessa. A data comparada vai no
+   título da célula, para ninguém achar que está comparando com ontem. */
+const HDOWS=[['','Todos'],['0','dom'],['1','seg'],['2','ter'],['3','qua'],['4','qui'],['5','sex'],['6','sáb']];
+
+function dowDe(dataISO){ return new Date(dataISO+'T12:00:00Z').getUTCDay(); }
+function inicioDosDados(){ return LINHAS.length? LINHAS[0].dia : '2026-08-12'; }
+
+/** Linhas da janela, da mais recente para a mais antiga.
+ *
+ *  DIA SEM NENHUM CONTATO NÃO EXISTE NA VIEW — ela é montada a partir das
+ *  mensagens, então um dia zerado simplesmente não tem linha. Deixar
+ *  assim faria a grade PULAR o dia: quem procura o sábado ruim não o
+ *  encontraria, e a ausência pareceria dia bom. Os buracos são
+ *  preenchidos aqui com zero, nunca antes do primeiro dia da base. */
+function linhasPorDia(ini,fim){
+  const mapa={};
+  for(const l of HORAS) mapa[l.dia]=l;
+  const de = ini<inicioDosDados()? inicioDosDados() : ini;
+  const out=[];
+  for(let d=de; d<=fim; d=menos(d,-1)){
+    const l = mapa[d] || {dia:d,dow:dowDe(d),total:0,horas:new Array(24).fill(0)};
+    if(HDOW===''||String(l.dow)===HDOW) out.push(l);
+  }
+  return out.sort((a,b)=>a.dia<b.dia?1:-1);
+}
+
+/** A ocorrência anterior do mesmo dia da semana é sempre a data menos 7,
+ *  então não há o que procurar. Buscar «o último sábado que existe em
+ *  HORAS» erraria justamente quando o sábado passado teve zero: ele não
+ *  está na view, e a comparação pularia para o sábado retrasado sem
+ *  avisar. Devolve null antes do início da base. */
+function diaAnteriorIgual(linha){
+  const alvo=menos(linha.dia,7);
+  if(alvo<inicioDosDados()) return null;
+  return HORAS.find(l=>l.dia===alvo) || {dia:alvo,dow:linha.dow,total:0};
+}
 
 /** As linhas de horário dentro da janela, já somadas por dia da semana e
  *  hora. Devolve também quantas vezes cada dia da semana apareceu, que é
@@ -739,6 +796,16 @@ function montarModosHeat(){
   el.innerHTML=HMODOS.map(([v,r])=>
     '<button class="fb'+(v===HMODO?' on':'')+'" data-v="'+v+'">'+r+'</button>').join('');
   el.querySelectorAll('.fb').forEach(b=>b.onclick=()=>{HMODO=b.dataset.v;montarModosHeat();aplicar();});
+
+  /* Os chips de dia da semana só fazem sentido com uma linha por data:
+     nos outros modos o dia da semana JÁ é a linha, e filtrar deixaria a
+     grade com uma faixa só, sem nada para comparar. */
+  const dw=$('fhdow');
+  if(!dw) return;
+  dw.style.display = HMODO==='dia' ? '' : 'none';
+  dw.innerHTML=HDOWS.map(([v,r])=>
+    '<button class="fb'+(v===HDOW?' on':'')+'" data-v="'+v+'">'+r+'</button>').join('');
+  dw.querySelectorAll('.fb').forEach(b=>b.onclick=()=>{HDOW=b.dataset.v;montarModosHeat();aplicar();});
 }
 
 /* Cor da célula. Fundo claro fixo e a tinta só na opacidade: assim o
@@ -753,6 +820,8 @@ function corHeat(v,teto){
 function desenharHeat(j){
   const box=$('heat');
   if(!box) return;
+  box.className='hmgrid'+(HMODO==='dia'?' pordia':'');
+  if(HMODO==='dia'){ desenharHeatDias(j); return; }
   const{soma,ocorrencias,total}=somarHoras(j.ini,j.fim);
   const media=HMODO==='media';
   const val=(d,h)=>{
@@ -842,8 +911,120 @@ function escreverResumoHeat(soma,ocorrencias,total,j){
       : '');
 }
 
+/* Uma linha por DATA. Mesma grade, mesma escala de cor, mesmo tamanho de
+   célula dos outros modos — trocar o desenho junto com o recorte faria
+   parecer outro gráfico, e a comparação entre os modos se perderia. */
+function desenharHeatDias(j){
+  const box=$('heat');
+  const linhas=linhasPorDia(j.ini,j.fim);
+  if(!linhas.length){
+    box.innerHTML='';
+    $('heatleg').innerHTML='';
+    $('heatres').innerHTML='Nenhum dia com contato nesse período'
+      +(HDOW===''?'':' para '+HDOWS.find(x=>x[0]===HDOW)[1])+'.';
+    return;
+  }
+
+  let teto=0;
+  for(const l of linhas){
+    const h=Array.isArray(l.horas)?l.horas:[];
+    for(let i=0;i<24;i++) teto=Math.max(teto,Number(h[i])||0);
+  }
+  teto=teto||1;
+
+  const hoje=hojeISO();
+  let html='<div class="hmh"></div>';
+  for(let h=0;h<24;h++) html+='<div class="hmh">'+h+'</div>';
+  html+='<div class="hmh">dia</div>';
+
+  for(const l of linhas){
+    const ehHoje=l.dia===hoje;
+    html+='<div class="hmdd'+(ehHoje?' hoje':'')+'">'+DOW_NOME[Number(l.dow)||0]+' '+fmtBR(l.dia)+'</div>';
+    const h=Array.isArray(l.horas)?l.horas:[];
+    let linhaTotal=0;
+    for(let i=0;i<24;i++){
+      const v=Number(h[i])||0;
+      linhaTotal+=v;
+      const t=fmtBR(l.dia)+' '+String(i).padStart(2,'0')+'h — '+v;
+      html+='<div class="hmc'+(v?'':' z')+'" style="'+corHeat(v,teto)+'" title="'+t+'">'+v+'</div>';
+    }
+    const ant=diaAnteriorIgual(l);
+    let dl='';
+    if(ant){
+      const tAnt=Number(ant.total)||0;
+      const d=linhaTotal-tAnt;
+      const cls=d>0?'sobe':(d<0?'desce':'igual');
+      const sinal=d>0?'+':'';
+      dl='<span class="dl '+cls+'" title="contra '+DOW_NOME[Number(ant.dow)||0]+' '+fmtBR(ant.dia)+', que teve '+tAnt+'">'+sinal+d+'</span>';
+    }
+    html+='<div class="hmt">'+linhaTotal+dl+'</div>';
+  }
+  box.innerHTML=html;
+
+  $('heatleg').innerHTML='<span>menos</span>'
+    +[0.10,0.30,0.50,0.70,0.90].map(o=>'<i style="background:rgba(10,147,150,'+o+')"></i>').join('')
+    +'<span>mais</span><span style="margin-left:auto">contatos na hora · a diferença é contra o mesmo dia da semana anterior</span>';
+
+  escreverResumoDias(linhas,j);
+}
+
+/* A frase embaixo do mapa responde a pergunta que fez alguém abrir o
+   modo dia a dia: «o dia de hoje foi ruim mesmo?». Sem ela sobram trinta
+   linhas de números e a conta fica por conta de quem olha. */
+function escreverResumoDias(linhas,j){
+  const el=$('heatres');
+  if(!el) return;
+  const topo=linhas[0];
+  const totalTopo=Number(topo.total)||0;
+  const ant=diaAnteriorIgual(topo);
+  const nomeDow=['domingo','segunda','terça','quarta','quinta','sexta','sábado'][Number(topo.dow)||0];
+
+  /* A média é a do MESMO dia da semana e vem do histórico inteiro, não
+     da janela: comparar um sábado com a média de todos os dias faria o
+     sábado parecer ruim só por ser sábado. Conta só os sábados que
+     existem na view; um sábado zerado ficaria de fora e puxaria a média
+     para cima. Com o volume de hoje isso não acontece, e se acontecer a
+     linha de cima já mostra o zero. */
+  const mesmos=HORAS.filter(l=>l.dow===topo.dow && l.dia<topo.dia);
+  const media=mesmos.length? mesmos.reduce((a,b)=>a+(Number(b.total)||0),0)/mesmos.length : 0;
+
+  let txt='<b>'+DOW_NOME[Number(topo.dow)||0]+' '+fmtBR(topo.dia)+'</b>: '+totalTopo+' contato'+(totalTopo===1?'':'s')+'. ';
+  if(ant){
+    const tAnt=Number(ant.total)||0;
+    const d=totalTopo-tAnt;
+    const pct=tAnt? Math.round(Math.abs(d)/tAnt*100) : 0;
+    txt += d===0
+      ? 'Igual ao '+nomeDow+' anterior ('+fmtBR(ant.dia)+').'
+      : 'O '+nomeDow+' anterior ('+fmtBR(ant.dia)+') teve <b>'+tAnt+'</b> — '
+        +(d>0?'alta':'queda')+' de '+pct+'%.';
+  }else{
+    txt += 'Não há '+nomeDow+' anterior na base para comparar.';
+  }
+  if(mesmos.length>=2) txt += ' Média dos '+mesmos.length+' '+nomeDow+'s anteriores: <b>'+media.toFixed(1).replace('.',',')+'</b>.';
+
+  if(topo.dia===hojeISO()) txt += '<br>O dia de hoje ainda está correndo: ele é comparado inteiro contra um dia que já fechou, então aparece mais fraco do que vai terminar.';
+  if(linhas.length===1 && HDOW==='') txt += '<br>A janela tem um dia só. Aumente o período, ou filtre por dia da semana, para ver mais linhas.';
+
+  el.innerHTML=txt;
+}
+
 function baixarHorarios(){
   const j=janela(PERIODO);
+  /* O CSV acompanha o modo da tela. Exportar sempre o agregado faria o
+     arquivo desmentir o que a pessoa está vendo. */
+  if(HMODO==='dia'){
+    const cab=['data','dia_semana','total'];
+    for(let h=0;h<24;h++) cab.push('h'+String(h).padStart(2,'0'));
+    const linhas=[cab];
+    for(const l of linhasPorDia(j.ini,j.fim)){
+      const h=Array.isArray(l.horas)?l.horas:[];
+      const linha=[l.dia.split('-').reverse().join('/'),DOW_NOME[Number(l.dow)||0],Number(l.total)||0];
+      for(let i=0;i<24;i++) linha.push(Number(h[i])||0);
+      linhas.push(linha);
+    }
+    baixar('horarios_dia_a_dia_'+j.ini+'_a_'+j.fim+'.csv',linhas);
+    return;
+  }
   const{soma,ocorrencias}=somarHoras(j.ini,j.fim);
   /* baixar() recebe linha como ARRAY e ele mesmo escapa cada campo com o
      csvCampo — juntar com ponto e vírgula aqui passaria a linha inteira

@@ -2840,6 +2840,37 @@ async function registrarMovimentoLista(clienteId,origListaId,destListaId){
   }
   if(entrou){
     await sb.from('crm_clientes').update({descartado_em:new Date().toISOString()}).eq('id',clienteId);
+    /* QUEM JA ASSINOU NAO E DESCARTE DE LEAD.
+       As duas listas de motivo se parecem de fora — descarte tem
+       "Desistiu do atendimento", cancelamento tem "Desistiu depois de
+       assinar" — e o cartao so pergunta o motivo depois de ja estar na
+       lista. Foi assim que uma cliente com contrato disparado foi parar
+       em Descartado: o CRM gravou descartado_em, nao cancelado_em, e ela
+       sumiu do relatorio de cancelamento continuando a contar como
+       assinada no painel do trafego.
+       A trava mora aqui, e nao em cada botao de mover, pelo mesmo motivo
+       que o motivo do descarte mora aqui: caminho novo de mover cartao
+       nasce ja coberto. O preco e o cartao piscar em Descartado antes de
+       pular para Contrato Cancelado, porque a checagem e depois do
+       movimento — travar antes exigiria repetir o teste em quatro
+       lugares, e o quinto nasceria sem ele. */
+    const{data:cAss}=await sb.from('crm_clientes')
+      .select('contrato_disparado_em').eq('id',clienteId).maybeSingle();
+    if(cAss&&cAss.contrato_disparado_em){
+      const vai=confirm('Essa cliente já teve contrato disparado.\n\n'
+        +'Descarte é para lead que nunca teve caminho. Contrato que cai depois '
+        +'de assinado é cancelamento: tem lista e motivo próprios, e é o que '
+        +'aparece no relatório de cancelamentos.\n\nMandar para Contrato Cancelado?');
+      if(vai){
+        const{data:lc}=await sb.from('crm_listas').select('id,quadro,nome')
+          .eq('nome','Contrato Cancelado').eq('arquivada',false).limit(1).maybeSingle();
+        if(lc){ await moverPara(clienteId,lc.quadro,lc.id,0); return; }
+        toast('Não achei a lista Contrato Cancelado — o cartão ficou em Descartado','er');
+      }
+      /* Disse que nao? O cartao fica onde esta, e o painel do trafego
+         mostra essa cliente como "descartada depois de assinar". Nao
+         some calada. */
+    }
     /* Arrastado no quadro, com o cartao fechado: nao ha onde mostrar o
        campo, e abrir um balao por cima do quadro atrapalha quem esta
        arrastando varios. Um aviso resolve — o campo espera dentro do

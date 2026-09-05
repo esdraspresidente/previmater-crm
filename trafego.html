@@ -85,6 +85,7 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 .kpi{background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:14px;box-shadow:var(--sh);}
 .kpi .n{font-size:26px;font-weight:800;letter-spacing:-.8px;line-height:1.1;}
 .kpi .l{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-top:4px;}
+.kpi .det{font-size:11px;font-weight:600;color:var(--text3);margin-top:3px;text-transform:none;letter-spacing:0;}
 
 .inv{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
 @media(max-width:640px){.inv{grid-template-columns:repeat(2,1fr);}}
@@ -204,6 +205,16 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
       mês não mede campanha — mede quando o sistema entrou no ar.
     </div>
 
+    <div class="aviso">
+      <b>O que entra nesta tela:</b> só cliente que chegou por anúncio — a que
+      trouxe o clique identificado do Meta. Orgânico, indicação e reativação de
+      lead antiga ficam de fora de propósito: esta tela existe para julgar
+      anúncio, e contrato que não veio de anúncio aqui dentro faria o custo por
+      contrato mentir para baixo. Quem clicou no anúncio mas perdeu a
+      identificação no caminho também fica de fora — o número peca por menos,
+      nunca por mais.
+    </div>
+
     <div class="filtros">
       <div class="fgrupo">
         <div class="flabel">Período</div>
@@ -219,7 +230,7 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
       <div class="kpi"><div class="n" id="k1">—</div><div class="l">Contatos novos</div><div class="cmp" id="c1"></div></div>
       <div class="kpi"><div class="n" id="k2">—</div><div class="l">Média por dia</div><div class="cmp" id="c2"></div></div>
       <div class="kpi"><div class="n" id="k3">—</div><div class="l">Contratos enviados</div><div class="cmp" id="c3"></div></div>
-      <div class="kpi"><div class="n" id="k4">—</div><div class="l">Contratos assinados</div><div class="cmp" id="c4"></div></div>
+      <div class="kpi"><div class="n" id="k4">—</div><div class="l">Contratos assinados</div><div class="det" id="k4det"></div><div class="cmp" id="c4"></div></div>
     </div>
 
     <div class="card">
@@ -410,7 +421,7 @@ const COMPARACOES=[['0','Não comparar'],['1','Dia anterior'],['7','Semana anter
 
 async function carregar(){
   const [dia,hora,estoque,meta,desc,canc,anun]=await Promise.all([
-    sb.from('vw_trafego_dia').select('dia,novos_contatos,contratos_enviados,contratos_assinados').order('dia',{ascending:true}).limit(400),
+    sb.from('vw_trafego_dia').select('dia,novos_contatos,contratos_enviados,contratos_assinados,contratos_cancelados').order('dia',{ascending:true}).limit(400),
     /* Uma linha por dia com as 24 horas num array. Linha por hora seria
        mais simples de ler e estouraria o corte de 1.000 do PostgREST em
        uns três meses — calado, mostrando meio mapa. */
@@ -462,15 +473,24 @@ function janela(periodo){
   return {ini:menos(hoje,n-1),fim:hoje,dias:n};
 }
 
+/* ASSINADO AQUI E ASSINADO QUE FICOU DE PE.
+   Contrato que caiu depois de assinado nao e resultado de anuncio: o
+   dinheiro entrou e saiu. O KPI mostra o liquido, e o bruto e o
+   abatimento ficam na linha de baixo para ninguem achar que o numero
+   encolheu sozinho. O abatimento cai no DIA DO CANCELAMENTO, nunca no
+   dia da assinatura — mexer no dia da assinatura reescreve dia que ja
+   passou, e o Rafael veria numero de semana fechada mudando. */
 function somar(ini,fim){
-  const t={contatos:0,enviados:0,assinados:0,diasComDado:0};
+  const t={contatos:0,enviados:0,assinadosBruto:0,cancelados:0,assinados:0,diasComDado:0};
   for(const l of LINHAS){
     if(l.dia<ini||l.dia>fim) continue;
     t.contatos+=l.novos_contatos||0;
     t.enviados+=l.contratos_enviados||0;
-    t.assinados+=l.contratos_assinados||0;
+    t.assinadosBruto+=l.contratos_assinados||0;
+    t.cancelados+=l.contratos_cancelados||0;
     t.diasComDado++;
   }
+  t.assinados=t.assinadosBruto-t.cancelados;
   return t;
 }
 
@@ -525,6 +545,9 @@ function aplicar(){
   $('k2').textContent=medAtual.toFixed(1).replace('.',',');
   $('k3').textContent=a.enviados;
   $('k4').textContent=a.assinados;
+  $('k4det').textContent=a.cancelados
+    ? a.assinadosBruto+' assinados − '+a.cancelados+' cancelado'+(a.cancelados>1?'s':'')
+    : '';
 
   escreverComparacao('c1',a.contatos,b.contatos,jAnt,inicioDados);
   escreverComparacao('c2',Math.round(medAtual*10),Math.round(medAnt*10),jAnt,inicioDados);
@@ -634,6 +657,7 @@ function baixarDiario(){
   const j=janela(PERIODO);
   const meta={}; for(const m of META) meta[m.dia]=m;
   const linhas=[['Dia','Contatos novos','Contratos enviados','Contratos assinados',
+                 'Contratos cancelados',
                  'Investido (R$)','Alcance','Cliques','Conversas (Meta)',
                  'Custo por conversa (R$)','Custo por contato (R$)']];
   for(const l of LINHAS){
@@ -643,6 +667,7 @@ function baixarDiario(){
     linhas.push([
       l.dia.split('-').reverse().join('/'),
       ct, l.contratos_enviados||0, l.contratos_assinados||0,
+      l.contratos_cancelados||0,
       num(g,2), m.alcance||0, m.cliques||0, cv,
       cv>0?num(g/cv,2):'', ct>0?num(g/ct,2):''
     ]);
@@ -915,7 +940,10 @@ function desenharCancelados(){
          + '<div class="fbar dbar'+cinza+'"><i style="width:'+pct+'%"></i></div>'
          + '<div class="fqtd">'+v.qtd+'</div><div class="dpct">'+share+'%</div></div>';
   }).join('')
-  + '<div class="vazio" style="margin-top:10px">'+total+' no período. Cartão que sair de Contrato Cancelado deixa de contar aqui.</div>';
+  + '<div class="vazio" style="margin-top:10px">'+total+' no período, já abatidos do KPI de assinados. '
+  + 'Cartão que sair de Contrato Cancelado deixa de contar aqui. '
+  + '"Descartada depois de assinar" é cartão que foi para Descartado tendo contrato disparado: '
+  + 'o cancelamento existiu, só não passou pela lista certa.</div>';
 }
 
 /* Anuncio x funil real.

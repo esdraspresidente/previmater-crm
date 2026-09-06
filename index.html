@@ -856,7 +856,13 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 /* Movimento do periodo. */
 .dsh-mov{background:var(--white);border:1px solid var(--border);border-radius:var(--rx);padding:18px 22px 20px;box-shadow:var(--sh);margin-bottom:22px;}
 .dsh-movt{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
-.dsh-seg{display:flex;background:var(--gray-bg);border-radius:99px;padding:3px;gap:2px;}
+/* Oito periodos mais tres origens nao cabem numa linha em telefone. A
+   pilula quebra em duas alturas em vez de estourar a largura, e os dois
+   grupos ficam empilhados para nao virarem uma fileira so de onze
+   botoes onde nada mais se distingue. */
+.dsh-segs{display:flex;flex-direction:column;gap:6px;align-items:flex-end;}
+.dsh-seg{display:flex;flex-wrap:wrap;justify-content:flex-end;background:var(--gray-bg);border-radius:99px;padding:3px;gap:2px;}
+@media(max-width:640px){.dsh-segs{align-items:stretch;width:100%;}.dsh-seg{justify-content:center;}}
 .dsh-seg button{border:none;background:none;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--text2);padding:6px 14px;border-radius:99px;cursor:pointer;transition:background .15s,color .15s;}
 .dsh-seg button[aria-selected="true"]{background:var(--white);color:var(--teal);box-shadow:var(--sh);}
 .dsh-seg button:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
@@ -5388,8 +5394,33 @@ async function excluirCliente(id){
 // ============================================================
 let DASH=null;
 let DASH_PER='dia';
-const DASH_PERIODOS=[['dia','Dia'],['semana','Semana'],['quinzena','Quinzena'],['mes','Mês']];
-const DASH_ROTULO_PER={dia:'hoje',semana:'esta semana',quinzena:'nos últimos 15 dias',mes:'neste mês'};
+/* OITO PERIODOS, E DOIS PARES QUE PARECEM IGUAIS MAS NAO SAO.
+   Quinzena e a METADE DO MES (1 a 15, ou 16 ate o fim) — o recorte com
+   que o escritorio fecha conta. 15 dias e janela corrida, para comparar
+   com os 15 anteriores sem esbarrar na virada do mes. Mesma coisa entre
+   Semana (desde domingo) e 7 dias. Antes existia um botao so, chamado
+   Quinzena, que na verdade contava 15 dias corridos: o numero mudava de
+   significado conforme o dia do mes e ninguem percebia.
+   Semana comeca no DOMINGO, nao na segunda do padrao ISO. */
+const DASH_PERIODOS=[
+  ['dia','Hoje'],['ontem','Ontem'],
+  ['semana','Semana'],['7dias','7 dias'],
+  ['quinzena','Quinzena'],['15dias','15 dias'],
+  ['mes','Mês'],['30dias','30 dias']];
+const DASH_ROTULO_PER={
+  dia:'hoje', ontem:'ontem',
+  semana:'nesta semana, desde domingo', '7dias':'nos últimos 7 dias',
+  quinzena:'nesta quinzena', '15dias':'nos últimos 15 dias',
+  mes:'neste mês', '30dias':'nos últimos 30 dias'};
+
+/* ORIGEM — a mesma faixa vista por tres recortes.
+   "Fora do tráfego" NAO e organico puro: e tudo que nao veio de anuncio,
+   indicacao inclusive. No painel do Rafael a indicacao some da tela
+   porque ela nao e resultado dele; aqui e faturamento e precisa cair em
+   algum balde. Geral = trafego + fora do trafego, sempre. */
+let DASH_ORI='geral';
+const DASH_ORIGENS=[['geral','Geral'],['trafego','Tráfego'],['organico','Fora do tráfego']];
+const DASH_ROTULO_ORI={geral:'', trafego:' · só quem veio de anúncio', organico:' · só quem não veio de anúncio'};
 
 async function pageDash(){
   const pc=$('pc');marcarNav('dashboard');
@@ -5414,16 +5445,28 @@ async function pageDash(){
 async function dashTrocarPeriodo(p){
   if(DASH_PER===p)return;
   DASH_PER=p;
+  await dashRecarregarMovimento();
+}
+/* Trocar a ORIGEM tem exatamente o mesmo custo e o mesmo risco de corrida
+   que trocar o periodo, entao usa o mesmo caminho: um so lugar para
+   consertar quando o proximo filtro aparecer. */
+async function dashTrocarOrigem(o){
+  if(DASH_ORI===o)return;
+  DASH_ORI=o;
+  await dashRecarregarMovimento();
+}
+async function dashRecarregarMovimento(){
+  const per=DASH_PER, ori=DASH_ORI;
   dashPintar();                       // o botao selecionado muda no mesmo instante
   const bloco=document.querySelector('.dsh-mvg');
   if(bloco)bloco.style.opacity='.4';
-  const{data,error}=await sb.rpc('crm_dashboard_movimento',{p_periodo:p});
-  /* Clicou em outro periodo enquanto este voltava: a resposta velha nao
-     pode sobrescrever a escolha nova. */
-  if(DASH_PER!==p)return;
+  const{data,error}=await sb.rpc('crm_dashboard_movimento',{p_periodo:per,p_origem:ori});
+  /* Clicou em outro periodo ou outra origem enquanto este voltava: a
+     resposta velha nao pode sobrescrever a escolha nova. */
+  if(DASH_PER!==per||DASH_ORI!==ori)return;
   if(error){
     if(bloco)bloco.style.opacity='';
-    toast('Não consegui trocar o período: '+error.message,'er');
+    toast('Não consegui trocar o recorte: '+error.message,'er');
     return;
   }
   DASH.movimento=data.movimento;
@@ -5432,7 +5475,7 @@ async function dashTrocarPeriodo(p){
   dashPintar();
 }
 async function dashCarregar(){
-  const{data,error}=await sb.rpc('crm_dashboard',{p_periodo:DASH_PER});
+  const{data,error}=await sb.rpc('crm_dashboard',{p_periodo:DASH_PER,p_origem:DASH_ORI});
   if(error){
     $('pc').innerHTML='<div class="emp"><div class="empt">Não consegui montar o dashboard</div><div class="emps">'+esc(error.message)+'</div></div>';
     return;
@@ -5523,8 +5566,12 @@ function dashPintar(){
     <div class="dsh-mov">
       <div class="dsh-movt">
         <div class="dsh-eyb">Movimento do período · o que andou</div>
-        <div class="dsh-seg" role="tablist">${DASH_PERIODOS.map(([k,r])=>
-          `<button role="tab" aria-selected="${k===DASH_PER}" onclick="dashTrocarPeriodo('${k}')">${r}</button>`).join('')}</div>
+        <div class="dsh-segs">
+          <div class="dsh-seg" role="tablist">${DASH_PERIODOS.map(([k,r])=>
+            `<button role="tab" aria-selected="${k===DASH_PER}" onclick="dashTrocarPeriodo('${k}')">${r}</button>`).join('')}</div>
+          <div class="dsh-seg" role="tablist">${DASH_ORIGENS.map(([k,r])=>
+            `<button role="tab" aria-selected="${k===DASH_ORI}" onclick="dashTrocarOrigem('${k}')">${r}</button>`).join('')}</div>
+        </div>
       </div>
       <div class="dsh-mvg">${dashMovimento(d.movimento||{})}</div>
       <div class="dsh-nota">${dashNotaMovimento(d)}</div>
@@ -5633,7 +5680,7 @@ function dashMovimento(m){
   ];
   const cel=(k,rot,rec,extra)=>{
     const v=m[k]||0;
-    return `<button class="dsh-mv ${extra||''} ${v?'dsh-clic':'zero'}" ${v?`onclick="dwrAbrir('${rec}','${rot}','Movimentação ${DASH_ROTULO_PER[DASH_PER]}')"`:'disabled'}>
+    return `<button class="dsh-mv ${extra||''} ${v?'dsh-clic':'zero'}" ${v?`onclick="dwrAbrir('${rec}','${rot}','Movimentação ${DASH_ROTULO_PER[DASH_PER]}${DASH_ROTULO_ORI[DASH_ORI]||''}')"`:'disabled'}>
       <div class="n dsh-num">${v}</div><div class="l">${rot}</div></button>`;
   };
   /* CANCELADOS FICAM DO LADO DE FORA, junto com os descartados, e nao na
@@ -5653,7 +5700,7 @@ function dashMovimento(m){
    historico do Trello virou comentario. Sem este aviso, "mes" pareceria
    um mes fraco em vez de um registro que ainda nao existe. */
 function dashNotaMovimento(d){
-  const base='Contando '+DASH_ROTULO_PER[DASH_PER]+'.';
+  const base='Contando '+DASH_ROTULO_PER[DASH_PER]+(DASH_ROTULO_ORI[DASH_ORI]||'')+'.';
   if(!d.movimento_desde)return base;
   const desde=new Date(d.movimento_desde);
   const inicio=new Date(d.periodo&&d.periodo.de?d.periodo.de:Date.now());
@@ -5841,7 +5888,7 @@ async function dwrBuscar(){
   }
   DWR_CARREGANDO=true;
   const{data,error}=await sb.rpc('crm_dashboard_cards',{
-    p_recorte:DWR_REC.recorte,p_periodo:DASH_PER,p_offset:DWR_OFFSET,p_limit:DWR_PAGINA
+    p_recorte:DWR_REC.recorte,p_periodo:DASH_PER,p_offset:DWR_OFFSET,p_limit:DWR_PAGINA,p_origem:DASH_ORI
   });
   DWR_CARREGANDO=false;
   if(error){$('dwrb').innerHTML='<div class="emp"><div class="empt">Erro ao carregar a lista</div><div class="emps">'+esc(error.message)+'</div></div>';return;}

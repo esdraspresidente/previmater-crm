@@ -3574,8 +3574,23 @@ let mcSnapshot='';
 function mcFotoCampos(){
   const box=$('modalbox');
   if(!box)return'';
+  /* O PAINEL DIREITO E O PICKER FICAM DE FORA — 05/09/2026.
+
+     A foto existe para uma pergunta so: "tem coisa digitada que o Salvar
+     ainda nao gravou?". Campo que grava sozinho nao entra nessa conta, e
+     o painel direito (.mcright) e inteiro assim — o comentario tem botao
+     proprio, o chat envia no Enter, o "Samara pausada" grava no clique.
+     Fotografar isso fazia escrever um comentario acender o aviso de
+     alteracao nao salva, e aviso que aparece quando nao devia e aviso
+     que se aprende a ignorar. O #mc-etq-picker entra na mesma regra: o
+     nome e a cor da etiqueta nova sao campos de um formulario que grava
+     por conta propria, e a etiqueta em si passou a gravar no clique.
+
+     Os mc-lido-* continuam dentro de proposito: eles nao gravam sozinho,
+     sao rascunho que so vira dado quando alguem clica em aplicar e
+     depois em Salvar — perder isso ao fechar e perda de verdade. */
   return [...box.querySelectorAll('.mcinner input,.mcinner select,.mcinner textarea')]
-    .filter(el=>el.id&&el.type!=='file')
+    .filter(el=>el.id&&el.type!=='file'&&!el.closest('.mcright,#mc-etq-picker'))
     .map(el=>el.id+'='+(el.type==='checkbox'?el.checked:el.value)).join('|');
 }
 function mcTemAlteracaoNaoSalva(){

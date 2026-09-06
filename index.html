@@ -5552,8 +5552,16 @@ function dashMovimento(m){
     return `<button class="dsh-mv ${extra||''} ${v?'dsh-clic':'zero'}" ${v?`onclick="dwrAbrir('${rec}','${rot}','Movimentação ${DASH_ROTULO_PER[DASH_PER]}')"`:'disabled'}>
       <div class="n dsh-num">${v}</div><div class="l">${rot}</div></button>`;
   };
+  /* CANCELADOS FICAM DO LADO DE FORA, junto com os descartados, e nao na
+     fileira do que andou: contrato que caiu e movimento para tras. E sao
+     duas celulas e nao uma porque decidem coisas diferentes — descarte
+     e lead que nunca teve caminho, cancelamento e contrato que ja tinha
+     sido fechado e custou trabalho. Quem tinha contrato disparado sai da
+     conta de descartado e entra aqui, entao a mesma pessoa nunca aparece
+     nas duas. */
   return campos.map(([k,r,rec])=>cel(k,r,rec)).join('')
     +'<div class="dsh-sep"></div>'
+    +cel('cancelado','Contratos cancelados','mov_cancelado','out')
     +cel('descartado','Descartados','mov_descartado','out');
 }
 

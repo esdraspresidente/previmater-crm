@@ -1089,7 +1089,7 @@ let mcPreviewAberto=false;
    cada arquivo. Guardar a aba antes de abrir custa uma variavel.
    A lista serve para navegar de um anexo ao outro sem fechar. */
 let MC_ANEXOS=[], mcPreviewIdx=-1, mcPreviewVoltarAba=null;
-function fecharModal(){$('modal').classList.add('h');mcPreviewAberto=false;if(typeof gravCancelar==='function')gravCancelar();if(typeof mcMostrarVeu==='function'){mcDropProf=0;mcMostrarVeu(false);}if(typeof pararChatPoll==='function')pararChatPoll();}
+function fecharModal(){$('modal').classList.add('h');mcSnapshot='';mcPreviewAberto=false;if(typeof gravCancelar==='function')gravCancelar();if(typeof mcMostrarVeu==='function'){mcDropProf=0;mcMostrarVeu(false);}if(typeof pararChatPoll==='function')pararChatPoll();}
 function fecharSeFundo(e){if(e.target===e.currentTarget)fecharInteligente();}
 function fecharInteligente(){
   if(mcPreviewAberto&&mcClienteId){
@@ -1103,6 +1103,7 @@ function fecharInteligente(){
   /* Fechou clicando no fundo: se havia um cartao esperando para voltar,
      devolve o cartao em vez de sumir com tudo — e o mesmo que o botao
      Voltar faz. */
+  if(typeof mcTemAlteracaoNaoSalva==='function'&&mcTemAlteracaoNaoSalva()&&!confirm('Há alterações não salvas neste cartão.\n\nSair sem salvar?'))return;
   if(typeof FILA_VOLTAR!=='undefined'&&FILA_VOLTAR){const id=FILA_VOLTAR;FILA_VOLTAR=null;fecharModal();abrirCardCliente(id);return;}
   fecharModal();
 }
@@ -3278,7 +3279,7 @@ function renderCardClienteModal(c,etqSel,listas){
   const canalAtual=canalDaConversa(c)||'whatsgw';
   const optCanal=Object.keys(CANAIS_ENVIO).map(k=>`<option value="${k}" ${canalAtual===k?'selected':''}>${CANAIS_ENVIO[k]}</option>`).join('');
   const optOrig=`<option value="">—</option>`+Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
-  const etqPicker=ETQ.map(t=>`<label class="etp-row" data-nome="${escA((t.nome||'').toLowerCase())}"><input type="checkbox" ${etqSel.includes(t.id)?'checked':''} onchange="mcToggleEtq('${t.id}')"/><span class="etp-bar" style="background:${escA(t.cor)}">${esc(t.nome)}</span></label>`).join('')||'<div class="fhint" style="padding:6px 2px">Nenhuma etiqueta criada ainda.</div>';
+  const etqPicker=ETQ.map(t=>`<label class="etp-row" data-nome="${escA((t.nome||'').toLowerCase())}"><input type="checkbox" data-etq="${t.id}" ${etqSel.includes(t.id)?'checked':''} onchange="mcToggleEtq('${t.id}')"/><span class="etp-bar" style="background:${escA(t.cor)}">${esc(t.nome)}</span></label>`).join('')||'<div class="fhint" style="padding:6px 2px">Nenhuma etiqueta criada ainda.</div>';
   const pagHtml=mcPagamentosHtml(c.id);
   /* Etapa do caso, para decidir quais blocos aparecem. O "tem dado" e
      conferido campo a campo: basta um preenchido para o bloco inteiro
@@ -3344,7 +3345,7 @@ function renderCardClienteModal(c,etqSel,listas){
       </div>
     </div>
     <div class="mcinner">
-    <button class="mbc" onclick="fecharModal()">×</button>
+    <button class="mbc" onclick="mcFecharCartao()">×</button>
     <div class="mccols2">
       <div>
     <input type="text" id="mc-nome" class="mctit" value="${escA(c.nome_completo)}"/>
@@ -3578,7 +3579,20 @@ function mcFotoCampos(){
     .map(el=>el.id+'='+(el.type==='checkbox'?el.checked:el.value)).join('|');
 }
 function mcTemAlteracaoNaoSalva(){
-  return !!mcSnapshot&&mcFotoCampos()!==mcSnapshot;
+  /* Foto vazia quer dizer que o que esta aberto nao e um cartao (modal
+     comum nao tem .mcinner). Sem esta linha, a foto vazia seria
+     "diferente da anterior" e todo modal passaria a perguntar se pode
+     sair. */
+  const foto=mcFotoCampos();
+  return !!mcSnapshot&&!!foto&&foto!==mcSnapshot;
+}
+/* O X DO CARTAO PERGUNTA ANTES — 05/09/2026.
+   O aviso de alteracao nao salva ja existia, mas so nas setas de navegar
+   entre cartoes. Fechar no X, no Esc ou clicando no fundo descartava
+   tudo calado. */
+function mcFecharCartao(){
+  if(mcTemAlteracaoNaoSalva()&&!confirm('Há alterações não salvas neste cartão.\n\nSair sem salvar?'))return;
+  fecharModal();
 }
 /* SETAS ← → ANDAM ENTRE OS CARTOES.
    A ordem e a do quadro que ficou atras do modal, lida do proprio DOM —
@@ -4101,11 +4115,57 @@ function mcTogEtqPicker(botao){
   if(vaiAbrir&&botao)posicionarFlutuante(p,botao,260);
   p.classList.toggle('h');
 }
-function mcToggleEtq(id){
-  const idx=mcEtqSelAtual.indexOf(id);
-  if(idx>=0)mcEtqSelAtual.splice(idx,1);else mcEtqSelAtual.push(id);
+function mcPintarChipsEtq(){
   const chips=$('mc-etq-chips');
   if(chips)chips.innerHTML=mcChipsHtml()+'<button class="etp-add etq-trigger" onclick="mcTogEtqPicker(this)">+ Etiqueta</button>';
+}
+/* ETIQUETA GRAVA NA HORA — 05/09/2026.
+
+   Ate aqui marcar e desmarcar so mexia no array em memoria, e quem
+   gravava era o Salvar, com um delete de TODAS as etiquetas da cliente
+   seguido de reinsert das que estavam na tela. Dois defeitos num
+   desenho so:
+
+   - Sair do cartao sem clicar em Salvar descartava a mudanca sem avisar,
+     com o chip ja apagado na tela. Aconteceu com a Anabelly em 05/09: a
+     ADM foi tirada na tela, o banco nunca soube, e ela ficou com PRE e
+     ADM ao mesmo tempo — as duas funcoes do motor que desempatam
+     etiqueta olham em ordem oposta (bifurcacaoContratoAssinado ve PRE
+     primeiro, varianteDoCliente ve ADM primeiro), entao o card ia para
+     um caminho e a variante do texto para o outro.
+   - O delete-all apagava etiqueta que o motor tivesse colado enquanto o
+     cartao estava aberto. O varianteDoCliente cola PRE e ADM sozinho.
+
+   Agora cada clique manda a SUA linha: insert de uma, delete de uma. O
+   que o motor colou no meio do caminho nao e tocado. Se o banco recusar,
+   a tela volta ao que era — chip aceso sem linha no banco e exatamente o
+   que este item veio consertar. */
+async function mcToggleEtq(id){
+  const idx=mcEtqSelAtual.indexOf(id);
+  const ligar=idx<0;
+  if(ligar)mcEtqSelAtual.push(id);else mcEtqSelAtual.splice(idx,1);
+  mcPintarChipsEtq();
+  /* Cartao ainda nao existe (cadastro novo): nao ha cliente_id para
+     apontar. Fica em memoria e o Salvar grava, que e o unico caso em que
+     o comportamento antigo continua certo. */
+  if(!mcClienteId)return;
+  const alvo=mcClienteId;
+  const{error}=ligar
+    ? await sb.from('crm_clientes_etiquetas').insert({cliente_id:alvo,etiqueta_id:id})
+    : await sb.from('crm_clientes_etiquetas').delete().eq('cliente_id',alvo).eq('etiqueta_id',id);
+  /* 23505 e a linha ja existente: o pedido era colar e ela ja estava
+     colada. O estado final e o desejado, entao nao e erro. */
+  if(error&&!(ligar&&error.code==='23505')){
+    if(mcClienteId===alvo){
+      const i2=mcEtqSelAtual.indexOf(id);
+      if(ligar&&i2>=0)mcEtqSelAtual.splice(i2,1);
+      else if(!ligar&&i2<0)mcEtqSelAtual.push(id);
+      mcPintarChipsEtq();
+      const cx=document.querySelector('#mc-etq-list input[data-etq="'+id+'"]');
+      if(cx)cx.checked=!ligar;
+    }
+    toast('Não deu para salvar a etiqueta: '+error.message,'er');
+  }
 }
 function mcFiltrarEtq(termo){
   const t=(termo||'').toLowerCase();
@@ -4133,10 +4193,17 @@ async function mcCriarEtqInline(){
   if(error){toast('Erro ao criar: '+error.message,'er');return;}
   ETQ.push(data);
   mcEtqSelAtual.push(data.id);
+  /* A etiqueta nasce ja aplicada a esta cliente, e o toast diz isso.
+     Como o Salvar nao grava mais etiqueta, o vinculo tem de sair daqui —
+     senao o toast prometeria uma coisa que nunca chega ao banco. */
+  if(mcClienteId){
+    const{error:eVinc}=await sb.from('crm_clientes_etiquetas').insert({cliente_id:mcClienteId,etiqueta_id:data.id});
+    if(eVinc&&eVinc.code!=='23505')toast('Etiqueta criada, mas não colou no cartão: '+eVinc.message,'er');
+  }
   const lista=$('mc-etq-list');
   if(lista){
     const vazio=lista.querySelector('.fhint');if(vazio)vazio.remove();
-    lista.insertAdjacentHTML('beforeend',`<label class="etp-row" data-nome="${escA(nome.toLowerCase())}"><input type="checkbox" checked onchange="mcToggleEtq('${data.id}')"/><span class="etp-bar" style="background:${escA(cor)}">${esc(nome)}</span></label>`);
+    lista.insertAdjacentHTML('beforeend',`<label class="etp-row" data-nome="${escA(nome.toLowerCase())}"><input type="checkbox" data-etq="${data.id}" checked onchange="mcToggleEtq('${data.id}')"/><span class="etp-bar" style="background:${escA(cor)}">${esc(nome)}</span></label>`);
   }
   const chips=$('mc-etq-chips');
   if(chips)chips.innerHTML=mcChipsHtml()+'<button class="etp-add etq-trigger" onclick="mcTogEtqPicker(this)">+ Etiqueta</button>';
@@ -4839,7 +4906,6 @@ async function salvarCardCliente(id){
     // Mesma regra do descarte: so viaja quando o destino e a lista dele.
     if(nomeDestino==='Contrato Cancelado') payload.cancelamento_motivo=vCampo('mc-cancel-motivo');
   }
-  const etqSel=mcEtqSelAtual.slice();
   // Sao dois botoes Salvar (topo e rodape) e a mesma funcao atende os
   // dois. Mexer so no de baixo deixaria o de cima dizendo "Salvar"
   // enquanto o gravamento acontece — e o clique repetido gravaria duas
@@ -4849,8 +4915,11 @@ async function salvarCardCliente(id){
   btnEstado('Salvando...',true);
   const{error}=await sb.from('crm_clientes').update(payload).eq('id',id);
   if(error){toast('Erro ao salvar: '+error.message,'er');btnEstado('Salvar',false);return;}
-  await sb.from('crm_clientes_etiquetas').delete().eq('cliente_id',id);
-  if(etqSel.length)await sb.from('crm_clientes_etiquetas').insert(etqSel.map(e=>({cliente_id:id,etiqueta_id:e})));
+  /* ETIQUETA NAO PASSA MAIS POR AQUI. Ela e gravada no clique, pelo
+     mcToggleEtq. O que existia neste ponto era um delete de todas as
+     etiquetas da cliente seguido de reinsert do array da tela: salvar o
+     cartao apagava o que o motor tivesse colado depois que a tela
+     abriu. */
   finCarregado=false;
 
   if(mcOriginal){

@@ -991,16 +991,65 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 /* O ponto de "tem coisa esperando" da fila precisa existir aqui também:
    se ele só vive no menu lateral, ninguém no celular vê o aviso — que é
    justamente o motivo de a fila ter subido para a barra. */
-.bnidot{position:absolute;margin:-3px 0 0 14px;width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 0 2.5px rgba(255,255,255,.95);}
+
+/* ══ DASHBOARD COM COR ══
+   O painel era branco sobre branco: tudo com a mesma borda cinza, os
+   números todos da mesma tinta. Cada família de informação ganha a sua
+   cor — e a cor passa a dizer alguma coisa (etapa, movimento, alerta). */
+:root{--amber:#F0A202;--amber-bg:#FFF4D6;--lilac:#7C5CD6;--lilac-bg:#EEE9FB;--sky:#00B4D8;--sky-bg:#E0F6FB;}
+/* esteira: bolas cheias, uma cor por etapa (ordem fixa do dashEsteira) */
+.dsh-est:not(#dsh-reativ) .dsh-et .bola{border:none;color:#fff;font-weight:800;}
+.dsh-est:not(#dsh-reativ) .dsh-et:nth-child(1) .bola{background:var(--gray-bg);color:var(--text3);border:2px dashed var(--text3);}
+.dsh-est:not(#dsh-reativ) .dsh-et:nth-child(2) .bola{background:var(--sky);}
+.dsh-est:not(#dsh-reativ) .dsh-et:nth-child(3) .bola{background:var(--teal);}
+.dsh-est:not(#dsh-reativ) .dsh-et:nth-child(4) .bola{background:var(--amber);}
+.dsh-est:not(#dsh-reativ) .dsh-et:nth-child(5) .bola{background:var(--rose);}
+.dsh-est:not(#dsh-reativ) .dsh-et:nth-child(6) .bola{background:var(--lilac);}
+.dsh-est:not(#dsh-reativ) .dsh-et:nth-child(7) .bola{background:var(--green);}
+.dsh-est:not(#dsh-reativ) .dsh-et.vazio .bola{background:var(--gray-bg)!important;color:var(--text3)!important;border:2px solid var(--border)!important;}
+.dsh-est:not(#dsh-reativ) .dsh-et .nm{color:var(--text);}
+#dsh-reativ .dsh-et.on .bola{background:var(--sky);border-color:var(--sky);color:#fff;}
+#dsh-reativ .dsh-et.gold .bola{background:var(--amber);border-color:var(--amber);color:#fff;}
+/* movimento: cada número na cor da sua etapa; saídas em vermelho */
+.dsh-mvg .dsh-mv:nth-child(1) .n{color:var(--sky);}
+.dsh-mvg .dsh-mv:nth-child(2) .n{color:var(--amber);}
+.dsh-mvg .dsh-mv:nth-child(3) .n{color:var(--teal);}
+.dsh-mvg .dsh-mv:nth-child(4) .n{color:var(--lilac);}
+.dsh-mvg .dsh-mv:nth-child(5) .n{color:var(--green);}
+.dsh-mvg .dsh-mv.out .n{color:var(--red);}
+.dsh-mvg .dsh-mv.zero .n{color:#C9DADA;}
+/* alertas: fundo tingido, não só a barrinha lateral */
+.dsh-ac{border-left-width:4px;}
+.dsh-ac.r{background:var(--red-bg);border-color:#F3C9C4;border-left-color:var(--red);}
+.dsh-ac.y{background:var(--amber-bg);border-color:#F1DDA6;border-left-color:var(--amber);}.dsh-ac.y .n{color:#B57A00;}
+.dsh-ac.p{background:var(--lilac-bg);border-color:#D6CCF2;border-left-color:var(--lilac);}.dsh-ac.p .n{color:var(--lilac);}
+.dsh-ac.t{background:var(--teal-l);border-color:#BDE3E4;border-left-color:var(--teal);}
+/* mini-indicadores: um tom por cartão, número na mesma cor */
+.dsh-mini .dsh-mc:nth-child(1){background:var(--teal-l);border-color:#BDE3E4;}.dsh-mini .dsh-mc:nth-child(1) .v{color:var(--teal);}
+.dsh-mini .dsh-mc:nth-child(2){background:var(--green-bg);border-color:#BFE3D6;}.dsh-mini .dsh-mc:nth-child(2) .v{color:var(--green);}
+.dsh-mini .dsh-mc:nth-child(3){background:var(--lilac-bg);border-color:#D6CCF2;}.dsh-mini .dsh-mc:nth-child(3) .v{color:var(--lilac);}
+.dsh-mini .dsh-mc:nth-child(4){background:var(--red-bg);border-color:#F3C9C4;}
+.dsh-mc .l{color:var(--text2);}
+/* chips do topo e rótulos de seção com mais presença */
+.dsh-chip{background:var(--white);}
+.dsh-eyb{font-size:12px;color:var(--text2);}
+.st{color:var(--text);font-size:14px;}
+.dsh-hero{background:var(--teal);}
+.dsh-hero .dsh-eyb{color:rgba(255,255,255,.8);}
+/* funil: rótulo de cada quadro na cor do quadro */
+.dsh-fl>div:nth-child(1) .dsh-qb{color:var(--sky);}
+.dsh-fl>div:nth-child(2) .dsh-qb{color:var(--rose);}
+.dsh-fl>div:nth-child(3) .dsh-qb{color:var(--lilac);}
+.dsh-fl>div:nth-child(4) .dsh-qb{color:var(--green);}
 </style>
 </head>
 <body>
 
-<div id="ls"><div class="logo-mark"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#FFFFFF"/><path d="M20 46V22a6 6 0 0 1 6-6h4a7 7 0 0 1 0 14h-6" fill="none" stroke="#0A9396" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M38 44V30a5 5 0 0 1 10 0v14" fill="none" stroke="#94D2BD" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="spin"></div></div>
+<div id="ls"><div class="logo-mark"><svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="128" fill="#FFFFFF"/><path d="M 122 212 C 186 168, 240 124, 292 100 A 56 56 0 1 1 258 196" fill="none" stroke="#0A9396" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><path d="M 226 218 C 150 232, 110 310, 134 372 C 156 424, 226 444, 296 424" fill="none" stroke="#0A9396" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><path d="M 202 326 C 208 374, 276 392, 320 358 C 356 328, 352 270, 312 250 C 282 234, 250 256, 256 284 C 261 306, 292 308, 294 286" fill="none" stroke="#F4A3B8" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="spin"></div></div>
 
 <div id="ln" class="h">
   <div class="lhero">
-    <div class="logo-mark"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#FFFFFF"/><path d="M20 46V22a6 6 0 0 1 6-6h4a7 7 0 0 1 0 14h-6" fill="none" stroke="#0A9396" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M38 44V30a5 5 0 0 1 10 0v14" fill="none" stroke="#94D2BD" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="logo-mark"><svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="128" fill="#FFFFFF"/><path d="M 122 212 C 186 168, 240 124, 292 100 A 56 56 0 1 1 258 196" fill="none" stroke="#0A9396" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><path d="M 226 218 C 150 232, 110 310, 134 372 C 156 424, 226 444, 296 424" fill="none" stroke="#0A9396" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><path d="M 202 326 C 208 374, 276 392, 320 358 C 356 328, 352 270, 312 250 C 282 234, 250 256, 256 284 C 261 306, 292 308, 294 286" fill="none" stroke="#F4A3B8" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <b>PreviMater</b>
     <span>CRM de atendimento e recebimentos</span>
   </div>
@@ -1019,7 +1068,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 <div id="app">
   <nav id="sb">
     <div class="sbh"><div class="sbl">
-      <div class="sbi logo-mark"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#0A9396"/><path d="M20 46V22a6 6 0 0 1 6-6h4a7 7 0 0 1 0 14h-6" fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M38 44V30a5 5 0 0 1 10 0v14" fill="none" stroke="#94D2BD" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="sbi logo-mark"><svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="128" fill="#0A9396"/><path d="M 122 212 C 186 168, 240 124, 292 100 A 56 56 0 1 1 258 196" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><path d="M 226 218 C 150 232, 110 310, 134 372 C 156 424, 226 444, 296 424" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><path d="M 202 326 C 208 374, 276 392, 320 358 C 356 328, 352 270, 312 250 C 282 234, 250 256, 256 284 C 261 306, 292 308, 294 286" fill="none" stroke="#F4A3B8" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div><div class="sblt">PreviMater</div><div class="sbls">CRM</div></div>
     </div>
     <button id="notifbtn" class="nbtn h" onclick="abrirNotificacoes()" title="Notificações"><svg class="ic lg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/></svg><span id="notifbadge" class="nbadge"></span></button>
@@ -1036,7 +1085,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
     <div id="tb">
       <div style="display:flex;align-items:center;gap:8px">
         <button style="background:none;border:none;cursor:pointer;padding:6px;color:var(--text2);display:flex" onclick="togSB()"><svg class="ic lg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
-        <div class="sbi logo-mark" style="width:30px;height:30px"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#0A9396"/><path d="M20 46V22a6 6 0 0 1 6-6h4a7 7 0 0 1 0 14h-6" fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M38 44V30a5 5 0 0 1 10 0v14" fill="none" stroke="#94D2BD" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="sbi logo-mark" style="width:30px;height:30px"><svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="128" fill="#0A9396"/><path d="M 122 212 C 186 168, 240 124, 292 100 A 56 56 0 1 1 258 196" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><path d="M 226 218 C 150 232, 110 310, 134 372 C 156 424, 226 444, 296 424" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><path d="M 202 326 C 208 374, 276 392, 320 358 C 356 328, 352 270, 312 250 C 282 234, 250 256, 256 284 C 261 306, 292 308, 294 286" fill="none" stroke="#F4A3B8" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         <span style="font-size:14px;font-weight:800">PreviMater</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
@@ -1051,7 +1100,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
     <button class="bni" id="bn-quadro" onclick="location.hash='#/quadro/'+(QPERM[0]||'comercial')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5.5" height="16" rx="1.5"/><rect x="10.5" y="4" width="5.5" height="11" rx="1.5"/><rect x="18" y="4" width="3" height="8" rx="1.5"/></svg>Quadros</button>
     <button class="bni" id="bn-inbox" onclick="location.hash='#/inbox'"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 21l1.8-4.5A8 8 0 1 1 21 12z"/></svg>Mensagens</button>
     <button class="bni" id="bn-recebimentos" onclick="location.hash='#/recebimentos'"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M14.5 7.5a5.5 5.5 0 1 1-7 7"/></svg>Recebimentos</button>
-    <button class="bni" id="bn-fila" onclick="location.hash='#/fila'"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h13M4 12h9M4 17h13"/><path d="M17 15l3 2-3 2"/></svg><span class="bnidot h" id="bn-fila-dot"></span>Fila</button>
+    <button class="bni" id="bn-fila" onclick="location.hash='#/fila'"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h13M4 12h9M4 17h13"/><path d="M17 15l3 2-3 2"/></svg>Fila</button>
     <button class="bni" id="bn-mais" onclick="togSB()"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>Mais</button>
   </nav>
 </div>
@@ -1419,7 +1468,6 @@ async function atualizarSinalFila(){
       else if(problemas<(v.ev||0)){v={em:v.em,ev:problemas};filaGravarVisto(v);}
     }
     dot.classList.toggle('h',!acender);
-    const dotBn=$('bn-fila-dot'); if(dotBn) dotBn.classList.toggle('h',!acender);
   }catch(_){}
 }
 function marcarNav(id){
@@ -5655,7 +5703,7 @@ function dashPintar(){
           ${dashGrafMeses(d.serie_meses||[])}
           <div class="dsh-lgd">
             <span><i style="background:var(--teal)"></i>Recebido</span>
-            <span><i style="background:var(--teal-m)"></i>Previsto</span>
+            <span><i style="background:#00B4D8"></i>Previsto</span>
             <span><i style="background:var(--red)"></i>Inadimplente</span>
           </div>
         </div>
@@ -5803,7 +5851,7 @@ function dashGrafMeses(serie){
     const cx=pl+bw*i+bw/2,x=cx-bar/2;
     const rec=Number(s.recebido)||0,pre=Number(s.previsto)||0,ina=Number(s.inadimplente)||0;
     let acc=0;
-    [[rec,'#0A9396'],[pre,'#94D2BD'],[ina,'#C0392B']].forEach(([v,c])=>{
+    [[rec,'#0A9396'],[pre,'#00B4D8'],[ina,'#C0392B']].forEach(([v,c])=>{
       if(v<=0)return;acc+=v;
       g+=`<rect x="${x}" y="${y(acc)}" width="${bar}" height="${H-pb-y(v)}" rx="4" fill="${c}"/>`;
     });

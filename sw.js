@@ -31,13 +31,13 @@
 // forcar todo mundo a largar cache ruim: e por isso que este comeca em
 // v2, para matar o 'fullfin-v3.71' que ficou nos aparelhos.
 
-const CACHE = 'previmater-crm-v2';
+const CACHE = 'previmater-crm-v3';
 
 // So o que e estavel. index.html de proposito fora daqui.
 const ASSETS = [
   './manifest.json',
-  './icon192.png',
-  './icon512.png'
+  './pm-icon-192.png',
+  './pm-icon-512.png'
 ];
 
 self.addEventListener('install', e => {

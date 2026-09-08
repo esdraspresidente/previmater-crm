@@ -323,7 +323,7 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
         <div class="ctit">Qual criativo traz mãe elegível</div>
         <button class="btcsv" onclick="baixarAnuncios()">Exportar CSV</button>
       </div>
-      <div class="csub">Foto do total desde 18/08, quando o anúncio de origem passou a ser gravado em cada lead — <b>não segue o filtro de período lá em cima</b>. Cada linha é um <b>código de criativo</b>, somando todas as cópias dele em qualquer campanha ou conjunto: subir anúncio novo com criativo antigo não zera mais o histórico. O <b>custo por lead</b> é o número que o Gerenciador do Meta mostra, e ele engana: o algoritmo aprendeu a achar quem abre conversa, não quem tem direito. O que decide é o <b>custo por elegível</b>.</div>
+      <div class="csub"><b>Segue o período escolhido lá em cima.</b> A lead entra pelo dia em que ela chegou e o gasto pelo dia em que foi gasto — os dois do mesmo recorte. Cada linha é um <b>código de criativo</b>, somando todas as cópias dele em qualquer campanha ou conjunto: subir anúncio novo com criativo antigo não zera mais o histórico. O <b>custo por lead</b> é o número que o Gerenciador do Meta mostra, e ele engana: o algoritmo aprendeu a achar quem abre conversa, não quem tem direito. O que decide é o <b>custo por elegível</b>. <b>Em período curto o custo por elegível aparece pior do que é</b> — quem chegou esta semana ainda está em triagem e ainda vai virar elegível; o aviso embaixo da tabela diz quantas são.</div>
       <div id="anuncios"></div>
     </div>
 
@@ -420,16 +420,24 @@ let META=[];             // uma linha por dia, gasto do Meta
 let ESTOQUE=[];          // uma linha por etapa do funil
 let DESCARTES=[];        // uma linha por dia e por motivo de descarte
 let CANCELADOS=[];       // contratos assinados que cairam, por dia e motivo
-let ANUNCIOS=[];         // uma linha por criativo, ja agregada na view
+let ANUNCIOS=[];         // uma linha por criativo, ja somada NO PERIODO
+let ANUNCIOS_JANELA=null;// a janela que gerou o ANUNCIOS atual, para os avisos
 let VARIANTE='qtd';      // qtd = geral | qtd_pre | qtd_adm
 let PERIODO='7';         // hoje | ontem | 7 | 15 | 30
 let COMPARAR='0';        // 0 = sem comparacao; 1,7,15,30 = deslocamento em dias
 
 const PERIODOS=[['hoje','Hoje'],['ontem','Ontem'],['7','7 dias'],['15','15 dias'],['30','30 dias']];
+/* DESDE QUANDO CADA FONTE EXISTE. Sem isto o filtro de 30 dias mostra
+   um custo por elegivel bonito por um motivo ruim: metade da janela e
+   anterior ao dia em que o anuncio passou a ser gravado na lead, entao
+   entra gasto sem lead nenhuma para dividir. O aviso de base parcial
+   embaixo da tabela nasce dessas duas datas. */
+const INICIO_ATRIBUICAO='2026-08-18';   // anuncio_id passou a ser carimbado na lead
+const INICIO_GASTO='2026-08-17';        // primeiro dia com gasto do Meta no banco
 const COMPARACOES=[['0','Não comparar'],['1','Dia anterior'],['7','Semana anterior'],['15','Quinzena anterior'],['30','Mês anterior']];
 
 async function carregar(){
-  const [dia,hora,estoque,meta,desc,canc,anun]=await Promise.all([
+  const [dia,hora,estoque,meta,desc,canc]=await Promise.all([
     sb.from('vw_trafego_dia').select('dia,novos_contatos,contratos_enviados,contratos_assinados,contratos_cancelados').order('dia',{ascending:true}).limit(400),
     /* Uma linha por dia com as 24 horas num array. Linha por hora seria
        mais simples de ler e estouraria o corte de 1.000 do PostgREST em
@@ -439,16 +447,11 @@ async function carregar(){
     sb.from('vw_trafego_meta_dia').select('dia,gasto,alcance,cliques,conversas').order('dia',{ascending:true}).limit(400),
     sb.from('vw_trafego_descartes').select('dia,codigo,rotulo,ordem,qtd').order('dia',{ascending:true}).limit(900),
     sb.from('vw_contratos_cancelados').select('dia,codigo,rotulo,ordem,qtd').order('dia',{ascending:true}).limit(900),
-    /* Uma linha por CODIGO de criativo desde 04/09 (item 443), nao mais
-       por nome do anuncio. `anuncios` diz de quantos anuncios aquela
-       linha e feita, e e o que prova para o Rafael que a cifra dele nao
-       se perdeu quando o id mudou. */
-    sb.from('vw_trafego_anuncio').select('codigo,criativo,criativo_desc,formato,anuncios,anuncios_novos_sem_csv,leads,nunca_respondeu,descartada,elegivel,gasto,por_lead,por_elegivel,pct_descarte,nao_classificada').order('gasto',{ascending:false}).limit(200)
   ]);
   if(!hora.error && Array.isArray(hora.data)) HORAS=hora.data;
   if(!desc.error && Array.isArray(desc.data)) DESCARTES=desc.data;
   if(!canc.error && Array.isArray(canc.data)) CANCELADOS=canc.data;
-  if(!anun.error && Array.isArray(anun.data)){ ANUNCIOS=anun.data; desenharAnuncios(); }
+  carregarAnuncios();
   if(!meta.error && Array.isArray(meta.data)) META=meta.data;
 
   // A view devolve um dia por linha desde 12/08. Com 400 dias de teto o
@@ -509,7 +512,11 @@ function montarFiltros(){
     '<button class="fb'+(v===PERIODO?' on':'')+'" data-v="'+v+'">'+r+'</button>').join('');
   $('fcomparar').innerHTML=COMPARACOES.map(([v,r])=>
     '<button class="fb'+(v===COMPARAR?' on':'')+'" data-v="'+v+'">'+r+'</button>').join('');
-  $('fperiodo').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{PERIODO=b.dataset.v;montarFiltros();aplicar();});
+  /* Trocar o periodo volta ao banco SO para os criativos. O resto da
+     tela filtra em memoria porque ja tem todos os dias na mao; esta
+     tabela nao pode ter, ver o comentario de carregarAnuncios(). O
+     botao de comparacao nao recarrega nada: ele nao mexe no periodo. */
+  $('fperiodo').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{PERIODO=b.dataset.v;montarFiltros();aplicar();carregarAnuncios();});
   $('fcomparar').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{COMPARAR=b.dataset.v;montarFiltros();aplicar();});
 }
 
@@ -1159,23 +1166,44 @@ function desenharCancelados(){
 }
 
 /* Anuncio x funil real.
-   A view ja entrega agregado por criativo — nao ha o que somar aqui, e
-   nao ha como esta tela ver cliente nenhum: vw_trafego_anuncio devolve
-   contagem, nunca linha de pessoa.
+   A funcao ja entrega agregado por criativo — nao ha o que somar aqui,
+   e nao ha como esta tela ver cliente nenhum: trafego_anuncio_periodo
+   devolve contagem, nunca linha de pessoa.
 
-   POR QUE NAO SEGUE O FILTRO DE PERIODO: a atribuicao so existe a
-   partir de 18/08, e o gasto do Meta e acumulado do criativo inteiro.
-   Cruzar um recorte de 7 dias de lead com o gasto total daria um custo
-   por elegivel inventado. Quando houver mais historico, a view passa a
-   devolver por dia e ai o filtro entra.
+   PASSOU A SEGUIR O FILTRO DE PERIODO em 08/09/2026. Ate aqui nao
+   seguia porque a view somava o gasto do criativo inteiro, e cruzar um
+   recorte de 7 dias de lead com gasto acumulado daria um custo por
+   elegivel inventado. A funcao corta os dois lados no mesmo periodo,
+   entao o cruzamento passou a fechar. O que sobrou de armadilha e a
+   maturacao da lead — ver o aviso amarelo mais abaixo.
 
    O AVISO DE POUCO VOLUME E O PONTO DA TELA. Criativo com menos de 3
    elegiveis nao se separa de sorte: 1 elegivel em 2 leads da 50%, e
    50% de dois nao e nada. Sem esse aviso a tela convida a cortar
    criativo no escuro, so que com mais confianca — que e o jeito mais
    caro de errar. */
+/* POR QUE ISTO VOLTA AO BANCO E NAO FILTRA EM MEMORIA.
+   O resto da tela carrega todos os dias de uma vez e filtra aqui
+   dentro, porque uma linha por dia cabe. Aqui seria uma linha por
+   CODIGO E POR DIA: hoje 29 criativos x 23 dias, mas em tres meses
+   passa de 2.700 — e o PostgREST corta em 1.000 sem avisar ninguem.
+   A tabela ficaria mentindo calada, que e o defeito que este painel
+   inteiro existe para nao ter. A funcao devolve ja somada no periodo:
+   uma linha por criativo, ~30 linhas, quantos meses forem.
+
+   O GASTO E O MESMO RECORTE DA LEAD. Cruzar 7 dias de lead com o gasto
+   acumulado do criativo inteiro daria um custo por elegivel inventado,
+   e era por isso que esta tabela nao tinha filtro ate hoje. */ async function carregarAnuncios(){
+  const j = janela(PERIODO);
+  ANUNCIOS_JANELA = j;
+  const { data, error } = await sb.rpc('trafego_anuncio_periodo', { p_ini: j.ini, p_fim: j.fim });
+  if(error){ $('anuncios').innerHTML='<div class="vazio">Não deu para carregar os criativos deste período.</div>'; return; }
+  ANUNCIOS = Array.isArray(data) ? data : [];
+  desenharAnuncios();
+}
+
 function desenharAnuncios(){
-  if(!ANUNCIOS.length){ $('anuncios').innerHTML='<div class="vazio">Nenhuma lead com anúncio identificado ainda.</div>'; return; }
+  if(!ANUNCIOS.length){ $('anuncios').innerHTML='<div class="vazio">Nenhum criativo com lead ou gasto neste período.</div>'; return; }
   const real=v=>v==null?'—':'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 
   /* Criativo que gastou e nao trouxe lead nenhum sai da tabela e vira uma
@@ -1185,11 +1213,16 @@ function desenharAnuncios(){
   const comLead = ANUNCIOS.filter(a=>(a.leads||0)>0);
   const semLead = ANUNCIOS.filter(a=>!(a.leads||0) && Number(a.gasto)>0);
 
-  let leads=0, eleg=0, gasto=0, semBalde=0, novosSemCsv=0;
+  let leads=0, eleg=0, gasto=0, semBalde=0, novosSemCsv=0, aberta=0;
   const fmt={};   // estatico/video: o corte que o teste do Rafael pergunta
   for(const a of ANUNCIOS){
     leads+=a.leads||0; eleg+=a.elegivel||0; gasto+=Number(a.gasto)||0;
     semBalde+=a.nao_classificada||0; novosSemCsv+=a.anuncios_novos_sem_csv||0;
+    /* Quem ainda esta em triagem ou nem respondeu NAO E descartada: e
+       elegivel que ainda nao virou. Ela infla o custo por elegivel do
+       periodo curto, e por isso o numero aparece na tela em vez de
+       ficar so no denominador. */
+    aberta+=(a.em_triagem||0)+(a.nunca_respondeu||0);
     const f=a.formato||'sem formato';
     if(!fmt[f]) fmt[f]={leads:0,eleg:0,gasto:0,desc:0};
     fmt[f].leads+=a.leads||0; fmt[f].eleg+=a.elegivel||0;
@@ -1232,6 +1265,28 @@ function desenharAnuncios(){
     + real(gasto)+' investido · <b>'+geral+' por elegível</b> no geral.<br>'
     + 'Lead que chegou por indicação não entra aqui, mesmo tendo vindo depois de um anúncio. '
     + 'Card arquivado continua contando: arquivar organiza a tela, não desfaz o que o anúncio trouxe.</div>'
+    /* O AVISO QUE FAZ O FILTRO SER SEGURO DE USAR — 08/09/2026.
+       Medido nas 407 leads dos ultimos 40 dias: nos primeiros 6 dias,
+       40% ainda estao em triagem ou nunca responderam; de 7 a 13 dias
+       caem para 5%, e de 14 a 20 para 2%. Ou seja, o custo por
+       elegivel de "Hoje" e de "7 dias" nasce inflado por construcao —
+       o denominador ainda nao acabou de encher. Sem este aviso, o
+       filtro que acabou de ser criado seria um jeito novo de cortar
+       criativo bom com mais confianca. */
+    + (aberta ? '<div class="vazio" style="color:var(--yellow);font-weight:700">'
+        + aberta + (aberta===1?' lead deste período ainda está':' leads deste período ainda estão')
+        + ' em triagem ou sem resposta — parte delas vira elegível, então o custo por elegível aqui está pior do que vai ficar. '
+        + 'Em janela de 14 dias ou mais isso quase não pesa.</div>' : '')
+    /* BASE PARCIAL. O painel ja faz isso nos KPIs de cima
+       (escreverComparacao) pelo mesmo motivo: nao existia sistema
+       antes, e queda contra o nada e a mentira mais cara que esta tela
+       poderia contar. Aqui o efeito e ao contrario — gasto sem lead
+       para dividir —, mas a causa e a mesma. */
+    + ((ANUNCIOS_JANELA && ANUNCIOS_JANELA.ini < INICIO_ATRIBUICAO) ?
+       '<div class="vazio">Parte deste período é anterior a '
+        + fmtBR(INICIO_ATRIBUICAO) + ', quando o anúncio de origem passou a ser gravado na lead'
+        + (INICIO_GASTO < INICIO_ATRIBUICAO ? ' (o gasto do Meta começa em '+fmtBR(INICIO_GASTO)+')' : '')
+        + '. Nesses dias há gasto sem lead atribuída, então o custo por elegível sai mais alto do que foi.</div>' : '')
     /* Gasto sem retorno nenhum. Some da tabela e nao pode sumir da conta:
        ate 04/09 esse dinheiro nao aparecia em lugar nenhum da tela,
        porque a view antiga partia dos leads e anuncio sem lead nao
@@ -1256,12 +1311,17 @@ function desenharAnuncios(){
 }
 
 function baixarAnuncios(){
-  const linhas=[['Codigo','Descricao','Formato','Anuncios','Leads','Nunca respondeu','Descartadas','Elegiveis','Nao classificadas','Gasto','Por lead','Por elegivel','% descarte']];
+  const linhas=[['Codigo','Descricao','Formato','Anuncios','Leads','Nunca respondeu','Em triagem','Descartadas','Elegiveis','Nao classificadas','Gasto','Por lead','Por elegivel','% descarte']];
   for(const a of ANUNCIOS) linhas.push([a.codigo,a.criativo_desc||'',a.formato||'',a.anuncios||1,
-                                        a.leads||0,a.nunca_respondeu||0,a.descartada||0,
+                                        a.leads||0,a.nunca_respondeu||0,a.em_triagem||0,a.descartada||0,
                                         a.elegivel||0,a.nao_classificada||0,a.gasto||0,
                                         a.por_lead||'',a.por_elegivel||'',a.pct_descarte||0]);
-  baixar('previmater-criativos-'+hojeISO()+'.csv',linhas);
+  /* O periodo entra no NOME do arquivo. Planilha de criativo circula
+     por WhatsApp e volta uma semana depois sem ninguem lembrar de que
+     recorte ela era — e agora que ha recorte, dois arquivos com o
+     mesmo nome diriam coisas diferentes. */
+  const j = ANUNCIOS_JANELA || janela(PERIODO);
+  baixar('previmater-criativos-'+j.ini+'_a_'+j.fim+'.csv',linhas);
 }
 
 // ------------------------------------------------------------

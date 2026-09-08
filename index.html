@@ -423,6 +423,14 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 
 /* ANEXOS */
 .anexolist{display:flex;flex-direction:column;gap:9px;margin-bottom:12px;}
+.dosslista{max-height:46vh;overflow:auto;display:flex;flex-direction:column;gap:6px;margin:10px 0 0}
+.dossitem{display:flex;align-items:flex-start;gap:10px;padding:9px 11px;border:1px solid var(--bd);border-radius:10px;cursor:pointer}
+.dossitem input{margin-top:2px;flex:0 0 auto}
+.dossnome{display:block;font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dossmeta{display:block;font-size:11px;color:var(--text3);margin-top:2px}
+.dossbar{margin-top:10px;font-size:12px;font-weight:700}
+.dossbom{color:var(--text2)}
+.dossruim{color:var(--red)}
 .anexoitem{display:flex;align-items:center;gap:11px;padding:11px 14px;border:1.5px solid var(--border);border-radius:11px;background:#F3FAFA;}
 .anexoicone{width:36px;height:36px;border-radius:9px;background:var(--teal-l);color:var(--teal);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
 .anexonome{font-size:14px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -1133,6 +1141,9 @@ const LISTA_CONTRATO_ENVIADO='c87d7210-b262-40a6-88fa-51d8faf12b1a';
 
 const PCT_HONORARIOS=0.30;
 const ANEXO_BUCKET='crm-anexos';
+/* So o rotulo da tela. O endereco de verdade fica em crm_variaveis e
+   quem le e a function: trocar de advogada nao republica o site. */
+const DOSSIE_EMAIL_ROTULO='o e-mail do escritório';
 /* Teto do envio pelo WhatsApp. O motor manda o arquivo em base64 dentro
    de um JSON: 5 MB de arquivo viram quase 7 MB de texto na memoria da
    Edge Function, e acima disso a rodada morre sem dizer por que. Vale
@@ -2054,6 +2065,157 @@ async function carregarAnexos(clienteId){
     if(s&&el)el.innerHTML=`<img src="${escA(s.signedUrl)}" alt=""/>`;
   });
 }
+// ============================================================
+// DOSSIE JUDICIAL — manda para o escritorio tudo de uma cliente
+// ============================================================
+/* O material de uma cliente nao mora num lugar so: o que ela mandou no
+   WhatsApp esta em crm_mensagens, o que voce subiu na mao esta em
+   crm_anexos, e o contrato gerado esta num campo do proprio cartao.
+   Esta tela junta os tres numa lista unica e VOCE marca o que vai.
+   Mandar tudo encheria o e-mail de audio e de foto repetida, e o
+   documento que interessa ao processo sumiria no meio. */
+let DOSSIE_ALVO=null,DOSSIE_ITENS=[],DOSSIE_CLIENTE=null;
+
+/* 18 MB e o teto do que sai daqui, e e o MESMO numero conferido do lado
+   da function. O Resend aceita 40 MB, mas a caixa da destinataria corta
+   em 25, e o anexo engorda ~33% virando base64 no caminho. Contar em MB
+   de arquivo e o unico numero que faz sentido para quem esta marcando. */
+const DOSSIE_TETO=18*1024*1024;
+
+async function abrirDossie(clienteId){
+  if(!clienteId)return;
+  DOSSIE_ALVO=clienteId;DOSSIE_ITENS=[];DOSSIE_CLIENTE=null;
+  FILA_VOLTAR=clienteId;
+  abrirModal('<div class="mbt">Dossiê judicial</div><div class="mbs">Carregando o material da cliente...</div>');
+  /* Colunas explicitas de proposito: crm_mensagens tem a coluna bruto,
+     que guarda o payload inteiro do WhatsApp. Um select('*') aqui
+     arrastaria megabytes de base64 por cartao aberto. */
+  const[{data:cli},{data:anx},{data:mid}]=await Promise.all([
+    sb.from('crm_clientes').select('id,nome_completo,senha_inss,contrato_arquivo_caminho').eq('id',clienteId).maybeSingle(),
+    sb.from('crm_anexos').select('id,nome_arquivo,tamanho_bytes,criado_em').eq('cliente_id',clienteId).order('criado_em',{ascending:false}).limit(200),
+    sb.from('crm_mensagens').select('id,midia_nome,midia_mime,midia_tamanho,midia_tipo_doc,criado_em').eq('cliente_id',clienteId).not('midia_caminho','is',null).order('criado_em',{ascending:false}).limit(300)
+  ]);
+  if(DOSSIE_ALVO!==clienteId)return; // trocaram de cartao enquanto carregava
+  if(!cli){abrirModal('<div class="mbt">Dossiê judicial</div><div class="mbs">Cliente não encontrada.</div><div class="brow" style="justify-content:flex-end"><button class="btn btns" onclick="dossieFechar()">Voltar</button></div>');return;}
+  DOSSIE_CLIENTE=cli;
+  const itens=[];
+  if(cli.contrato_arquivo_caminho){
+    itens.push({origem:'contrato',id:'contrato',nome:cli.contrato_arquivo_caminho.split('/').pop(),
+      bytes:0,rotulo:'Contrato',quando:null,marcado:true});
+  }
+  (anx||[]).forEach(a=>itens.push({origem:'anexo',id:a.id,nome:a.nome_arquivo||'anexo',
+    bytes:Number(a.tamanho_bytes||0),rotulo:'Anexo do CRM',quando:a.criado_em,marcado:true}));
+  /* Audio de WhatsApp entra na lista mas ja vem desmarcado: quase nunca
+     serve de prova e pesa mais do que qualquer documento. Marcar na mao
+     continua possivel. */
+  (mid||[]).forEach(m=>{
+    const mime=String(m.midia_mime||'');
+    const ehAudio=mime.indexOf('audio/')===0;
+    const tipo=m.midia_tipo_doc&&m.midia_tipo_doc!=='nao_lido'&&m.midia_tipo_doc!=='outro'?m.midia_tipo_doc:null;
+    itens.push({origem:'midia',id:m.id,nome:m.midia_nome||((tipo||(ehAudio?'audio':'arquivo'))+' de '+(m.criado_em||'').slice(0,10)),
+      bytes:Number(m.midia_tamanho||0),rotulo:tipo?('WhatsApp · '+tipo.replace(/_/g,' ')):'WhatsApp',
+      quando:m.criado_em,marcado:!ehAudio});
+  });
+  DOSSIE_ITENS=itens;
+  dossieDesenhar();
+}
+
+function dossieDesenhar(){
+  const c=DOSSIE_CLIENTE;
+  const temSenha=!!(c&&c.senha_inss);
+  const linhas=DOSSIE_ITENS.map((it,i)=>`
+    <label class="dossitem">
+      <input type="checkbox" ${it.marcado?'checked':''} onchange="dossieMarcar(${i},this.checked)"/>
+      <span style="flex:1;min-width:0">
+        <span class="dossnome">${esc(it.nome)}</span>
+        <span class="dossmeta">${esc(it.rotulo)}${it.bytes?' · '+fmtBytes(it.bytes):''}${it.quando?' · '+tempoRel(it.quando):''}</span>
+      </span>
+    </label>`).join('');
+  abrirModal(`
+    <div class="mbt">Dossiê judicial</div>
+    <div class="mbs">${esc(c?c.nome_completo:'')} — vai para ${esc(DOSSIE_EMAIL_ROTULO)}</div>
+    <div class="fhint" style="margin-bottom:10px">Os dados do cartão (CPF, endereço, datas, veredito, referências e observações) vão sempre no corpo do e-mail. Aqui você escolhe só os arquivos.</div>
+    <label class="dossitem" style="border-color:var(--yellow)">
+      <input type="checkbox" id="doss-senha" ${temSenha?'':'disabled'}/>
+      <span style="flex:1;min-width:0">
+        <span class="dossnome">Incluir a senha do Meu INSS</span>
+        <span class="dossmeta">${temSenha?'Uma vez enviada, ela fica para sempre na caixa de quem recebeu.':'Esta cliente não tem senha cadastrada.'}</span>
+      </span>
+    </label>
+    <div class="dosslista">${linhas||'<div class="seqvazio">Nenhum arquivo nesta cliente.</div>'}</div>
+    <div class="dossbar" id="doss-barra"></div>
+    <div class="brow" style="justify-content:flex-end;gap:9px;margin-top:14px">
+      <button class="btn btns" onclick="dossieFechar()">Voltar</button>
+      <button class="btn btnp" id="doss-enviar" onclick="dossieEnviar()">Enviar</button>
+    </div>`,true);
+  dossieRecalcular();
+}
+
+function dossieMarcar(i,valor){
+  if(!DOSSIE_ITENS[i])return;
+  DOSSIE_ITENS[i].marcado=!!valor;
+  dossieRecalcular();
+}
+
+/* O contador soma o que a tabela diz. Midia antiga tem tamanho zerado
+   no banco, entao a conta daqui e uma estimativa — quem decide de
+   verdade e a function, que mede o arquivo baixado. Por isso o aviso
+   fala em "aproximadamente". */
+function dossieRecalcular(){
+  const barra=$('doss-barra'),botao=$('doss-enviar');
+  if(!barra)return;
+  const marcados=DOSSIE_ITENS.filter(x=>x.marcado);
+  const bytes=marcados.reduce((t,x)=>t+(x.bytes||0),0);
+  const passou=bytes>DOSSIE_TETO;
+  barra.innerHTML=`<span class="${passou?'dossruim':'dossbom'}">${marcados.length} arquivo${marcados.length===1?'':'s'} · aproximadamente ${fmtBytes(bytes)||'0 KB'}</span>`
+    +(passou?'<span class="dossruim"> — acima de 18 MB, desmarque alguns</span>':'');
+  if(botao)botao.disabled=passou;
+}
+
+function dossieFechar(){
+  DOSSIE_ALVO=null;DOSSIE_ITENS=[];DOSSIE_CLIENTE=null;
+  filaFecharDialogo();
+}
+
+async function dossieEnviar(){
+  const alvo=DOSSIE_ALVO;
+  if(!alvo)return;
+  const botao=$('doss-enviar');
+  const marcados=DOSSIE_ITENS.filter(x=>x.marcado).map(x=>({origem:x.origem,id:x.id}));
+  const comSenha=!!($('doss-senha')&&$('doss-senha').checked);
+  if(botao){botao.disabled=true;botao.textContent='Enviando...';}
+  /* Timeout largo: a function baixa cada arquivo do storage antes de
+     falar com o Resend, e dez anexos nao voltam em cinco segundos. */
+  const corta=new AbortController();
+  const t=setTimeout(()=>corta.abort(),120000);
+  let r=null,dados=null;
+  try{
+    const{data:sess}=await sb.auth.getSession();
+    const tk=(sess&&sess.session)?sess.session.access_token:SUPABASE_ANON_KEY;
+    r=await fetch(SUPABASE_URL+'/functions/v1/enviar-dossie',{
+      method:'POST',
+      headers:{apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+tk,'Content-Type':'application/json'},
+      body:JSON.stringify({cliente_id:alvo,arquivos:marcados,incluir_senha:comSenha}),
+      signal:corta.signal
+    });
+    dados=await r.json().catch(()=>null);
+  }catch(e){
+    dados=null;
+  }finally{
+    clearTimeout(t);
+  }
+  if(!r||!dados||!dados.ok){
+    const motivo=(dados&&(dados.detalhe||dados.motivo))||'não foi possível enviar';
+    toast('Dossiê não enviado: '+motivo,'er');
+    if(botao){botao.disabled=false;botao.textContent='Enviar';}
+    return;
+  }
+  registrarAtividade(alvo,'enviou o dossiê judicial ('+dados.enviados+' anexo(s))');
+  const sobrou=(dados.falhas&&dados.falhas.length)?(' — '+dados.falhas.length+' arquivo(s) não abriram'):'';
+  toast('Dossiê enviado com '+dados.enviados+' anexo(s)'+sobrou,'ok');
+  dossieFechar();
+}
+
 async function visualizarAnexo(caminho,nome,idx){
   const{data,error}=await sb.storage.from(ANEXO_BUCKET).createSignedUrl(caminho,180);
   if(error||!data){toast('Não foi possível abrir o arquivo','er');return;}
@@ -3625,6 +3787,7 @@ function renderCardClienteModal(c,etqSel,listas){
           <div class="anexoupload" onclick="$('mc-anexo-input').click()">
             <span style="font-size:12px;color:var(--text2);font-weight:600">${clipeSvg()} Clique para anexar arquivos</span>
           </div>
+          <button class="btn btns" style="width:100%;margin-top:10px" onclick="abrirDossie('${c.id}')">Enviar dossiê judicial…</button>
         </div>
 
         <div class="mcpane" id="mcpane-coment">

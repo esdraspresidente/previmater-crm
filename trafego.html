@@ -162,6 +162,10 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 .apale{color:var(--text3);}
 .aforte{font-weight:800;color:var(--teal);}
 .aravo{font-size:10px;color:var(--yellow);font-weight:700;display:block;margin-top:2px;}
+.acmp{font-size:11px;font-weight:700;white-space:nowrap;}
+.acmp.sobe{color:var(--green);} .acmp.desce{color:var(--red);} .acmp.igual{color:var(--text3);}
+.acmp.mudo{color:var(--text3);font-weight:400;}
+.acmpd{display:block;font-size:10px;font-weight:400;color:var(--text3);margin-top:2px;}
 .afmt{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 6px;border-radius:4px;background:#F0F7F7;color:var(--text3);}
 .adesc{display:block;font-size:11px;font-weight:400;color:var(--text3);margin-top:2px;}
 /* Resumo do teste que motivou tudo: estatico qualifica melhor que video?
@@ -422,6 +426,7 @@ let DESCARTES=[];        // uma linha por dia e por motivo de descarte
 let CANCELADOS=[];       // contratos assinados que cairam, por dia e motivo
 let ANUNCIOS=[];         // uma linha por criativo, ja somada NO PERIODO
 let ANUNCIOS_JANELA=null;// a janela que gerou o ANUNCIOS atual, para os avisos
+let ANUNCIOS_ANT=null;   // mesmo recorte deslocado, por codigo; null = sem comparacao
 let VARIANTE='qtd';      // qtd = geral | qtd_pre | qtd_adm
 let PERIODO='7';         // hoje | ontem | 7 | 15 | 30
 let COMPARAR='0';        // 0 = sem comparacao; 1,7,15,30 = deslocamento em dias
@@ -517,7 +522,9 @@ function montarFiltros(){
      tabela nao pode ter, ver o comentario de carregarAnuncios(). O
      botao de comparacao nao recarrega nada: ele nao mexe no periodo. */
   $('fperiodo').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{PERIODO=b.dataset.v;montarFiltros();aplicar();carregarAnuncios();});
-  $('fcomparar').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{COMPARAR=b.dataset.v;montarFiltros();aplicar();});
+  /* A comparacao agora tambem mexe nos criativos: precisa de uma
+     segunda ida ao banco, com a janela deslocada. */
+  $('fcomparar').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{COMPARAR=b.dataset.v;montarFiltros();aplicar();carregarAnuncios();});
 }
 
 /**
@@ -1196,15 +1203,77 @@ function desenharCancelados(){
    e era por isso que esta tabela nao tinha filtro ate hoje. */ async function carregarAnuncios(){
   const j = janela(PERIODO);
   ANUNCIOS_JANELA = j;
-  const { data, error } = await sb.rpc('trafego_anuncio_periodo', { p_ini: j.ini, p_fim: j.fim });
-  if(error){ $('anuncios').innerHTML='<div class="vazio">Não deu para carregar os criativos deste período.</div>'; return; }
-  ANUNCIOS = Array.isArray(data) ? data : [];
+  const desloc = Number(COMPARAR)||0;
+  const jAnt = desloc ? {ini:menos(j.ini,desloc), fim:menos(j.fim,desloc)} : null;
+
+  const [at, ant] = await Promise.all([
+    sb.rpc('trafego_anuncio_periodo', { p_ini: j.ini, p_fim: j.fim }),
+    jAnt ? sb.rpc('trafego_anuncio_periodo', { p_ini: jAnt.ini, p_fim: jAnt.fim }) : Promise.resolve({data:null,error:null})
+  ]);
+  if(at.error){ $('anuncios').innerHTML='<div class="vazio">Não deu para carregar os criativos deste período.</div>'; return; }
+  ANUNCIOS = Array.isArray(at.data) ? at.data : [];
+
+  /* Indexado por codigo porque o criativo pode existir num periodo e nao
+     no outro — criativo novo nao tem semana passada, criativo pausado
+     nao tem esta semana. Quem nao achar par vira "sem base", nunca 0. */
+  if(jAnt && !ant.error && Array.isArray(ant.data)){
+    ANUNCIOS_ANT = {}; ANUNCIOS_ANT.__janela = jAnt;
+    for(const a of ant.data) ANUNCIOS_ANT[a.codigo] = a;
+  } else ANUNCIOS_ANT = null;
+
   desenharAnuncios();
 }
 
 function desenharAnuncios(){
   if(!ANUNCIOS.length){ $('anuncios').innerHTML='<div class="vazio">Nenhum criativo com lead ou gasto neste período.</div>'; return; }
   const real=v=>v==null?'—':'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  /* COMPARAR SOBRE LEAD JA TRIADA, NAO SOBRE O TOTAL — 08/09/2026.
+
+     O Rafael pediu a comparacao para NAO cortar criativo que foi mal
+     esta semana e bem na passada. Comparando custo por elegivel direto,
+     ela faria exatamente o contrario. O EST6, unico criativo com volume
+     nos dois lados quando isto foi escrito:
+
+       esta semana:    25 leads, 3 elegiveis, 13 AINDA EM TRIAGEM, R$416
+       semana passada: 22 leads, 3 elegiveis,  2 ainda em triagem, R$275
+
+     Por elegivel da R$138 contra R$91 — "piorou 51%", corta. Mas 13 das
+     25 leads desta semana ainda nem foram triadas. Sobre as que ja
+     foram: 25% de aproveitamento agora contra 15% antes. O criativo
+     MELHOROU. A comparacao ingenua mandaria cortar o melhor criativo da
+     conta, que e o erro que ele pediu para evitar.
+
+     Entao o que se compara aqui e elegivel / (lead - lead ainda aberta).
+     Tira o vies dos dois lados e vira maca com maca. O custo por
+     elegivel continua na tabela como numero de caixa; ele so nao serve
+     para comparar semana crua com semana madura.
+
+     A TRAVA DE 3 VALE NOS DOIS LADOS. Quando isto entrou, 1 criativo em
+     15 tinha 3 elegiveis nas duas janelas — quase toda linha vai dizer
+     "pouco volume", e esta certo: 2 contra 3 elegiveis e sorte, nao
+     desempenho. Preferivel a tela recusar a conclusao a entrega-la
+     errada com ar de precisao. */ const triadas = a => Math.max(0,(a.leads||0)-((a.em_triagem||0)+(a.nunca_respondeu||0)));
+  const aprov = a => { const t=triadas(a); return t>0 ? (a.elegivel||0)/t : null; };
+  const pct1 = v => (v*100).toFixed(v*100>=10?0:1).replace('.',',')+'%';
+
+  function celulaCmp(a){
+    if(!ANUNCIOS_ANT) return '';
+    const b = ANUNCIOS_ANT[a.codigo];
+    if(!b) return '<td class="acmp mudo">sem base<span class="acmpd">não rodou no período anterior</span></td>';
+    const va = aprov(a), vb = aprov(b);
+    if(va==null||vb==null) return '<td class="acmp mudo">sem base<span class="acmpd">nenhuma lead triada dos dois lados</span></td>';
+    const det = pct1(va)+' agora · '+pct1(vb)+' antes <span class="acmpd">'
+              + (a.elegivel||0)+'/'+triadas(a)+' triadas · '+(b.elegivel||0)+'/'+triadas(b)+' antes</span>';
+    /* Volume antes de veredito: sem 3 elegiveis de cada lado a seta
+       seria leitura de sorte com cara de dado. */
+    if((a.elegivel||0)<3 || (b.elegivel||0)<3)
+      return '<td class="acmp mudo">pouco volume<span class="acmpd">'+det+'</span></td>';
+    if(vb===0) return '<td class="acmp sobe">antes era 0<span class="acmpd">'+det+'</span></td>';
+    const p = Math.round(((va-vb)/vb)*100);
+    return '<td class="acmp '+(p>0?'sobe':p<0?'desce':'igual')+'">'+(p>0?'+':'')+p+'%'
+         + '<span class="acmpd">'+det+'</span></td>';
+  }
 
   /* Criativo que gastou e nao trouxe lead nenhum sai da tabela e vira uma
      linha de rodape. Ele PRECISA aparecer em algum lugar — e dinheiro
@@ -1250,7 +1319,8 @@ function desenharAnuncios(){
          + '<td>'+(a.leads||0)+'</td><td>'+(a.pct_descarte==null?'—':a.pct_descarte+'%')+'</td>'
          + '<td>'+(a.elegivel||0)+'</td>'
          + '<td class="apale">'+real(a.por_lead)+'</td>'
-         + '<td class="'+(pouco?'apale':'aforte')+'">'+real(a.por_elegivel)+'</td></tr>';
+         + '<td class="'+(pouco?'apale':'aforte')+'">'+real(a.por_elegivel)+'</td>'
+         + celulaCmp(a)+'</tr>';
   }).join('');
 
   const geral = eleg>0 ? real(gasto/eleg) : '—';
@@ -1259,12 +1329,23 @@ function desenharAnuncios(){
   $('anuncios').innerHTML =
       '<div class="aresumo">'+resumo+'</div>'
     + '<table class="atab"><thead><tr><th>Criativo</th><th>Formato</th><th>Leads</th><th>Descarte</th>'
-    + '<th>Elegíveis</th><th>Por lead</th><th>Por elegível</th></tr></thead><tbody>'
+    + '<th>Elegíveis</th><th>Por lead</th><th>Por elegível</th>'
+    + (ANUNCIOS_ANT?'<th>Aproveitamento</th>':'')+'</tr></thead><tbody>'
     + linhas + '</tbody></table>'
     + '<div class="vazio" style="margin-top:10px">'+leads+' leads atribuídas · '+eleg+' elegíveis · '
     + real(gasto)+' investido · <b>'+geral+' por elegível</b> no geral.<br>'
     + 'Lead que chegou por indicação não entra aqui, mesmo tendo vindo depois de um anúncio. '
     + 'Card arquivado continua contando: arquivar organiza a tela, não desfaz o que o anúncio trouxe.</div>'
+    /* A coluna precisa se explicar na propria tela: "aproveitamento"
+       nao e palavra que se adivinha, e quem abrir sem ler isto vai
+       achar que e o custo por elegivel de novo. */
+    + (ANUNCIOS_ANT ? '<div class="vazio"><b>Aproveitamento</b> compara só as leads que já foram triadas '
+        + '(elegíveis ÷ leads já respondidas e classificadas), contra '
+        + (ANUNCIOS_ANT.__janela.ini===ANUNCIOS_ANT.__janela.fim ? fmtBR(ANUNCIOS_ANT.__janela.ini)
+           : fmtBR(ANUNCIOS_ANT.__janela.ini)+' a '+fmtBR(ANUNCIOS_ANT.__janela.fim))+'. '
+        + 'É por aí que se compara período novo com período velho: o custo por elegível da coluna ao lado '
+        + 'ainda está subindo enquanto as leads desta janela terminam a triagem, então ele faria criativo bom parecer ruim. '
+        + 'Linha com menos de 3 elegíveis em qualquer um dos lados não recebe veredito — 2 contra 3 é sorte, não desempenho.</div>' : '')
     /* O AVISO QUE FAZ O FILTRO SER SEGURO DE USAR — 08/09/2026.
        Medido nas 407 leads dos ultimos 40 dias: nos primeiros 6 dias,
        40% ainda estao em triagem ou nunca responderam; de 7 a 13 dias

@@ -3342,6 +3342,14 @@ async function mvpConfirmar(listaIdArg,posArg){
   if(origListaId&&origListaId!==listaId)await registrarMovimentoLista(id,origListaId,listaId);
   finCarregado=false;
   fecharMoverPopover();
+  /* O QUADRO ATRAS TAMBEM PRECISA SER REPINTADO.
+     Este balao gravava a lista nova no banco, reabria o cartao e parava
+     ai: o card continuava desenhado na coluna velha ate um F5. Os
+     outros tres caminhos de mover (arrastar, moverPara e o Salvar do
+     cartao) ja atualizam; so este nao atualizava. Nao e so cosmetico —
+     as setas ← → leem a ordem do DOM que ficou atras (mcIrmaosNaTela),
+     entao com o quadro velho na tela elas levam para o card errado. */
+  refrescarRotaAtual();
   abrirCardCliente(id);
 }
 async function mvTrocarQuadro(){

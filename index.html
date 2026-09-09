@@ -9337,7 +9337,14 @@ function mcAgruparSequencias(linhas,nomes,totais){
     const g=grupos[chave];
     if(a.enviado_em&&(!g.ultima||a.enviado_em>g.ultima))g.ultima=a.enviado_em;
     const peso=SEQ_PESO[a.status]||0;
-    if(peso>g.peso){
+    /* EMPATE DE PESO DECIDE PELA DATA — 09/09/2026.
+       Uma sequencia pode ter dois passos no MESMO estado (a Tentativa
+       tem Direito nasce com os dois esperando aprovacao). Com so
+       `peso>g.peso`, ficava o primeiro que a lista devolvesse, e a
+       ordem da lista nao e promessa de nada: o cartao podia anunciar a
+       data do passo 2 enquanto o passo 1 saia vinte dias antes. */
+    const maisCedo=peso===g.peso&&peso>0&&a.data_hora_agendada&&(!g.quando||a.data_hora_agendada<g.quando);
+    if(peso>g.peso||maisCedo){
       g.peso=peso;g.estado=a.status;g.ordem=a.ordem||g.ordem;
       g.quando=a.data_hora_agendada||null;g.motivo=a.motivo_cancelamento||null;
       /* QUAL automacao produziu este estado. Sem guardar o id, os botoes
@@ -9368,7 +9375,7 @@ function mcQuandoTexto(iso){
 function mcSeqLinha(g,viva){
   const passo=g.total?('passo '+(g.ordem||1)+' de '+g.total):(g.ordem?('passo '+g.ordem):'');
   let ic='ic-fim',sim='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>',sub='';
-  if(g.estado==='aguardando_aprovacao'){ic='ic-esp';sim='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';sub='esperando sua aprovação';}
+  if(g.estado==='aguardando_aprovacao'){ic='ic-esp';sim='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';sub='esperando sua aprovação'+(g.quando?' — sai '+mcQuandoTexto(g.quando):'');}
   else if(g.estado==='agendado'){ic='ic-and';sim='▶';sub=g.quando?('próxima '+mcQuandoTexto(g.quando)):'agendada';}
   else if(g.estado==='vencida'){ic='ic-esp';sim='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';sub='vencida — passou da hora e não saiu';}
   else if(g.estado==='pausado'){ic='ic-pau';sim='⏸';sub='pausada'+(g.motivo?' — '+g.motivo:'');}

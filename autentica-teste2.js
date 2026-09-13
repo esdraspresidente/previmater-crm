@@ -52,16 +52,17 @@
     var f = p.querySelector('#pm-arq').files[0];
     if (!f) return log('escolhe um arquivo primeiro');
     log('subindo ' + f.name + ' ...');
-    var tentar = function (campo) {
-      var fd = new FormData();
-      fd.append(campo, f, f.name);
-      fd.append('action', 'save');
-      return post('/Upload/SalvarTemporario', fd).then(function (t) {
-        return 'campo "' + campo + '"\n' + t;
-      });
-    };
-    tentar('files').then(function (a) {
-      return tentar('file').then(function (b) { log(a + '\n\n---\n\n' + b); });
+    var fd = new FormData();
+    fd.append('action', 'save');
+    fd.append('files[]', f, f.name);   // colchetes: sem eles o servidor le como texto
+    post('/Upload/SalvarTemporario', fd).then(function (t) {
+      try {
+        var j = JSON.parse(t.split('\n').slice(1).join('\n'));
+        if (typeof j === 'string') j = JSON.parse(j);
+        var e = Array.isArray(j) ? j[0] : j;
+        if (e && e.status) { est.doc = e.hash; est.nome = e.name; }
+      } catch (err) { }
+      log(t + (est.doc ? '\n\n>> hash do arquivo guardado' : '\n\n>> NAO guardou hash'));
     }).catch(function (e) { log('ERRO: ' + e.message); });
   };
 
@@ -85,9 +86,8 @@
 
   // 3) envio final. Precisa do hash do arquivo (etapa 1) e da pasta raiz.
   p.querySelector('#pm-3').onclick = function () {
+    if (!est.doc) return log('faz a etapa 1 primeiro');
     if (!est.sig) return log('faz a etapa 2 primeiro');
-    if (!est.doc) return log('cole abaixo o hash do arquivo da etapa 1:\n' +
-      (est.doc = prompt('hash do arquivo (etapa 1)') || '') ? 'ok, clica de novo' : 'cancelado');
     log('criando envio ...');
     fetch('/Envio/Novo', { credentials: 'same-origin' }).then(function (r) { return r.text(); })
       .then(function (h) {

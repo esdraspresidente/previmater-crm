@@ -5759,6 +5759,7 @@ async function dashCarregar(){
   DASH=data;
   dashPintar();
   dashReativacao();
+  dashPrazoContrib();
 }
 
 const dshK=v=>{const n=Number(v)||0;return n>=1000?'R$ '+(n/1000).toFixed(1).replace('.',',')+'k':'R$ '+n.toFixed(0);};
@@ -5801,6 +5802,111 @@ async function dashReativacao(){
   }catch(_){cx.style.display='none';}
 }
 
+/* PRAZO DA CONTRIBUICAO — 13/09/2026, a pedido do Esdras.
+
+   O QUE ESTE PAINEL RESPONDE. Quem tem ate o dia 15 deste mes para
+   pagar a GPS ou perde o beneficio — inclusive mae que ainda nem
+   fechou contrato, que e onde o prazo vira gatilho de urgencia para
+   fechar. Ate a v177 do motor essa pergunta so podia ser respondida a
+   mao, card a card: a conta existia dentro do veredito mas nao ficava
+   gravada em lugar nenhum.
+
+   CARREGADO A PARTE, como o placar da reativacao, e pelo mesmo motivo:
+   a RPC crm_dashboard e compartilhada, e isto le colunas que o motor
+   carimba sozinho. Falha em silencio — painel que nao carrega nao pode
+   derrubar a tela inteira.
+
+   A TELA NAO CALCULA NADA. Ela le contrib_prazo_final,
+   contrib_pagavel_ate, contrib_competencia e contrib_precisa, que a
+   varrerPrazosContribuicao() grava todo dia chamando o elegibilidade.js
+   do motor. Refazer a conta aqui criaria uma segunda regra que diverge
+   da primeira no dia seguinte e ninguem descobriria.
+
+   SO ENTRA BEBE JA NASCIDO, e isso e regra e nao filtro: gravida pode
+   contribuir em qualquer competencia antes do parto, entao nao existe
+   penhasco de dia 15 para ela. Usar urgencia de dia 15 com gravida e
+   urgencia falsa, e a cliente descobre.
+
+   ENTRA QUEM FOI DESCARTADA. A janela e fato do calendario e nao do
+   veredito: em 12/09, das sete descartadas com janela aberta, cinco
+   tinham caido por FALTA_DADO — falta de resposta, nao falta de
+   direito. Sao justamente as que o telefonema recupera.
+
+   NAO SOME QUANDO ESTA VAZIO, ao contrario dos outros blocos: o Esdras
+   pediu uma coisa para olhar todo dia, e bloco que some quando nao tem
+   nada e indistinguivel de bloco quebrado. */
+function dashPrazoHojeISO(){
+  /* Data LOCAL, nunca toISOString(): depois das 21h em Brasilia o UTC
+     ja virou o dia seguinte e a lista perderia quem vence hoje. */
+  const d=new Date();
+  const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+}
+function dashPrazoDias(iso,hojeISO){
+  const a=new Date(iso+'T12:00:00'),b=new Date(hojeISO+'T12:00:00');
+  return Math.round((a-b)/86400000);
+}
+function dashPrazoBR(iso){
+  if(!iso)return'—';
+  const p=String(iso).slice(0,10).split('-');
+  return p[2]+'/'+p[1];
+}
+async function dashPrazoContrib(){
+  const cx=$('dsh-prazo');if(!cx)return;
+  try{
+    const hoje=dashPrazoHojeISO();
+    /* contrib_precisa NULL e "nao sei", nao "nao precisa" — e a fatia
+       que mais rende telefonema, porque e quem caiu por falta de
+       resposta. Quem o calculo ja disse que nao precisa (TEM_DIREITO,
+       SEM_DIREITO) fica de fora: ligar para ela e ruido. */
+    const{data,error}=await sb.from('crm_clientes')
+      .select('id,nome_completo,telefone_principal,telefone_chave,contrib_prazo_final,contrib_pagavel_ate,contrib_competencia,contrib_situacao,contrib_precisa,veredito,descartado_em')
+      .gte('contrib_prazo_final',hoje)
+      .is('arquivado_em',null)
+      .or('contrib_precisa.eq.true,contrib_precisa.is.null')
+      .order('contrib_prazo_final',{ascending:true})
+      .limit(50);
+    if(error){cx.style.display='none';return;}
+    const linhas=data||[];
+    const urg=linhas.filter(l=>l.contrib_precisa===true).length;
+    let corpo;
+    if(!linhas.length){
+      corpo='<div class="dsh-nota" style="margin:0">Ninguém com janela aberta hoje. Entra aqui quem tem bebê já nascido e ainda pode pagar a GPS.</div>';
+    }else{
+      corpo=linhas.map(l=>{
+        const dias=dashPrazoDias(String(l.contrib_prazo_final).slice(0,10),hoje);
+        const precisa=l.contrib_precisa===true;
+        const cor=precisa?'#C0392B':'#B7791F';
+        const tag=precisa?'precisa contribuir':'falta dado — não dá para saber';
+        /* O prazo curto e o prazo final sao coisas diferentes e a linha
+           diz os dois: a competencia aberta hoje e o gatilho da ligacao,
+           o prazo final e o dia em que a via mensal acaba. Mostrar so um
+           deles foi exatamente o erro que o motor v177 corrigiu. */
+        const curto=l.contrib_pagavel_ate
+          ?'paga até '+dashPrazoBR(l.contrib_pagavel_ate)+(l.contrib_competencia?' (competência '+esc(l.contrib_competencia)+')':'')
+          :'ainda não abre — a guia só pode ser paga a partir do dia 1º';
+        const fone=l.telefone_principal||l.telefone_chave||'';
+        return `<div class="dwr-row" onclick="abrirCardCliente('${l.id}')">
+          <div class="av" style="background:${avC(l.nome_completo)}">${avL(l.nome_completo)}</div>
+          <div style="flex:1;min-width:0">
+            <div class="nm">${esc(l.nome_completo||'Sem nome')}</div>
+            <div class="tel">${foneLink(fone)}</div>
+            <div class="ctx">${curto} · prazo final ${dashPrazoBR(l.contrib_prazo_final)}</div>
+            <div class="ctx" style="color:${cor};font-weight:800">${tag}${l.descartado_em?' · descartada em '+dashPrazoBR(l.descartado_em):''}</div>
+          </div>
+          <div class="vlr dsh-num" style="color:${dias<=3?'#C0392B':'var(--text2)'}">${dias===0?'hoje':dias+'d'}</div>
+        </div>`;
+      }).join('');
+    }
+    cx.innerHTML=`
+      <div class="dsh-estt">
+        <div class="dsh-eyb">Prazo da contribuição · paga ou perde o benefício</div>
+        <div class="tot">${linhas.length} com janela aberta · ${urg} precisando contribuir</div>
+      </div>
+      ${corpo}`;
+    cx.style.display='';
+  }catch(_){cx.style.display='none';}
+}
 function dashPintar(){
   const d=DASH;if(!d)return;
   const din=d.dinheiro||{},al=d.alertas||{},es=d.esteira||{},mo=d.motor||{};
@@ -5838,6 +5944,8 @@ function dashPintar(){
     </div>
 
     <div class="dsh-est" id="dsh-reativ" style="display:none"></div>
+
+    <div class="dsh-est" id="dsh-prazo" style="display:none"></div>
 
     <div class="dsh-mov">
       <div class="dsh-movt">

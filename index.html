@@ -5834,7 +5834,23 @@ async function dashReativacao(){
 
    NAO SOME QUANDO ESTA VAZIO, ao contrario dos outros blocos: o Esdras
    pediu uma coisa para olhar todo dia, e bloco que some quando nao tem
-   nada e indistinguivel de bloco quebrado. */
+   nada e indistinguivel de bloco quebrado.
+
+   TIRAR DA LISTA NAO E DESCARTAR A CLIENTE — 13/09/2026. O X grava
+   contrib_ignorado_em e contrib_ignorado_prazo e nao encosta em
+   descartado_em, lista nem veredito: isto aqui e uma lista de ligacao,
+   e "ja falei com ela" nao e a mesma coisa que "saiu do funil". Se
+   fosse descarte de verdade, tirar do painel jogaria a cliente para
+   fora da esteira comercial com um clique, sem pergunta nenhuma.
+
+   E O QUE FICA GRAVADO E O PRAZO, nao um sim/nao. A tela so esconde
+   quando contrib_ignorado_prazo bate com o contrib_prazo_final de
+   agora, entao janela NOVA (bebe novo, dado corrigido que muda a conta)
+   traz a cliente de volta sozinha. Uma marca sem prazo silenciaria para
+   sempre exatamente o caso que o painel existe para pegar. Quem sai
+   continua contado no cabecalho e volta num clique — nada some sem
+   deixar rastro na tela. */
+let DSH_PRAZO=null,DSH_PRAZO_OCULTAS=false;
 function dashPrazoHojeISO(){
   /* Data LOCAL, nunca toISOString(): depois das 21h em Brasilia o UTC
      ja virou o dia seguinte e a lista perderia quem vence hoje. */
@@ -5851,6 +5867,92 @@ function dashPrazoBR(iso){
   const p=String(iso).slice(0,10).split('-');
   return p[2]+'/'+p[1];
 }
+const dshDia=v=>v?String(v).slice(0,10):'';
+/* Recolhido fica no navegador, na mesma familia de chave das secoes do
+   cartao. O cabecalho com a contagem NUNCA e escondido: recolher e para
+   tirar a lista da frente, e esconder o numero faria recolher esconder
+   justamente o que diz se vale a pena abrir. */
+function dashPrazoRecolhido(){return localStorage.getItem('dshsec:prazo')==='0';}
+function dashPrazoToggle(){
+  localStorage.setItem('dshsec:prazo',dashPrazoRecolhido()?'1':'0');
+  dashPrazoPintar();
+}
+function dashPrazoVerOcultas(){DSH_PRAZO_OCULTAS=!DSH_PRAZO_OCULTAS;dashPrazoPintar();}
+async function dashPrazoIgnorar(id,prazo){
+  const{error}=await sb.from('crm_clientes')
+    .update({contrib_ignorado_em:new Date().toISOString(),contrib_ignorado_prazo:prazo})
+    .eq('id',id);
+  if(error){toast('Não consegui tirar da lista: '+error.message,'er');return;}
+  const l=(DSH_PRAZO||[]).find(x=>x.id===id);
+  if(l){l.contrib_ignorado_prazo=prazo;l.contrib_ignorado_em=new Date().toISOString();}
+  dashPrazoPintar();
+  toast('Fora da lista. Volta sozinha se a janela mudar.','ok');
+}
+async function dashPrazoVoltar(id){
+  const{error}=await sb.from('crm_clientes')
+    .update({contrib_ignorado_em:null,contrib_ignorado_prazo:null}).eq('id',id);
+  if(error){toast('Não consegui trazer de volta: '+error.message,'er');return;}
+  const l=(DSH_PRAZO||[]).find(x=>x.id===id);
+  if(l){l.contrib_ignorado_prazo=null;l.contrib_ignorado_em=null;}
+  dashPrazoPintar();
+}
+function dashPrazoLinha(l,hoje,oculta){
+  const dias=dashPrazoDias(dshDia(l.contrib_prazo_final),hoje);
+  const precisa=l.contrib_precisa===true;
+  const cor=precisa?'#C0392B':'#B7791F';
+  const tag=precisa?'precisa contribuir':'falta dado — não dá para saber';
+  /* O prazo curto e o prazo final sao coisas diferentes e a linha diz os
+     dois: a competencia aberta hoje e o gatilho da ligacao, o prazo
+     final e o dia em que a via mensal acaba. Mostrar so um deles foi
+     exatamente o erro que o motor v177 corrigiu. */
+  const curto=l.contrib_pagavel_ate
+    ?'paga até '+dashPrazoBR(l.contrib_pagavel_ate)+(l.contrib_competencia?' (competência '+esc(l.contrib_competencia)+')':'')
+    :'ainda não abre — a guia só pode ser paga a partir do dia 1º';
+  const fone=l.telefone_principal||l.telefone_chave||'';
+  const acao=oculta
+    ?`<button onclick="event.stopPropagation();dashPrazoVoltar('${l.id}')" title="Trazer de volta para a lista" style="border:1px solid var(--border);background:var(--white);color:var(--text2);border-radius:999px;padding:5px 11px;font-size:11px;font-weight:800;cursor:pointer">voltar</button>`
+    :`<button onclick="event.stopPropagation();dashPrazoIgnorar('${l.id}','${dshDia(l.contrib_prazo_final)}')" title="Tirar da lista — não descarta a cliente" style="border:1px solid var(--border);background:var(--white);color:var(--text3);border-radius:999px;width:26px;height:26px;line-height:1;font-size:13px;font-weight:800;cursor:pointer">×</button>`;
+  return `<div class="dwr-row" onclick="abrirCardCliente('${l.id}')" style="${oculta?'opacity:.5':''}">
+    <div class="av" style="background:${avC(l.nome_completo)}">${avL(l.nome_completo)}</div>
+    <div style="flex:1;min-width:0">
+      <div class="nm">${esc(l.nome_completo||'Sem nome')}</div>
+      <div class="tel">${foneLink(fone)}</div>
+      <div class="ctx">${curto} · prazo final ${dashPrazoBR(l.contrib_prazo_final)}</div>
+      <div class="ctx" style="color:${cor};font-weight:800">${tag}${l.descartado_em?' · descartada em '+dashPrazoBR(l.descartado_em):''}</div>
+    </div>
+    <div class="vlr dsh-num" style="color:${dias<=3?'#C0392B':'var(--text2)'}">${dias===0?'hoje':dias+'d'}</div>
+    <div style="margin-left:10px;display:flex;align-items:center">${acao}</div>
+  </div>`;
+}
+function dashPrazoPintar(){
+  const cx=$('dsh-prazo');if(!cx||!DSH_PRAZO)return;
+  const hoje=dashPrazoHojeISO();
+  const fora=l=>l.contrib_ignorado_prazo&&dshDia(l.contrib_ignorado_prazo)===dshDia(l.contrib_prazo_final);
+  const linhas=DSH_PRAZO.filter(l=>!fora(l));
+  const ocultas=DSH_PRAZO.filter(fora);
+  const urg=linhas.filter(l=>l.contrib_precisa===true).length;
+  const recolhido=dashPrazoRecolhido();
+  let corpo='';
+  if(!recolhido){
+    corpo=linhas.length
+      ?linhas.map(l=>dashPrazoLinha(l,hoje,false)).join('')
+      :'<div class="dsh-nota" style="margin:0">Ninguém com janela aberta hoje. Entra aqui quem tem bebê já nascido e ainda pode pagar a GPS.</div>';
+    if(ocultas.length){
+      corpo+=`<button class="dwr-mais" onclick="dashPrazoVerOcultas()">${DSH_PRAZO_OCULTAS?'esconder':'mostrar'} ${ocultas.length} que você tirou da lista</button>`;
+      if(DSH_PRAZO_OCULTAS)corpo+=ocultas.map(l=>dashPrazoLinha(l,hoje,true)).join('');
+    }
+  }
+  cx.innerHTML=`
+    <div class="dsh-estt" style="margin-bottom:${recolhido?0:16}px">
+      <div>
+        <div class="dsh-eyb">Prazo da contribuição · paga ou perde o benefício</div>
+        <div class="tot">${linhas.length} com janela aberta · ${urg} precisando contribuir${ocultas.length?' · '+ocultas.length+' fora da lista':''}</div>
+      </div>
+      <button onclick="dashPrazoToggle()" style="border:1px solid var(--border);background:var(--white);color:var(--text2);border-radius:999px;padding:6px 13px;font-size:11.5px;font-weight:800;cursor:pointer">${recolhido?'abrir':'recolher'}</button>
+    </div>
+    ${corpo}`;
+  cx.style.display='';
+}
 async function dashPrazoContrib(){
   const cx=$('dsh-prazo');if(!cx)return;
   try{
@@ -5858,53 +5960,21 @@ async function dashPrazoContrib(){
     /* contrib_precisa NULL e "nao sei", nao "nao precisa" — e a fatia
        que mais rende telefonema, porque e quem caiu por falta de
        resposta. Quem o calculo ja disse que nao precisa (TEM_DIREITO,
-       SEM_DIREITO) fica de fora: ligar para ela e ruido. */
+       SEM_DIREITO) fica de fora: ligar para ela e ruido.
+       O ignorado NAO e filtrado aqui: os dois campos sao comparados um
+       com o outro e o PostgREST nao compara coluna com coluna. Sao
+       poucas dezenas de linhas, entao o corte acontece na tela — e de
+       quebra o cabecalho consegue dizer quantas voce tirou. */
     const{data,error}=await sb.from('crm_clientes')
-      .select('id,nome_completo,telefone_principal,telefone_chave,contrib_prazo_final,contrib_pagavel_ate,contrib_competencia,contrib_situacao,contrib_precisa,veredito,descartado_em')
+      .select('id,nome_completo,telefone_principal,telefone_chave,contrib_prazo_final,contrib_pagavel_ate,contrib_competencia,contrib_situacao,contrib_precisa,contrib_ignorado_prazo,contrib_ignorado_em,veredito,descartado_em')
       .gte('contrib_prazo_final',hoje)
       .is('arquivado_em',null)
       .or('contrib_precisa.eq.true,contrib_precisa.is.null')
       .order('contrib_prazo_final',{ascending:true})
       .limit(50);
     if(error){cx.style.display='none';return;}
-    const linhas=data||[];
-    const urg=linhas.filter(l=>l.contrib_precisa===true).length;
-    let corpo;
-    if(!linhas.length){
-      corpo='<div class="dsh-nota" style="margin:0">Ninguém com janela aberta hoje. Entra aqui quem tem bebê já nascido e ainda pode pagar a GPS.</div>';
-    }else{
-      corpo=linhas.map(l=>{
-        const dias=dashPrazoDias(String(l.contrib_prazo_final).slice(0,10),hoje);
-        const precisa=l.contrib_precisa===true;
-        const cor=precisa?'#C0392B':'#B7791F';
-        const tag=precisa?'precisa contribuir':'falta dado — não dá para saber';
-        /* O prazo curto e o prazo final sao coisas diferentes e a linha
-           diz os dois: a competencia aberta hoje e o gatilho da ligacao,
-           o prazo final e o dia em que a via mensal acaba. Mostrar so um
-           deles foi exatamente o erro que o motor v177 corrigiu. */
-        const curto=l.contrib_pagavel_ate
-          ?'paga até '+dashPrazoBR(l.contrib_pagavel_ate)+(l.contrib_competencia?' (competência '+esc(l.contrib_competencia)+')':'')
-          :'ainda não abre — a guia só pode ser paga a partir do dia 1º';
-        const fone=l.telefone_principal||l.telefone_chave||'';
-        return `<div class="dwr-row" onclick="abrirCardCliente('${l.id}')">
-          <div class="av" style="background:${avC(l.nome_completo)}">${avL(l.nome_completo)}</div>
-          <div style="flex:1;min-width:0">
-            <div class="nm">${esc(l.nome_completo||'Sem nome')}</div>
-            <div class="tel">${foneLink(fone)}</div>
-            <div class="ctx">${curto} · prazo final ${dashPrazoBR(l.contrib_prazo_final)}</div>
-            <div class="ctx" style="color:${cor};font-weight:800">${tag}${l.descartado_em?' · descartada em '+dashPrazoBR(l.descartado_em):''}</div>
-          </div>
-          <div class="vlr dsh-num" style="color:${dias<=3?'#C0392B':'var(--text2)'}">${dias===0?'hoje':dias+'d'}</div>
-        </div>`;
-      }).join('');
-    }
-    cx.innerHTML=`
-      <div class="dsh-estt">
-        <div class="dsh-eyb">Prazo da contribuição · paga ou perde o benefício</div>
-        <div class="tot">${linhas.length} com janela aberta · ${urg} precisando contribuir</div>
-      </div>
-      ${corpo}`;
-    cx.style.display='';
+    DSH_PRAZO=data||[];
+    dashPrazoPintar();
   }catch(_){cx.style.display='none';}
 }
 function dashPintar(){

@@ -3082,6 +3082,105 @@ async function salvarOrdemLista(listaId,body){
   if(res.find(r=>r.error)){toast('Não foi possível mover','er');route();return;}
   toast('Cliente movido','ok');atualizarContadores();
 }
+/* CONTRATO ASSINADO FORA DO SISTEMA — 14/09/2026.
+
+   Contrato fechado por outro numero, no papel ou em qualquer canal que
+   o CRM nao enxerga: a cliente ja assinou e o sistema nao viu nada.
+   Cadastrar e arrastar o card direto ate Montar Processo NAO conta em
+   lugar nenhum — o `fechado` do dashboard (e a vw_trafego_dia, que usa
+   a mesma chave de proposito) conta a SAIDA da lista "Contrato
+   enviado", nao a chegada no destino. Sem passar por la o contrato
+   existe, a cliente e atendida, e o numero nunca sobe.
+
+   Arrastar na mao pelas duas listas resolveria a contagem e dispararia
+   exatamente o que nao se quer: entrar em "Contrato enviado" com link
+   preenchido faz o dispararContratosProntos mandar o contrato para ela
+   ASSINAR DE NOVO, e entrar em "Contrato assinado" faz o
+   dispararContratosAssinados abrir pedir_senha ou acompanhamento_mensal.
+
+   AS DUAS VARREDURAS DO MOTOR FILTRAM POR `.is(coluna, null)`. Entao
+   carimbar contrato_disparado_em e contrato_assinado_disparado_em ANTES
+   do movimento deixa o card invisivel para as duas. Nao e trava nova:
+   e a mesma trava de idempotencia que elas ja usam para nao disparar
+   duas vezes no mesmo cartao.
+
+   A DATA E A DA ASSINATURA, NAO A DO CLIQUE. O dashboard conta pelo
+   criado_em da atividade de movimento, entao registrar hoje um contrato
+   de terca jogaria o numero na semana errada. As duas atividades saem
+   com a data informada — a segunda um segundo depois, senao a ordem
+   delas no historico fica no sorteio do banco.
+
+   DUAS ATIVIDADES E NAO UMA, porque sao duas celulas diferentes do
+   dashboard: a entrada em "Contrato enviado" alimenta "Contratos", e a
+   saida de la alimenta "Contratos fechados".
+
+   NAO ENCOSTA em contrato_dados_conferido_em, de proposito: aquela
+   coluna e o gatilho do gerarContratosPendentes, e carimba-la aqui
+   faria o motor montar um .docx de um contrato que ja existe assinado.
+
+   O UPDATE vai travado por `.is('contrato_disparado_em', null)` com
+   select: se o motor ou outra aba carimbou no meio do caminho, afeta 0
+   linhas e o clique avisa, em vez de sobrescrever o disparo real. */
+async function mcContratoExterno(id){
+  if(!id)return;
+  const p2=n=>String(n).padStart(2,'0');
+  const ag=new Date();
+  const txt=prompt('Em que dia a cliente assinou este contrato?\n\nFormato dd/mm/aaaa. E esta data que decide em qual semana ou mes o contrato vai contar no dashboard.',
+    p2(ag.getDate())+'/'+p2(ag.getMonth()+1)+'/'+ag.getFullYear());
+  if(txt===null)return;
+  const m=String(txt).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(!m){toast('Data inválida. Use dd/mm/aaaa','er');return;}
+  /* Meio-dia e nao meia-noite: o card e lido em fuso de Brasilia e
+     00:00 local vira o dia anterior em UTC na virada do horario. */
+  const d=new Date(+m[3],+m[2]-1,+m[1],12,0,0);
+  const lim=new Date();lim.setHours(23,59,59,999);
+  if(isNaN(d.getTime())||d.getDate()!==+m[1]||d>lim){toast('Data inválida ou no futuro','er');return;}
+
+  const{data:ls}=await sb.from('crm_listas').select('id,nome,quadro')
+    .in('nome',['Contrato enviado','Contrato assinado']).eq('arquivada',false);
+  const lEnv=(ls||[]).find(x=>x.nome==='Contrato enviado');
+  const lAss=(ls||[]).find(x=>x.nome==='Contrato assinado');
+  if(!lEnv||!lAss){toast('Não achei as listas Contrato enviado / Contrato assinado','er');return;}
+
+  const{data:cli}=await sb.from('crm_clientes')
+    .select('lista_id,contrato_disparado_em,nome_completo').eq('id',id).maybeSingle();
+  if(!cli){toast('Cliente não encontrada','er');return;}
+  if(cli.contrato_disparado_em){toast('Este cartão já tem contrato registrado','er');return;}
+  let nomeAtual=null;
+  if(cli.lista_id){
+    const{data:la}=await sb.from('crm_listas').select('nome').eq('id',cli.lista_id).maybeSingle();
+    nomeAtual=la?la.nome:null;
+  }
+
+  const quando=p2(d.getDate())+'/'+p2(d.getMonth()+1)+'/'+d.getFullYear();
+  if(!confirm('Registrar contrato assinado em '+quando+' para '+(cli.nome_completo||'esta cliente')+'.\n\n'
+    +'O que vai acontecer:\n'
+    +'• o cartão vai de "'+(nomeAtual||'sem lista')+'" para Contrato enviado e de lá para Contrato assinado\n'
+    +'• o contrato passa a contar como fechado na data de '+quando+'\n'
+    +'• NENHUMA mensagem é enviada para a cliente\n\n'
+    +'Depois disso a esteira automática fica desligada neste cartão: mover para Contrato assinado não vai mais disparar pedir_senha nem o acompanhamento mensal. O que ela precisar receber, dispare na mão pelo bloco Sequências.\n\n'
+    +'Confirma?'))return;
+
+  const iso=d.toISOString();
+  const iso2=new Date(d.getTime()+1000).toISOString();
+  const{data:upd,error:eu}=await sb.from('crm_clientes').update({
+    contrato_disparado_em:iso,
+    contrato_assinado_disparado_em:iso,
+    lista_id:lAss.id,quadro:lAss.quadro,posicao:0,
+    atualizado_em:new Date().toISOString()
+  }).eq('id',id).is('contrato_disparado_em',null).select('id');
+  if(eu||!upd||!upd.length){
+    toast('Não gravei: o cartão mudou no meio do caminho. Reabra e tente de novo','er');return;
+  }
+  await registrarAtividade(id,'moveu o cartão de "'+(nomeAtual||'?')+'" para "Contrato enviado"',undefined,
+    {tipo:'movimento',lista_origem:nomeAtual,lista_destino:'Contrato enviado',criado_em:iso});
+  await registrarAtividade(id,'moveu o cartão de "Contrato enviado" para "Contrato assinado"',undefined,
+    {tipo:'movimento',lista_origem:'Contrato enviado',lista_destino:'Contrato assinado',criado_em:iso2});
+  await registrarAtividade(id,'registrou contrato assinado fora do sistema, em '+quando
+    +'. Esteira automática do contrato desligada neste cartão para não enviar mensagem repetida.',undefined,{tipo:'outro'});
+  toast('Contrato registrado. O cartão está em Contrato assinado','ok');
+  await abrirCardCliente(id);
+}
 async function registrarMovimentoLista(clienteId,origListaId,destListaId){
   const[{data:lo},{data:ld}]=await Promise.all([
     sb.from('crm_listas').select('nome').eq('id',origListaId).single(),
@@ -3724,6 +3823,10 @@ function renderCardClienteModal(c,etqSel,listas){
           <div class="fld ff" style="margin-bottom:11px"><label>Link do contrato (Autentica Online)</label>
             <input type="url" id="mc-link-contrato" placeholder="https://..." value="${escA(c.link_contrato)}"/>
             <div class="fhint">Cole o link e mova o card para <b>Contrato enviado</b>. A Samara volta a falar com a cliente e manda o contrato sozinha.</div>
+          </div>
+          <div class="fld ff" style="margin-bottom:11px">
+            ${c.contrato_disparado_em?`<div class="fhint">Contrato registrado em ${new Date(c.contrato_disparado_em).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'})}.</div>`:`<button class="btn btns" style="padding:6px 12px;font-size:12px" onclick="mcContratoExterno('${c.id}')">Registrar contrato assinado fora do sistema</button>
+            <div class="fhint">Para contrato que já foi assinado por fora — outro número, papel, outro canal. Leva o cartão por Contrato enviado até Contrato assinado para o contrato contar no dashboard, <b>sem enviar nenhuma mensagem</b> para a cliente.</div>`}
           </div>
           <div class="fg">
             <div class="fld"><label>Referência 1 · nome</label><input type="text" id="mc-ref1-nome" value="${escA(c.referencia1_nome)}"/></div>

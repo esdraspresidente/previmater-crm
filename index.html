@@ -5341,6 +5341,15 @@ async function salvarCardCliente(id){
   btnEstado('Salvar',false);
   toast('Cliente atualizado','ok');
   refrescarRotaAtual();
+  /* O BLOQUEIO DO INSS OFERECE O LEMBRETE SOZINHO.
+     Sem isto voce teria que lembrar de criar um lembrete toda vez que
+     preenchesse a data — que e o mesmo buraco de antes, so que com mais
+     passos. Pergunta DEPOIS de gravar, e nao antes, porque a data so e
+     um fato depois de salva.
+     So oferece quando nao ha lembrete nenhum esperando naquele dia, e
+     so uma vez por cartao enquanto a aba estiver aberta: quem ja disse
+     nao nao precisa ouvir de novo a cada Salvar. */
+  await ofertarLembreteDeBloqueio(id,$('mc-bloqueio')?$('mc-bloqueio').value:'');
   const{data:cAt}=await sb.from('crm_clientes')
     .select('id,nome_completo,quadro,lista_id,lista_desde,arquivado_em').eq('id',id).single();
   if(mcClienteId!==id)return; // trocou de cartao enquanto gravava
@@ -5348,6 +5357,36 @@ async function salvarCardCliente(id){
   if(hn)hn.textContent=nome;
   if(cAt)await mcPintarTrilha(cAt);
   mcSnapshot=mcFotoCampos();
+}
+const LEMB_BLOQ_RECUSADO=new Set();
+async function ofertarLembreteDeBloqueio(clienteId,dia){
+  if(!clienteId||!dia)return;
+  if(LEMB_BLOQ_RECUSADO.has(clienteId+'|'+dia))return;
+  const quando=new Date(`${dia}T09:00:00`);
+  if(isNaN(quando.getTime())||quando.getTime()<=Date.now())return;
+  let existe=false;
+  try{existe=await lembreteJaExiste(clienteId,dia);}catch(e){existe=false;}
+  if(existe)return;
+  const br=quando.toLocaleDateString('pt-BR');
+  if(!confirm('O bloqueio do INSS desta cliente vai até '+br+'.\n\n'
+    +'Esse campo só desenha a tarja no cartão: ele não segura sequência, a Samara não fica sabendo e ninguém é avisado quando a data chega.\n\n'
+    +'Criar um lembrete para você em '+br+' às 09:00?')){
+    LEMB_BLOQ_RECUSADO.add(clienteId+'|'+dia);
+    return;
+  }
+  const{error}=await sb.from('crm_automacoes').insert({
+    cliente_id:clienteId,
+    tipo_automacao:'aviso_esdras',
+    data_hora_agendada:quando.toISOString(),
+    status:'aguardando_aprovacao',
+    aprovado:false,
+    ordem:1,
+    texto_montado:'Bloqueio do INSS venceu hoje. Conferir se o acesso ao Meu INSS liberou e retomar o processo.',
+    flags:'[LEMBRETE][BLOQUEIO_INSS]'
+  });
+  if(error){toast('Não consegui criar o lembrete: '+error.message,'er');return;}
+  toast('Lembrete criado para '+br+' às 09:00','ok');
+  registrarAtividade(clienteId,'agendou um lembrete de fim do bloqueio do INSS para '+br+' às 09:00');
 }
 async function excluirClienteModal(id){
   if(!confirm('Excluir esta cliente? Essa ação não pode ser desfeita.'))return;
@@ -9720,6 +9759,7 @@ function mcRenderSequencias(){
      duplicar — não tem passo, nem atraso útil, nem sorteio de braço, nem
      mover_para. Só um texto e um horário que você escolheu. */
   html+=`<button class="seqverfim" onclick="mcAbrirAgendarMsg()">＋ agendar uma mensagem</button>`;
+  html+=`<button class="seqverfim" onclick="mcAbrirLembrete()">＋ agendar um lembrete para mim</button>`;
   box.innerHTML=html+'</div>';
 }
 function mcSeqTogFim(){mcSeqMostrarFim=!mcSeqMostrarFim;mcRenderSequencias();}
@@ -9882,6 +9922,144 @@ async function msgAgendar(){
   msgFechar();
 }
 
+/* LEMBRETE — a mensagem agendada que vem para VOCE, nao para a cliente.
+   15/09/2026.
+
+   Nasceu de um buraco concreto: o campo "Bloqueio INSS ate" do cartao
+   nunca fez nada alem de desenhar uma tarja. Nenhuma sequencia parava,
+   a Samara nao sabia, e no dia em que a data chegava ninguem era
+   avisado. Anotar a data num campo que so pinta e confiar que alguem vai
+   olhar o quadro naquele dia e o mesmo que nao anotar.
+
+   NAO E TIPO NOVO DE AUTOMACAO, e de proposito. O aviso_esdras ja existe
+   e ja e isso: recado para voce, com nome e telefone da cliente na
+   primeira linha, mais o resumo do que a Samara coletou e o veredito. O
+   lembrete e um aviso_esdras com data no futuro.
+
+   A GARANTIA DE QUE NUNCA CHEGA NA CLIENTE JA ESTAVA NO MOTOR: o
+   reservarDaFila(), que e quem transforma linha da fila em mensagem de
+   WhatsApp para a cliente, tem .neq("tipo_automacao", aviso_esdras).
+   Nao existe caminho fisico do lembrete ate ela, nem se o texto vier
+   escrito como se fosse para ela. Por isso este bloco nao exige telefone
+   valido, ao contrario do agendar mensagem logo acima.
+
+   status "aguardando_aprovacao" e aprovado FALSE, ao contrario da
+   mensagem avulsa, que nasce aprovada. Nao e inconsistencia: quem le a
+   fila de avisos e o enviarResumoAvisos(), e ele procura exatamente esse
+   status. Aqui "aguardando aprovacao" nao quer dizer que voce precisa
+   autorizar de novo — quer dizer que o recado ainda nao foi lido por
+   voce. O numero do caso vem do gatilho crm_numerar_aprovacao, entao a
+   linha nasce numerada como qualquer outro aviso.
+
+   OS DADOS DA CLIENTE SAO OS DO DIA DO ENVIO, nao os de hoje. O texto
+   guarda o molde e o motor troca {primeiro_nome} e {nome_completo} na
+   hora de mandar. E o contrario do aviso de contrato, que congela os
+   valores em dados_contrato — la voce aprova o que leu, aqui voce quer
+   saber como a coisa esta no dia do lembrete. */
+function mcAbrirLembrete(){return abrirLembrete(mcClienteId,true);}
+let LEMB_ALVO=null,LEMB_VOLTA_CARTAO=false;
+async function abrirLembrete(clienteId,voltarParaCartao,pre){
+  if(!clienteId)return;
+  LEMB_ALVO=clienteId;LEMB_VOLTA_CARTAO=!!voltarParaCartao;
+  const{data:c,error}=await sb.from('crm_clientes')
+    .select('nome_completo').eq('id',clienteId).single();
+  if(error||!c){toast('Erro ao ler o card: '+(error?error.message:''),'er');return;}
+  const q=(pre&&pre.data)?{data:pre.data,hora:(pre.hora||'09:00')}:lembQuandoPadrao();
+  abrirModal(`
+    <div class="mbt">Agendar um lembrete</div>
+    <div class="mbs">Vem para <b>você</b>, no WhatsApp dos avisos, no dia e na hora que marcar. A cliente não recebe nada — aviso não tem caminho até ela.</div>
+    <div class="fld" style="margin-bottom:10px">
+      <label>Lembrete sobre ${esc(c.nome_completo||'esta cliente')}</label>
+      <textarea id="lemb-texto" rows="5" placeholder="Conferir se o INSS liberou o acesso" oninput="lembConferir()">${esc((pre&&pre.texto)||'')}</textarea>
+      <div class="fhint" style="margin-top:3px">O nome e o telefone dela já vão na primeira linha do aviso, junto com o resumo do que a Samara coletou. Aqui escreva só o que <b>você</b> precisa lembrar de fazer.</div>
+    </div>
+    <div class="fg">
+      <div class="fld"><label>Dia</label><input type="date" id="lemb-data" value="${q.data}" oninput="lembConferir()"/></div>
+      <div class="fld"><label>Hora</label><input type="time" id="lemb-hora" value="${q.hora}" oninput="lembConferir()"/></div>
+    </div>
+    <div class="fhint" style="margin-top:8px">O lembrete entra na Fila de automações, em <b>Aviso para você</b>. Ele sai no primeiro lote de avisos depois da hora marcada, então pode atrasar alguns minutos por causa do intervalo entre avisos.</div>
+    <div class="fhint" id="lemb-erro" style="margin-top:8px;color:var(--red,#c62828)"></div>
+    <div class="brow" style="justify-content:flex-end;gap:9px;margin-top:14px">
+      <button class="btn btns" onclick="lembFechar()">Voltar</button>
+      <button class="btn btnp" id="lemb-ok" onclick="lembAgendar()">Agendar lembrete</button>
+    </div>`,true);
+  if(LEMB_VOLTA_CARTAO)FILA_VOLTAR=clienteId;
+  lembConferir();
+}
+function lembQuandoPadrao(){
+  const d=new Date(Date.now()+24*3600000);
+  const p=n=>String(n).padStart(2,'0');
+  return{data:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`,hora:'09:00'};
+}
+function lembFechar(){
+  if(LEMB_VOLTA_CARTAO&&LEMB_ALVO)abrirCardCliente(LEMB_ALVO);
+  else fecharModal();
+  LEMB_ALVO=null;LEMB_VOLTA_CARTAO=false;
+}
+/* Mesma escolha do agendar mensagem: confere enquanto escreve, com o
+   motivo embaixo do botao desligado. */
+function lembConferir(){
+  const err=$('lemb-erro'),bt=$('lemb-ok');
+  if(!err||!bt)return null;
+  const txt=($('lemb-texto')?$('lemb-texto').value:'').trim();
+  const dia=$('lemb-data')?$('lemb-data').value:'';
+  const hora=$('lemb-hora')?$('lemb-hora').value:'';
+  let quando=null,motivo='';
+  if(!txt)motivo='Escreva o lembrete.';
+  else if(!dia||!hora)motivo='Escolha o dia e a hora.';
+  else{
+    quando=new Date(`${dia}T${hora}:00`);
+    if(isNaN(quando.getTime()))motivo='Dia ou hora inválidos.';
+    else if(quando.getTime()<=Date.now())motivo='Esse horário já passou.';
+  }
+  /* As chaves valem aqui pelo mesmo motivo que valem na mensagem: quem
+     troca e o mesmo montarTexto do motor. Chave que ele nao conhece
+     pararia como erro no dia do envio. */
+  if(!motivo){
+    const ruins=msgChavesRuins(txt);
+    if(ruins.length)motivo='O motor não conhece '+ruins.map(k=>'{'+k+'}').join(', ')+' — o lembrete pararia como erro no dia.';
+  }
+  err.textContent=motivo;
+  bt.disabled=!!motivo;
+  bt.style.opacity=motivo?'.5':'';
+  return motivo?null:{txt,quando};
+}
+async function lembAgendar(){
+  const v=lembConferir();
+  if(!v)return;
+  const alvo=LEMB_ALVO;
+  if(!alvo)return;
+  const bt=$('lemb-ok');if(bt){bt.disabled=true;bt.textContent='Agendando...';}
+  const{error}=await sb.from('crm_automacoes').insert({
+    cliente_id:alvo,
+    tipo_automacao:'aviso_esdras',
+    data_hora_agendada:v.quando.toISOString(),
+    status:'aguardando_aprovacao',
+    aprovado:false,
+    ordem:1,
+    texto_montado:v.txt,
+    flags:'[LEMBRETE]'
+  });
+  if(error){
+    toast('Erro ao agendar: '+error.message,'er');
+    if(bt){bt.disabled=false;bt.textContent='Agendar lembrete';}
+    return;
+  }
+  toast('Lembrete agendado para '+v.quando.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}),'ok');
+  registrarAtividade(alvo,'agendou um lembrete para '+v.quando.toLocaleString('pt-BR')+': '+v.txt);
+  lembFechar();
+}
+/* Ja existe lembrete esperando para este cartao nesta data? Serve para
+   o gancho do bloqueio nao oferecer duas vezes a mesma coisa. */
+async function lembreteJaExiste(clienteId,diaISO){
+  const ini=new Date(`${diaISO}T00:00:00`).toISOString();
+  const fim=new Date(`${diaISO}T23:59:59`).toISOString();
+  const{data}=await sb.from('crm_automacoes').select('id')
+    .eq('cliente_id',clienteId).eq('tipo_automacao','aviso_esdras')
+    .eq('status','aguardando_aprovacao')
+    .gte('data_hora_agendada',ini).lte('data_hora_agendada',fim).limit(1);
+  return !!(data&&data.length);
+}
 async function abrirDisparoSequencia(clienteId,voltarParaCartao){
   const alvo=clienteId;
   if(!alvo)return;

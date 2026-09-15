@@ -1175,6 +1175,41 @@ function canalDaConversa(c){
   return null;
 }
 const ORIGENS={contato_direto:'Contato Direto',indicacao:'Indicação',redes_sociais:'Redes Sociais',site:'Site',outro:'Outro'};
+/* ROTULO DE ORIGEM SEPARADO DO SELETOR — 15/09/2026.
+
+   O seletor oferece 5 opcoes, mas a COLUNA guarda mais coisa que isso:
+   o `whatsapp_whatsgw` que o webhook carimba na criacao, o
+   `botconversa`/`trello` da migracao e o `anuncio` do backfill de hoje.
+   Valor que nao existia no seletor fazia o select cair em "" e o Salvar
+   gravar null por cima — 44 dos 467 leads de trafego perderam a origem
+   exatamente assim, e nao havia como perceber: a tela mostrava "—" como
+   se o campo nunca tivesse sido preenchido.
+
+   Rotulo e coisa de LEITURA e mora aqui. O que pode ser ESCOLHIDO
+   continua so no ORIGENS, e `anuncio` NAO entra lado de la de proposito:
+   marcar "tráfego" a mao num card sem anuncio_id nao faz ele contar no
+   painel do Rafael, que le anuncio_id/clid/codigo e nunca leu esta
+   coluna. Opcao que promete credito e nao entrega e pior que opcao
+   nenhuma. */
+const ORIGENS_LEITURA={anuncio:'Tráfego (anúncio)',whatsapp_whatsgw:'WhatsApp (entrada)',botconversa:'BotConversa',trello:'Trello','trello+botconversa':'Trello + BotConversa'};
+function rotuloOrigem(v){return v?(ORIGENS[v]||ORIGENS_LEITURA[v]||v):'';}
+/* QUEM MANDA NA ATRIBUICAO DE TRAFEGO E A CHAVE DO ANUNCIO, nunca a
+   coluna origem. Este teste e uma copia deliberada do que a
+   vw_cliente_origem e a vw_trafego_dia fazem no banco, para a tela nao
+   poder discordar do painel: se o cartao diz trafego, o painel conta. */
+function ehDeTrafego(c){return !!(c&&(c.anuncio_id||c.anuncio_clid||c.anuncio_codigo));}
+function rotuloTrafego(c){
+  const app=c.anuncio_app==='instagram'?'Instagram':(c.anuncio_app==='facebook'?'Facebook':(c.anuncio_app||null));
+  return 'Tráfego — anúncio'+(app?' ('+app+')':'')+(c.anuncio_codigo?' · '+c.anuncio_codigo:'');
+}
+/* O campo Origem do cartao e da ficha: texto travado para quem veio de
+   anuncio, seletor para o resto. Sem elemento editavel, o Salvar nao tem
+   de onde tirar um null — ver o `origem:` do salvarCardCliente. */
+function origemCampoHtml(c,optOrig,id){
+  if(!ehDeTrafego(c))return '<select id="'+id+'">'+optOrig+'</select>';
+  return '<div style="padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg2);font-size:14px;font-weight:600">'+esc(rotuloTrafego(c))+'</div>'
+    +'<div class="fhint">Vem do anúncio, não se edita e mudar de lista não apaga mais. É este dado que o painel do tráfego conta.</div>';
+}
 const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
 let U=null,S=null,QPERM=[],ETQ=[],USUARIOS=[];
@@ -2744,7 +2779,11 @@ async function pageQuadro(q){
   }
   const[{data:listas},{data:clientes,error}]=await Promise.all([
     sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem'),
-    sb.from('crm_clientes').select('id,nome_completo,lista_id,posicao,telefone_principal,data_nascimento_bebe,data_entrega,data_desbloqueio_inss,valor_beneficio_esperado,valor_honorarios,crm_clientes_etiquetas(etiqueta_id)').eq('quadro',q).is('arquivado_em',null).order('posicao')
+    /* anuncio_id/codigo/app entram aqui so para o selo do cartao: sem
+       eles a tela do quadro nao tinha como distinguir lead de trafego de
+       lead organico, e a pergunta "esse e do Rafael?" exigia abrir o
+       cartao um por um. */
+    sb.from('crm_clientes').select('id,nome_completo,lista_id,posicao,telefone_principal,data_nascimento_bebe,data_entrega,data_desbloqueio_inss,valor_beneficio_esperado,valor_honorarios,anuncio_id,anuncio_codigo,anuncio_app,crm_clientes_etiquetas(etiqueta_id)').eq('quadro',q).is('arquivado_em',null).order('posicao')
   ]);
   if(error){pc.innerHTML=`<div class="emp"><div class="empt">Erro ao carregar</div>${esc(error.message)}</div>`;return;}
   const L=listas||[],C=clientes||[];
@@ -2904,10 +2943,14 @@ function cardHtml(c){
   }
   const clsPar=par?(paradoComDireito(par)?' kc-parado-direito':' kc-parado'):'';
   const parHtml=par?`<div class="kcm"><span class="kcpar">◉ parado há ${par.dias_parado}d${paradoComDireito(par)?' · TEM DIREITO':''}</span></div>`:'';
+  /* SELO DE ANUNCIO. Le a chave do anuncio, nao a coluna origem — e por
+     isso ele nao pode ser apagado por um Salvar. */
+  const trafHtml=ehDeTrafego(c)?`<div class="kcm"><span class="ent ent-ok">◈ anúncio${c.anuncio_codigo?' · '+esc(c.anuncio_codigo):''}${c.anuncio_app==='instagram'?' · Instagram':(c.anuncio_app==='facebook'?' · Facebook':'')}</span></div>`:'';
 
   return `<div class="kc${clsPar}" draggable="true" data-card="${c.id}" onclick="abrirCardCliente('${c.id}')">
       <button class="kcmv" title="Mover cartão" onclick="event.stopPropagation();modalMover('${c.id}')">⇄</button>
       <div class="kcn">${esc(c.nome_completo)}</div>
+      ${trafHtml}
       ${parHtml}
       ${meta.length?`<div class="kcm">${meta.join(' · ')}</div>`:''}
       ${finHtml||(c.valor_honorarios?`<div class="kcm"><span class="kcv">${R(c.valor_honorarios)}</span></div>`:'')}
@@ -3658,7 +3701,15 @@ function renderCardClienteModal(c,etqSel,listas){
      deixar em branco so serviria para travar o botao de enviar. */
   const canalAtual=canalDaConversa(c)||'whatsgw';
   const optCanal=Object.keys(CANAIS_ENVIO).map(k=>`<option value="${k}" ${canalAtual===k?'selected':''}>${CANAIS_ENVIO[k]}</option>`).join('');
-  const optOrig=`<option value="">—</option>`+Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
+  /* Valor de fora das 5 opcoes entra como opcao propria e selecionada,
+     rotulada como historico: assim o Salvar devolve o mesmo valor em vez
+     de null. O "—" so aparece quando o campo esta vazio de verdade —
+     enquanto ele era a primeira opcao de todo mundo, apagar sem querer
+     era um clique em Salvar. */
+  const optOrig=(c.origem&&!ORIGENS[c.origem]
+      ?`<option value="${escA(c.origem)}" selected>${esc(rotuloOrigem(c.origem))} (histórico)</option>`
+      :`<option value="">—</option>`)
+    +Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
   const etqPicker=ETQ.map(t=>`<label class="etp-row" data-nome="${escA((t.nome||'').toLowerCase())}"><input type="checkbox" data-etq="${t.id}" ${etqSel.includes(t.id)?'checked':''} onchange="mcToggleEtq('${t.id}')"/><span class="etp-bar" style="background:${escA(t.cor)}">${esc(t.nome)}</span></label>`).join('')||'<div class="fhint" style="padding:6px 2px">Nenhuma etiqueta criada ainda.</div>';
   const pagHtml=mcPagamentosHtml(c.id);
   /* Etapa do caso, para decidir quais blocos aparecem. O "tem dado" e
@@ -3805,7 +3856,7 @@ function renderCardClienteModal(c,etqSel,listas){
           </div>
           <div class="fld"><label>Telefone</label><input type="text" id="mc-tel" value="${escA(c.telefone_principal)}"/></div>
           <div class="fld"><label>Canal WhatsApp</label><select id="mc-canal" onchange="mcCanalChange()">${optCanal}</select></div>
-          <div class="fld"><label>Origem</label><select id="mc-origem">${optOrig}</select></div>
+          <div class="fld"><label>Origem</label>${origemCampoHtml(c,optOrig,'mc-origem')}</div>
           <div class="fld"><label>DN do bebê</label><input type="date" id="mc-dn" value="${c.data_nascimento_bebe||''}"/>
             <div class="fhint">Enquanto não nasceu, a data prevista vai aqui mesmo. Quando nascer, corrija neste campo.</div></div>
           <div class="fld"><label>DS (saída do último emprego)</label><input type="date" id="mc-ds" value="${c.data_saida_emprego||''}"/></div>
@@ -5258,7 +5309,12 @@ async function salvarCardCliente(id){
     referencia2_nome:vCampo('mc-ref2-nome'),
     referencia2_telefone:vCampo('mc-ref2-tel'),
     canal_ativo:$('mc-canal').value||'whatsgw',
-    origem:$('mc-origem').value||null,
+    /* SO VIAJA QUANDO O SELETOR EXISTE. Card de trafego nao tem campo
+       editavel de origem, entao `undefined` some do JSON em vez de
+       gravar null por cima — mesma armadilha do vCampo(). Era este `||
+       null` sozinho que apagava a origem a cada Salvar de quem tinha
+       valor fora das 5 opcoes. */
+    origem:($('mc-origem')?($('mc-origem').value||null):undefined),
     /* SAO DUAS COLUNAS E ELAS SAO INDEPENDENTES. O nome sempre vale — e
        o que entra na mensagem que a Samara manda para a indicada. O
        vinculo com o card de quem indicou e opcional: quem indicou por
@@ -5529,7 +5585,10 @@ async function pageCliente(id){
   const optL=(listas||[]).map(l=>`<option value="${l.id}" ${lSel===l.id?'selected':''}>${esc(l.nome)}</option>`).join('');
   const canalForm=canalDaConversa(c)||'whatsgw';
   const optCanal=Object.keys(CANAIS_ENVIO).map(k=>`<option value="${k}" ${canalForm===k?'selected':''}>${CANAIS_ENVIO[k]}</option>`).join('');
-  const optOrig=Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c&&c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
+  const optOrig=((c&&c.origem&&!ORIGENS[c.origem])
+      ?`<option value="${escA(c.origem)}" selected>${esc(rotuloOrigem(c.origem))} (histórico)</option>`
+      :'')
+    +Object.keys(ORIGENS).map(k=>`<option value="${k}" ${c&&c.origem===k?'selected':''}>${ORIGENS[k]}</option>`).join('');
   const chips=ETQ.map(t=>`<span class="ett ${etqSel.includes(t.id)?'on':''}" data-etq="${t.id}" style="background:${escA(t.cor)}" onclick="this.classList.toggle('on')">${esc(t.nome)}</span>`).join('');
 
   pc.innerHTML=`
@@ -5546,7 +5605,7 @@ async function pageCliente(id){
         <div class="fld"><label>CPF</label><input type="text" id="f-cpf" inputmode="numeric" placeholder="000.000.000-00" value="${escA(c&&c.cpf)}" oninput="cpfMask(this)"/></div>
         <div class="fld"><label>Telefone / WhatsApp</label><input type="text" id="f-tel" value="${escA(c&&c.telefone_principal)}"/></div>
         <div class="fld"><label>Canal WhatsApp</label><select id="f-canal">${optCanal}</select></div>
-        <div class="fld"><label>Origem</label><select id="f-origem"><option value="">— selecione —</option>${optOrig}</select></div>
+        <div class="fld"><label>Origem</label>${origemCampoHtml(c,'<option value="">— selecione —</option>'+optOrig,'f-origem')}</div>
         <div class="fld ff" style="position:relative"><label>Indicada por</label>
           <input type="text" id="f-indicanome" autocomplete="off" placeholder="nome de quem indicou esta cliente" value="${escA(c&&c.indicado_por_nome)}" oninput="buscarIndicadora(this.value,'f')" onfocus="buscarIndicadora(this.value,'f')" onblur="setTimeout(()=>fecharSugIndicadora('f'),200)"/>
           <input type="hidden" id="f-indicaid" value="${escA(c&&c.indicado_por)}"/>
@@ -5734,7 +5793,7 @@ async function salvarCliente(id){
     cpf:$('f-cpf').value.trim()||null,
     telefone_principal:$('f-tel').value.trim()||null,
     canal_ativo:$('f-canal').value||'whatsgw',
-    origem:$('f-origem').value||null,
+    origem:($('f-origem')?($('f-origem').value||null):undefined),
     trello_url:$('f-trello').value.trim()||null,
     quadro:quadro,
     lista_id:$('f-lista').value||null,
@@ -8733,7 +8792,7 @@ async function clCarregar(reset){
   CL_CARREGANDO=true;
   if(reset)$('cl-lista').innerHTML='<div class="fhint" style="text-align:center;padding:26px 0">Carregando...</div>';
   let q=sb.from('crm_clientes')
-    .select('id,nome_completo,telefone_principal,telefone_chave,cpf,quadro,lista_id,origem,arquivado_em,criado_em',{count:'exact'});
+    .select('id,nome_completo,telefone_principal,telefone_chave,cpf,quadro,lista_id,origem,anuncio_id,anuncio_codigo,anuncio_app,arquivado_em,criado_em',{count:'exact'});
 
   if(CL_FILTRO==='sem_card')q=q.is('quadro',null).is('arquivado_em',null);
   else if(CL_FILTRO==='arquivados')q=q.not('arquivado_em','is',null);
@@ -8789,7 +8848,9 @@ function clRender(){
       sit=`<span class="cl-tag cl-ok">${esc(ln)}</span>`;
       sub2=QUADROS[c.quadro]?QUADROS[c.quadro].rotulo:c.quadro;
     }
-    const org=c.origem&&ORIGENS[c.origem]?ORIGENS[c.origem]:(c.origem||'');
+    /* Trafego vence a coluna: quem tem anuncio aparece como trafego
+       mesmo que a origem esteja nula ou com valor velho da migracao. */
+    const org=ehDeTrafego(c)?rotuloTrafego(c):rotuloOrigem(c.origem);
     h+=`<div class="cl-row${arq?' cl-off':''}" onclick="clAbrir('${c.id}')">
       <div class="cl-nm"><div class="cl-av">${esc(ini)}</div>
         <div style="min-width:0"><div class="cl-n1">${esc(nome)}</div>${org?`<div class="cl-n2">${esc(org)}</div>`:''}</div></div>

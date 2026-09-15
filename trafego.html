@@ -1282,10 +1282,10 @@ function desenharAnuncios(){
   const comLead = ANUNCIOS.filter(a=>(a.leads||0)>0);
   const semLead = ANUNCIOS.filter(a=>!(a.leads||0) && Number(a.gasto)>0);
 
-  let leads=0, eleg=0, gasto=0, semBalde=0, novosSemCsv=0, aberta=0;
+  let leads=0, eleg=0, gasto=0, semBalde=0, novosSemCsv=0, aberta=0, contr=0;
   const fmt={};   // estatico/video: o corte que o teste do Rafael pergunta
   for(const a of ANUNCIOS){
-    leads+=a.leads||0; eleg+=a.elegivel||0; gasto+=Number(a.gasto)||0;
+    leads+=a.leads||0; eleg+=a.elegivel||0; gasto+=Number(a.gasto)||0; contr+=a.contrato||0;
     semBalde+=a.nao_classificada||0; novosSemCsv+=a.anuncios_novos_sem_csv||0;
     /* Quem ainda esta em triagem ou nem respondeu NAO E descartada: e
        elegivel que ainda nao virou. Ela infla o custo por elegivel do
@@ -1320,6 +1320,15 @@ function desenharAnuncios(){
          + '<td>'+(a.elegivel||0)+'</td>'
          + '<td class="apale">'+real(a.por_lead)+'</td>'
          + '<td class="'+(pouco?'apale':'aforte')+'">'+real(a.por_elegivel)+'</td>'
+         /* CONTRATO POR CRIATIVO — 15/09/2026.
+            A tabela parava em elegivel: dava para saber quanto custou
+            trazer mae com direito, nunca quanto custou trazer mae que
+            assinou. O numero vem da RPC pela MESMA chave do resto do
+            painel (saida da lista "Contrato enviado"). Nao leva a trava
+            de `pouco` do por elegivel: contrato nao e estimativa de
+            aproveitamento, e fato consumado — 1 contrato ja informa. */
+         + '<td>'+(a.contrato||0)+'</td>'
+         + '<td class="aforte">'+real(a.por_contrato)+'</td>'
          + celulaCmp(a)+'</tr>';
   }).join('');
 
@@ -1329,13 +1338,23 @@ function desenharAnuncios(){
   $('anuncios').innerHTML =
       '<div class="aresumo">'+resumo+'</div>'
     + '<table class="atab"><thead><tr><th>Criativo</th><th>Formato</th><th>Leads</th><th>Descarte</th>'
-    + '<th>Elegíveis</th><th>Por lead</th><th>Por elegível</th>'
+    + '<th>Elegíveis</th><th>Por lead</th><th>Por elegível</th><th>Contratos</th><th>Por contrato</th>'
     + (ANUNCIOS_ANT?'<th>Aproveitamento</th>':'')+'</tr></thead><tbody>'
     + linhas + '</tbody></table>'
     + '<div class="vazio" style="margin-top:10px">'+leads+' leads atribuídas · '+eleg+' elegíveis · '
-    + real(gasto)+' investido · <b>'+geral+' por elegível</b> no geral.<br>'
+    + contr+' contrato'+(contr===1?'':'s')+' · '
+    + real(gasto)+' investido · <b>'+geral+' por elegível</b>'
+    + (contr>0?' · <b>'+real(gasto/contr)+' por contrato</b>':'')+' no geral.<br>'
     + 'Lead que chegou por indicação não entra aqui, mesmo tendo vindo depois de um anúncio. '
-    + 'Card arquivado continua contando: arquivar organiza a tela, não desfaz o que o anúncio trouxe.</div>'
+    + 'Card arquivado continua contando: arquivar organiza a tela, não desfaz o que o anúncio trouxe.<br>'
+    /* A coluna tem que se explicar aqui, senao a primeira linha em que
+       contrato passa elegivel parece erro de conta. Nao e: elegivel e o
+       estado de HOJE do card, contrato e uma coisa que aconteceu e nao
+       desacontece. Mae que assinou e depois foi para Descartado sai do
+       elegivel e continua no contrato. */
+    + '<b>Contratos</b> conta a saída da lista "Contrato enviado" — a mesma chave do resto do painel. '
+    + 'Contrato que caiu depois continua contando: ela assinou, e o criativo fez o trabalho dele. '
+    + 'Por isso uma linha pode ter mais contratos que elegíveis, que é o estado de hoje do cartão.</div>'
     /* A coluna precisa se explicar na propria tela: "aproveitamento"
        nao e palavra que se adivinha, e quem abrir sem ler isto vai
        achar que e o custo por elegivel de novo. */

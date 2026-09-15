@@ -9684,7 +9684,17 @@ async function mcCarregarSequencias(clienteId){
   if(!$('mc-seqs')||mcClienteId!==clienteId)return;
   if(error){box.innerHTML='<div class="seqbox"><div class="seqvazio">Erro ao carregar: '+esc(error.message)+'</div></div>';return;}
   const linhas=autos||[];
-  if(!linhas.length){box.innerHTML='<div class="seqbox"><div class="seqvazio">Nenhuma sequência rodando para esta cliente.</div></div>';return;}
+  /* CLIENTE SEM NENHUMA AUTOMACAO NAO PODE SER BECO SEM SAIDA — 15/09/2026.
+     Este return pintava a caixa vazia e saia ANTES do mcRenderSequencias(),
+     que e quem desenha os tres botoes do rodape (disparar sequencia na
+     mao, agendar mensagem, agendar lembrete). O efeito era invertido:
+     justamente quem NUNCA teve automacao — cliente cadastrada na mao, ou
+     que a Samara nunca atendeu — era a unica que nao podia receber nada
+     agendado, e quem ja tinha uma sequencia qualquer podia. Caso da
+     Lucimara, 15/09: zero linhas em crm_automacoes, zero botoes.
+     Agora o caminho e um so — estado vazio desenhado pelo mesmo render
+     de sempre, que ja sabia dizer "Nenhuma sequência rodando". */
+  if(!linhas.length){MC_AUTOS=[];MC_SEQS={vivos:[],mortos:[]};mcRenderSequencias();return;}
   const ids=[...new Set(linhas.filter(a=>a.sequencia_id).map(a=>a.sequencia_id))];
   let nomes={},totais={};
   if(ids.length){

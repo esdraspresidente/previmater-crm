@@ -754,6 +754,8 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .gb-nome{font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:7px;}
 .gb-meta{font-size:11.5px;color:var(--text3);}
 .gb-arq{background:#8A8F8F;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:8px;}
+.gb-grp{font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--text3);padding:12px 14px 4px;}
+.gb-grp:first-child{padding-top:0;}
 .klc-arq{cursor:pointer;border:none;background:#EDE7DD;color:#7A6A52;font-family:inherit}
 .klc-arq:hover{background:#E0D6C6;color:#5A4C38}
 .pgs-arq{color:#7A6A52}
@@ -4467,12 +4469,24 @@ async function enviarMensagemChat(clienteId){
 // BUSCA GLOBAL — inclui clientes arquivados, com aviso na tela
 // ============================================================
 let gbTimer=null;
+/* QUADRO DE ONDE A BUSCA PARTIU — 16/09/2026.
+   Lido na ABERTURA e guardado, não a cada tecla: o modal cobre a tela e a
+   rota não muda enquanto ele está aberto, mas ler uma vez só deixa claro
+   que a prioridade é "onde eu estava quando cliquei em buscar". Fora de um
+   quadro (dashboard, fila, caixa de entrada) fica null e todos os quadros
+   valem o mesmo. */
+let gbQuadro=null;
 function abrirBuscaGlobal(){
+  const mq=(location.hash||'').match(/^#\/quadro\/([^/?#]+)/);
+  gbQuadro=(mq&&QUADROS[mq[1]])?mq[1]:null;
+  const dica=gbQuadro
+    ?`Procura primeiro em <b>${esc(QUADROS[gbQuadro].rotulo)}</b>, depois nos outros quadros, arquivados e base.`
+    :'Busca em todos os quadros, inclusive clientes arquivados.';
   abrirModal(`
     <button class="mbc" onclick="fecharModal()">×</button>
     <div class="mctit" style="margin-bottom:14px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg> Buscar cliente</div>
-    <input type="text" id="gb-input" class="etp-search" style="width:100%;margin-bottom:14px" placeholder="Nome, telefone, CPF, observações..." oninput="globalBuscaInput(this.value)"/>
-    <div id="gb-resultados"><div class="fhint" style="text-align:center;padding:14px 0">Busca em todos os quadros, inclusive clientes arquivados.</div></div>
+    <input type="text" id="gb-input" class="etp-search" style="width:100%;margin-bottom:14px" placeholder="Nome, telefone ou CPF..." oninput="globalBuscaInput(this.value)"/>
+    <div id="gb-resultados"><div class="fhint" style="text-align:center;padding:14px 0">${dica}</div></div>
   `);
   setTimeout(()=>{const i=$('gb-input');if(i)i.focus();},50);
 }
@@ -4491,47 +4505,42 @@ function globalBuscaInput(valor){
 async function executarBuscaGlobal(termo){
   const alvo=$('gb-resultados');
   if(!alvo)return;
-  const escQ=v=>String(v).replace(/"/g,'\\"');
-  /* BUSCA POR PEDACOS — 04/09/2026, caso da Bianca.
-
-     Antes o termo inteiro ia como uma frase so: "BIANCA 3629" virava
-     ilike '%BIANCA 3629%' e nao achava nada, porque essa sequencia nao
-     existe em campo nenhum. E o cadastro antigo da Bianca estava
-     gravado com OUTRO nome ("Bianca indicacao 3677 Franciele Santos"),
-     entao procurar pelo nome completo de hoje tambem nao achava — o
-     unico ponto em comum entre os dois cadastros era o telefone.
-
-     Agora cada pedaco e uma condicao: TODOS precisam bater, cada um em
-     QUALQUER campo. "BIANCA 3629" acha quem tem Bianca no nome E 3629
-     no telefone. Chamar .or() varias vezes e o que produz esse E — no
-     PostgREST cada filtro encadeado entra como AND com os anteriores.
-
-     Pedaco de uma letra fica de fora: "Ana C" traria a base inteira. */
-  const pedacos=termo.trim().split(/\s+/).filter(t=>t.length>=2).slice(0,4);
-  const alvos=pedacos.length?pedacos:[termo];
-  let q=sb.from('crm_clientes')
-    .select('id,nome_completo,telefone_principal,quadro,arquivado_em');
-  alvos.forEach(t=>{
-    const d=t.replace(/\D/g,'');
-    const conds=[
-      `nome_completo.ilike."%${escQ(t)}%"`,
-      `telefone_principal.ilike."%${escQ(t)}%"`,
-      `cpf.ilike."%${escQ(t)}%"`,
-      `observacoes.ilike."%${escQ(t)}%"`,
-      `trello_url.ilike."%${escQ(t)}%"`
-    ];
-    if(d.length>=3)conds.push(`telefone_chave.ilike."%${d}%"`);
-    q=q.or(conds.join(','));
-  });
-  const{data,error}=await q.order('nome_completo').limit(25);
+  /* A BUSCA MORA NO BANCO, na crm_buscar_clientes — 16/09/2026.
+     Antes esta função montava o filtro por pedaços aqui e ordenava por
+     NOME, com limite de 25, sobre a base inteira: numa base com 27,5 mil
+     cartões sem quadro, "Ana" trazia 25 Anas da base fria e a do Comercial
+     podia nem aparecer. Agora a ordem é por PRIORIDADE (quadro aberto →
+     outros quadros → arquivados → base), e isso não dá para fazer com o
+     .order() do PostgREST, que não ordena por expressão.
+     A regra dos pedaços (caso da Bianca, 04/09) foi junto para a função e
+     está explicada lá — docs/sql/crm_buscar_clientes.sql. Uma regra só:
+     se ficasse uma cópia aqui, as duas divergiriam no primeiro ajuste.
+     `observacoes` saiu da busca por decisão do Esdras. */
+  const quadro=gbQuadro;
+  const{data,error}=await sb.rpc('crm_buscar_clientes',{p_termo:termo,p_quadro:quadro,p_limite:30});
+  // resposta velha não pode pintar por cima de um termo já trocado
   if(!$('gb-resultados')||$('gb-input')&&$('gb-input').value.trim()!==termo)return;
   if(error){alvo.innerHTML='<div class="fhint" style="text-align:center;padding:14px 0">Erro ao buscar: '+esc(error.message)+'</div>';return;}
   if(!data||!data.length){alvo.innerHTML='<div class="fhint" style="text-align:center;padding:14px 0">Nada encontrado</div>';return;}
-  alvo.innerHTML=data.map(c=>`
+  /* Cabeçalho por grupo porque a ordem, sozinha, não se explica: sem ele
+     um arquivado logo abaixo de um ativo parece resultado fora de ordem. */
+  const GRUPO={
+    0:quadro&&QUADROS[quadro]?'Em '+QUADROS[quadro].rotulo:'Neste quadro',
+    1:quadro?'Em outros quadros':'Nos quadros',
+    2:'Arquivados',
+    3:'Base (sem quadro)'
+  };
+  let atual=null,h='';
+  data.forEach(c=>{
+    if(c.prioridade!==atual){atual=c.prioridade;h+=`<div class="gb-grp">${GRUPO[atual]||''}</div>`;}
+    const onde=[QUADROS[c.quadro]?QUADROS[c.quadro].rotulo:(c.quadro||'Sem quadro'),c.lista].filter(Boolean).map(esc).join(' · ');
+    h+=`
     <div class="gb-item" onclick="abrirCardCliente('${c.id}')">
       <div class="gb-nome">${esc(c.nome_completo)}${c.arquivado_em?'<span class="gb-arq">Arquivado</span>':''}</div>
-      <div class="gb-meta">${QUADROS[c.quadro]?QUADROS[c.quadro].rotulo:(c.quadro||'—')}${c.telefone_principal?' · '+esc(c.telefone_principal):''}</div>
-    </div>`).join('');
+      <div class="gb-meta">${onde}${c.telefone_principal?' · '+esc(c.telefone_principal):''}</div>
+    </div>`;
+  });
+  alvo.innerHTML=h;
 }
 /* Arquivar nao apaga nada: so preenche crm_clientes.arquivado_em. O quadro
    carrega com .is('arquivado_em',null), entao o card some da coluna; o

@@ -4267,15 +4267,47 @@ function mcFecharCartao(){
    limite de 1.000 linhas do PostgREST nao entra na conta porque nada
    aqui vai ao banco buscar lista. Fora do quadro (Financeiro, Caixa de
    Entrada) nao ha cartoes na tela e a seta simplesmente avisa. */
+// trava: segurar a seta durante a busca da pagina nao dispara varias buscas
+let mcNavegando=false;
 function mcIrmaosNaTela(){
   return [...document.querySelectorAll('.kc[data-card]')].map(el=>el.getAttribute('data-card'));
 }
-function mcNavegar(passo){
-  if(!mcClienteId)return;
-  const ids=mcIrmaosNaTela();
+/* LISTA CARREGADA PELA METADE — 16/09/2026.
+   Desde que o quadro carrega 50 cartoes por lista, "ler do DOM" deixou de
+   ser "ler a lista": do ultimo cartao desenhado de Descartado a seta →
+   pulava direto para a lista seguinte, e os outros 540 ficavam
+   inalcancaveis sem fechar o cartao e clicar em "carregar mais".
+   Agora, indo para a frente a partir do ultimo cartao desenhado de uma
+   lista que ainda tem cartoes no banco, a seta busca a proxima pagina
+   ANTES de decidir o destino — pelo mesmo carregarMaisLista() do botao,
+   entao cursor, contador e arrasto ficam coerentes. Continua lendo do
+   DOM depois disso: a regra "nada de copia em memoria" segue valendo.
+   Para tras nao busca nada: pagina nova entra sempre no FIM da lista,
+   entao quem anda para tras so passa por cartao que ja veio. Da lista
+   anterior, ← chega ao ultimo cartao CARREGADO dela, nao ao ultimo do
+   banco — carregar 500 cartoes para dar um passo para tras seria pior. */
+async function mcNavegar(passo){
+  if(!mcClienteId||mcNavegando)return;
+  let ids=mcIrmaosNaTela();
   const i=ids.indexOf(mcClienteId);
   if(i<0){toast('As setas só andam entre os cartões do quadro','er');return;}
-  const j=i+passo;
+  if(passo>0){
+    const el=document.querySelector(`.kc[data-card="${mcClienteId}"]`);
+    const kl=el&&el.closest('.kl');
+    const body=kl&&kl.querySelector('.klb');
+    const cards=body?body.querySelectorAll('.kc'):[];
+    const ultimo=cards.length&&cards[cards.length-1]===el;
+    const lid=kl&&kl.getAttribute('data-lista');
+    if(ultimo&&Number(kl.getAttribute('data-restante')||0)>0&&KB_LISTAS[lid]){
+      mcNavegando=true;
+      try{await carregarMaisLista(lid);}finally{mcNavegando=false;}
+      if(!mcClienteId)return;   // cartao foi fechado enquanto carregava
+      ids=mcIrmaosNaTela();
+    }
+  }
+  const k=ids.indexOf(mcClienteId);
+  if(k<0){toast('As setas só andam entre os cartões do quadro','er');return;}
+  const j=k+passo;
   if(j<0){toast('Este já é o primeiro cartão','er');return;}
   if(j>=ids.length){toast('Este já é o último cartão','er');return;}
   if(mcTemAlteracaoNaoSalva()&&!confirm('Há alterações não salvas neste cartão.\n\nSair sem salvar?'))return;

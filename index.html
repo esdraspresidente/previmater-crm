@@ -3607,7 +3607,8 @@ async function mvpTrocarQuadro(){
 async function mvpTrocarLista(posAtual){
   const lid=$('mvp-lista').value,sel=$('mvp-pos');
   if(!lid){sel.innerHTML='<option value="0">1</option>';return;}
-  const{count}=await sb.from('crm_clientes').select('id',{count:'exact',head:true}).eq('lista_id',lid);
+  // so ativos: arquivado nao aparece na lista, entao nao ocupa posicao (16/09)
+  const{count}=await sb.from('crm_clientes').select('id',{count:'exact',head:true}).eq('lista_id',lid).is('arquivado_em',null);
   let opts='';
   for(let i=0;i<=(count||0);i++)opts+=`<option value="${i}" ${(posAtual!==undefined&&posAtual===i)?'selected':''}>${i+1}</option>`;
   sel.innerHTML=opts;
@@ -3642,21 +3643,13 @@ async function mvpConfirmar(listaIdArg,posArg){
 
   const{data:atualCli}=await sb.from('crm_clientes').select('lista_id,quadro').eq('id',id).single();
   const origListaId=atualCli?atualCli.lista_id:null;
-  const{data:naLista}=await sb.from('crm_clientes').select('id,posicao').eq('lista_id',listaId).neq('id',id).order('posicao');
-  const ord=(naLista||[]).map(x=>x.id);
-  ord.splice(pos,0,id);
-  const res=await Promise.all(ord.map((cid,i)=>{
-    const p={lista_id:listaId,posicao:i,atualizado_em:new Date().toISOString()};
-    if(cid===id){
-      p.quadro=quadro;
-      // So grava quando ha algo digitado. Campo vazio nao apaga o link
-      // que ja estiver salvo no banco — para apagar de proposito, use o
-      // botao Salvar do cartao.
-      if(linkDigitado)p.link_contrato=linkDigitado;
-    }
-    return sb.from('crm_clientes').update(p).eq('id',cid);
-  }));
-  if(res.find(r=>r.error)){toast('Não foi possível mover','er');return;}
+  const extra={quadro};
+  // So grava quando ha algo digitado. Campo vazio nao apaga o link
+  // que ja estiver salvo no banco — para apagar de proposito, use o
+  // botao Salvar do cartao.
+  if(linkDigitado)extra.link_contrato=linkDigitado;
+  const{error:errMov}=await gravarPosicaoNaLista(id,listaId,pos,extra);
+  if(errMov){toast('Não foi possível mover','er');return;}
   toast('Cartão movido','ok');
   if(origListaId&&origListaId!==listaId)await registrarMovimentoLista(id,origListaId,listaId);
   finCarregado=false;
@@ -3680,7 +3673,8 @@ async function mvTrocarQuadro(){
 async function mvTrocarLista(posAtual){
   const lid=$('mv-lista').value,sel=$('mv-pos');
   if(!lid){sel.innerHTML='<option value="0">1</option>';return;}
-  const{count}=await sb.from('crm_clientes').select('id',{count:'exact',head:true}).eq('lista_id',lid);
+  // so ativos: arquivado nao aparece na lista, entao nao ocupa posicao (16/09)
+  const{count}=await sb.from('crm_clientes').select('id',{count:'exact',head:true}).eq('lista_id',lid).is('arquivado_em',null);
   let opts='';
   for(let i=0;i<=(count||0);i++)opts+=`<option value="${i}" ${(posAtual!==undefined&&posAtual===i)?'selected':''}>${i+1}</option>`;
   sel.innerHTML=opts;
@@ -3690,18 +3684,63 @@ async function moverConfirmar(id){
   if(!l){toast('Escolha uma lista','er');return;}
   await moverPara(id,q,l,p);
 }
+/* GRAVAR UM CARTAO NUMA POSICAO DA LISTA — 16/09/2026.
+
+   Os dois caminhos de mover por botao (o balao do cartao e o modal ⇄,
+   que tambem atende as sugeridas e a bifurcacao) liam a lista de destino
+   INTEIRA e regravavam a posicao de cada cartao. Tres defeitos juntos:
+
+   1. CUSTO: mover para Descartado disparava um UPDATE por cartao da lista.
+   2. ARQUIVADOS ENTRAVAM NA CONTA: o select nao filtrava arquivado_em, e
+      Descartado acumula milhares de arquivados. Cada movimento regravava
+      posicao e atualizado_em de cartoes arquivados que ninguem tocou —
+      atualizado_em passava a mentir sobre quando a ficha mudou.
+   3. TETO DE 1.000: o select sem .limit() voltava cortado e calado, e os
+      cartoes alem do corte ficavam com posicoes antigas colidindo com as
+      novas.
+
+   AGORA, igual ao arrasto: lista com ate CARDS_POR_LISTA ativos continua
+   renumerada inteira (e a lista que se ve inteira na tela, e a ordem
+   exata importa); lista maior grava SO o cartao movido, com a posicao do
+   vizinho de cima na ordem (posicao, id) — ou a do de baixo menos 1, se
+   foi para o topo. Mesmo preco do arrasto: com vizinhos de posicao igual,
+   a ordem exata entre eles fica pelo id.
+
+   `extra` vai so no cartao movido (quadro, link do contrato). */
+async function gravarPosicaoNaLista(clienteId,listaId,pos,extra){
+  const agora=new Date().toISOString();
+  const base=()=>sb.from('crm_clientes').select('id,posicao',{count:'exact'})
+    .eq('lista_id',listaId).is('arquivado_em',null).neq('id',clienteId)
+    .order('posicao',{ascending:true,nullsFirst:false}).order('id');
+  pos=Math.max(0,parseInt(pos,10)||0);
+  const{data:primeira,count,error}=await base().limit(CARDS_POR_LISTA);
+  if(error)return{error};
+  if((count||0)<=CARDS_POR_LISTA){
+    const ord=(primeira||[]).map(x=>x.id);
+    ord.splice(Math.min(pos,ord.length),0,clienteId);
+    const res=await Promise.all(ord.map((id,i)=>{
+      const p={lista_id:listaId,posicao:i,atualizado_em:agora};
+      if(id===clienteId)Object.assign(p,extra||{});
+      return sb.from('crm_clientes').update(p).eq('id',id);
+    }));
+    const r=res.find(x=>x.error);
+    return{error:r?r.error:null};
+  }
+  // lista grande: so os dois vizinhos do ponto de insercao
+  const ini=Math.max(0,pos-1);
+  const{data:viz,error:e2}=await base().range(ini,pos);
+  if(e2)return{error:e2};
+  const v=viz||[];
+  const ant=pos>0?v[0]:null, prox=pos>0?v[1]:v[0];
+  const nova=ant&&ant.posicao!=null?ant.posicao:(prox&&prox.posicao!=null?prox.posicao-1:0);
+  const{error:e3}=await sb.from('crm_clientes').update(Object.assign({lista_id:listaId,posicao:nova,atualizado_em:agora},extra||{})).eq('id',clienteId);
+  return{error:e3||null};
+}
 async function moverPara(clienteId,quadro,listaId,pos){
   const{data:atualCli}=await sb.from('crm_clientes').select('lista_id,quadro').eq('id',clienteId).single();
   const origListaId=atualCli?atualCli.lista_id:null;
-  const{data:naLista}=await sb.from('crm_clientes').select('id,posicao').eq('lista_id',listaId).neq('id',clienteId).order('posicao');
-  const ord=(naLista||[]).map(x=>x.id);
-  ord.splice(pos,0,clienteId);
-  const res=await Promise.all(ord.map((id,i)=>{
-    const p={lista_id:listaId,posicao:i,atualizado_em:new Date().toISOString()};
-    if(id===clienteId)p.quadro=quadro;
-    return sb.from('crm_clientes').update(p).eq('id',id);
-  }));
-  if(res.find(r=>r.error)){toast('Não foi possível mover','er');return;}
+  const{error:errMov}=await gravarPosicaoNaLista(clienteId,listaId,pos,{quadro});
+  if(errMov){toast('Não foi possível mover','er');return;}
   fecharModal();toast('Cartão movido','ok');
   if(origListaId&&origListaId!==listaId)await registrarMovimentoLista(clienteId,origListaId,listaId);
   const at=location.hash.match(/^#\/quadro\/(.+)$/);

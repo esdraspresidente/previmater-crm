@@ -120,7 +120,10 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .kl{flex:0 0 262px;width:262px;background:var(--white);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--sh);display:flex;flex-direction:column;max-height:calc(100vh - 188px);transition:flex-basis .15s,width .15s;}
 @media(max-width:900px){.kl{max-height:calc(100vh - 242px);}}
 .kl.collapsed{flex:0 0 42px;width:42px;}
-.kl.collapsed .klb,.kl.collapsed .klf{display:none;}
+.kl.collapsed .klb,.kl.collapsed .klf,.kl.collapsed .kmore{display:none;}
+.kmore{margin:0 10px 2px;width:calc(100% - 20px);background:var(--bg);border:1px dashed var(--border);color:var(--text2);font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;padding:8px;border-radius:8px;}
+.kmore:hover{color:var(--text);border-style:solid;}
+.kmore:disabled{opacity:.6;cursor:default;}
 .kl.collapsed .klh{flex-direction:column-reverse;height:100%;padding:10px 6px;gap:10px;justify-content:flex-end;}
 .kl.collapsed .klh>div{flex-direction:column;gap:8px;}
 .kl.collapsed .kln{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:11px;margin-top:4px;}
@@ -2769,48 +2772,82 @@ const pCli=p=>p.crm_cliente_id||p.cliente_id;
 // ============================================================
 // QUADRO / KANBAN
 // ============================================================
-async function pageQuadro(q){
-  const pc=$('pc');marcarNav(q);
-  if(!QUADROS[q]||!QPERM.includes(q)){pc.innerHTML='<div class="emp"><div class="empt">Você não tem acesso a este quadro</div></div>';return;}
-  pc.innerHTML=`<div class="pgh"><div><div class="pgt">${QUADROS[q].rotulo}</div><div class="pgs">Carregando...</div></div></div>`;
+/* QUADRO CARREGADO POR LISTA — 16/09/2026.
+
+   O QUE ESTAVA ERRADO. O quadro pedia TODOS os cartões ativos numa
+   consulta só, sem .limit(). O PostgREST devolve no máximo 1.000 e não
+   avisa: o Comercial tinha 1.223 ativos, então 223 simplesmente não
+   apareciam — os de posicao mais alta, quase todos em Descartado. E o
+   peso não estava onde se trabalha: medido em 16/09, Descartado tinha
+   592 ativos e Reativação Trello 532, contra 45 em Lead novo e 13 em
+   Em triagem. A tela desenhava 1.100 cartões mortos para mostrar 100
+   vivos. Depois ainda mandava os 1.000 ids na URL para contar anexos
+   (~37 kB de endereço, com o erro ignorado).
+
+   COMO FICA. Cada lista pede os seus primeiros CARDS_POR_LISTA, todas em
+   paralelo, com a contagem exata junto. Lista pequena vem inteira e se
+   comporta exatamente como antes. Lista grande mostra o começo e um botão
+   "carregar mais". Lista MINIMIZADA não carrega cartão nenhum, só conta:
+   quem minimizou Descartado não paga por ele. O número no cabeçalho é
+   sempre o TOTAL da lista, nunca o que está desenhado.
+
+   PAGINAÇÃO POR CURSOR (posicao, id), não por offset. Arrastar um cartão
+   para fora da lista muda o offset de todos os que vêm depois, e o
+   "carregar mais" pularia um cartão calado. O cursor não se mexe com
+   isso. O id entra na ordem porque posicao repete (os 532 da Reativação
+   Trello estão todos em 0) e sem desempate a página seguinte não é
+   determinística. Cartão que já está na tela e volta numa página é
+   ignorado pelo id. */
+const CARDS_POR_LISTA=50;
+/* anuncio_id/codigo/app entram aqui so para o selo do cartao: sem eles a
+   tela do quadro nao tinha como distinguir lead de trafego de lead
+   organico, e a pergunta "esse e do Rafael?" exigia abrir o cartao um por
+   um. */
+const SEL_CARD_QUADRO='id,nome_completo,lista_id,posicao,telefone_principal,data_nascimento_bebe,data_entrega,data_desbloqueio_inss,valor_beneficio_esperado,valor_honorarios,anuncio_id,anuncio_codigo,anuncio_app,crm_clientes_etiquetas(etiqueta_id)';
+/* Estado de cada lista desenhada: total no banco, cursor da última
+   página e se já carregou alguma. Zerado a cada pageQuadro. */
+let KB_LISTAS={},KB_QUADRO=null,KB_CARGA=0;
+
+/* Uma página de cartões de uma lista, a partir do cursor. Devolve os
+   cartões e quantos AINDA faltam depois deles — o count vem da mesma
+   consulta, então não existe janela entre contar e buscar. */
+async function buscarPaginaDaLista(listaId,cursor){
+  let q=sb.from('crm_clientes').select(SEL_CARD_QUADRO,{count:'exact'})
+    .eq('lista_id',listaId).is('arquivado_em',null);
+  if(cursor){
+    /* posicao nula ordena por ultimo; cursor nulo so pode seguir entre
+       os nulos. Hoje nenhum cartao ativo tem posicao nula, mas a coluna
+       aceita, e um cursor que ignorasse isso travaria a lista inteira. */
+    q=cursor.posicao==null
+      ? q.is('posicao',null).gt('id',cursor.id)
+      : q.or(`posicao.gt.${cursor.posicao},and(posicao.eq.${cursor.posicao},id.gt.${cursor.id}),posicao.is.null`);
+  }
+  const{data,count,error}=await q.order('posicao',{ascending:true,nullsFirst:false}).order('id').limit(CARDS_POR_LISTA);
+  if(error)return{error};
+  const cards=data||[];
+  const ult=cards[cards.length-1];
+  return{cards,restante:Math.max(0,(count||0)-cards.length),cursor:ult?{posicao:ult.posicao,id:ult.id}:cursor};
+}
+/* Anexos e, no Financeiro, resumo das parcelas — para os cartões DESTA
+   página. Por página e não do quadro inteiro: o .in() leva no máximo
+   CARDS_POR_LISTA ids na URL, em vez dos 1.000 de antes. */
+async function enriquecerCardsDoQuadro(q,cards){
+  if(!cards.length)return;
+  /* EM FATIAS DE CARDS_POR_LISTA ids. Na abertura do quadro chegam aqui os
+     cartoes de TODAS as listas juntos (13 listas x 50 = 650 ids), e um
+     .in() so recriaria a URL gigante que isto veio tirar. */
+  const fatias=[];
+  for(let i=0;i<cards.length;i+=CARDS_POR_LISTA)fatias.push(cards.slice(i,i+CARDS_POR_LISTA).map(c=>c.id));
+  const anxRs=await Promise.all(fatias.map(ids=>sb.from('crm_anexos').select('cliente_id').in('cliente_id',ids).limit(5000)));
+  const parRs=q==='financeiro'
+    ?await Promise.all(fatias.map(ids=>sb.from('pm_parcelas').select('crm_cliente_id,status,data_vencimento').in('crm_cliente_id',ids).neq('status','cancelado').limit(5000)))
+    :[];
+  const anxCont={};
+  anxRs.flatMap(r=>r.data||[]).forEach(a=>{anxCont[a.cliente_id]=(anxCont[a.cliente_id]||0)+1;});
+  cards.forEach(c=>{c.anexosCount=anxCont[c.id]||0;});
   if(q==='financeiro'){
-    _cacheListasFin=null;
-    await sb.rpc('arquivar_finalizados_antigos');
-    await loadFin(true);
-    await varrerAtrasos();
-  }
-  const[{data:listas},{data:clientes,error}]=await Promise.all([
-    sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem'),
-    /* anuncio_id/codigo/app entram aqui so para o selo do cartao: sem
-       eles a tela do quadro nao tinha como distinguir lead de trafego de
-       lead organico, e a pergunta "esse e do Rafael?" exigia abrir o
-       cartao um por um. */
-    sb.from('crm_clientes').select('id,nome_completo,lista_id,posicao,telefone_principal,data_nascimento_bebe,data_entrega,data_desbloqueio_inss,valor_beneficio_esperado,valor_honorarios,anuncio_id,anuncio_codigo,anuncio_app,crm_clientes_etiquetas(etiqueta_id)').eq('quadro',q).is('arquivado_em',null).order('posicao')
-  ]);
-  if(error){pc.innerHTML=`<div class="emp"><div class="empt">Erro ao carregar</div>${esc(error.message)}</div>`;return;}
-  const L=listas||[],C=clientes||[];
-
-  // quantos cards arquivados existem em cada lista deste quadro
-  const ARQ={};let ARQTOTAL=0;
-  {
-    // count exato por lista: o select comum para em 1000 linhas e mentiria o total
-    const{count:tot}=await sb.from('crm_clientes')
-      .select('id',{count:'exact',head:true}).eq('quadro',q).not('arquivado_em','is',null);
-    ARQTOTAL=tot||0;
-    if(ARQTOTAL){
-      const contagens=await Promise.all(L.map(l=>
-        sb.from('crm_clientes').select('id',{count:'exact',head:true})
-          .eq('lista_id',l.id).not('arquivado_em','is',null)
-      ));
-      L.forEach((l,i)=>{const n=contagens[i]?contagens[i].count||0:0;if(n)ARQ[l.id]=n;});
-    }
-  }
-
-  if(q==='financeiro'&&C.length){
-    const ids=C.map(c=>c.id);
-    const{data:parc}=await sb.from('pm_parcelas').select('crm_cliente_id,status,data_vencimento').in('crm_cliente_id',ids).neq('status','cancelado');
     const porCliente={};
-    (parc||[]).forEach(p=>{
+    parRs.flatMap(r=>r.data||[]).forEach(p=>{
       if(!porCliente[p.crm_cliente_id])porCliente[p.crm_cliente_id]={total:0,recebidas:0,proxima:null,atraso:0,inad:0};
       const r=porCliente[p.crm_cliente_id];
       r.total++;
@@ -2822,44 +2859,128 @@ async function pageQuadro(q){
         if(da>r.atraso)r.atraso=da;
       }
     });
-    C.forEach(c=>{c.finResumo=porCliente[c.id]||null;});
+    cards.forEach(c=>{c.finResumo=porCliente[c.id]||null;});
   }
+}
+async function pageQuadro(q){
+  const pc=$('pc');marcarNav(q);
+  if(!QUADROS[q]||!QPERM.includes(q)){pc.innerHTML='<div class="emp"><div class="empt">Você não tem acesso a este quadro</div></div>';return;}
+  pc.innerHTML=`<div class="pgh"><div><div class="pgt">${QUADROS[q].rotulo}</div><div class="pgs">Carregando...</div></div></div>`;
+  if(q==='financeiro'){
+    _cacheListasFin=null;
+    await sb.rpc('arquivar_finalizados_antigos');
+    await loadFin(true);
+    await varrerAtrasos();
+  }
+  /* Ficha da carga: se o quadro for aberto de novo (ou outro quadro)
+     antes desta terminar, a resposta velha nao pinta por cima. Nao
+     compara o hash porque o pageQuadro tambem e chamado depois de salvar
+     lista e mover cartao, com a rota ja igual. */
+  const carga=++KB_CARGA;
+  KB_QUADRO=q;KB_LISTAS={};
+  const{data:listas,error:errL}=await sb.from('crm_listas').select('*').eq('quadro',q).eq('arquivada',false).order('ordem');
+  if(errL){pc.innerHTML=`<div class="emp"><div class="empt">Erro ao carregar</div>${esc(errL.message)}</div>`;return;}
+  const L=listas||[];
 
   /* OS PARADOS DESTE QUADRO.
      Uma consulta so, na view, filtrada pelo quadro: ela ja devolve apenas
-     quem passou do prazo, entao sao dezenas de linhas e nao a base. NAO
-     da para perguntar isso card a card — seriam N consultas — nem trazer
-     tudo e filtrar aqui, que esbarraria no teto de 1.000 do PostgREST
-     quando o volume crescer.
+     quem passou do prazo, entao sao dezenas de linhas e nao a base.
+     A coluna `lista` entrou em 16/09: com a lista carregada pela metade, o
+     contador do cabecalho nao pode mais contar os parados entre os cartoes
+     DESENHADOS — contaria so os da primeira pagina. Conta pela view.
      Falha nao quebra o quadro: sem os parados o quadro fica como era
      antes de 26/08, que e uma tela pior e nao uma tela quebrada. */
   PARADOS={};
-  try{
-    const{data:par}=await sb.from('vw_cards_parados')
-      .select('cliente_id,dias_parado,veredito').eq('quadro',q).limit(1000);
-    (par||[]).forEach(x=>{PARADOS[x.cliente_id]=x;});
-  }catch(_){}
+  const parP=sb.from('vw_cards_parados').select('cliente_id,dias_parado,veredito,lista').eq('quadro',q).limit(1000)
+    .then(r=>{(r.data||[]).forEach(x=>{PARADOS[x.cliente_id]=x;});},()=>{});
 
-  if(C.length){
-    const ids=C.map(c=>c.id);
-    const{data:anx}=await sb.from('crm_anexos').select('cliente_id').in('cliente_id',ids);
-    const anxCont={};
-    (anx||[]).forEach(a=>{anxCont[a.cliente_id]=(anxCont[a.cliente_id]||0)+1;});
-    C.forEach(c=>{c.anexosCount=anxCont[c.id]||0;});
-  }
+  /* Uma chamada por lista, em paralelo. Minimizada so conta (head:true). */
+  const idsL=L.map(l=>l.id);
+  const porListaP=L.map(async l=>{
+    if(listaColapsada(l.id)){
+      const{count}=await sb.from('crm_clientes').select('id',{count:'exact',head:true}).eq('lista_id',l.id).is('arquivado_em',null);
+      return{l,cards:[],restante:count||0,cursor:null,carregou:false};
+    }
+    const r=await buscarPaginaDaLista(l.id,null);
+    if(r.error)return{l,erro:r.error};
+    return{l,cards:r.cards,restante:r.restante,cursor:r.cursor,carregou:true};
+  });
+  /* Cartao do quadro cuja lista foi arquivada ou nao existe: continua
+     indo para "Sem lista", como antes. Antes saia de graca do select do
+     quadro inteiro; agora precisa de consulta propria. */
+  let orfaosQ=sb.from('crm_clientes').select(SEL_CARD_QUADRO,{count:'exact'}).eq('quadro',q).is('arquivado_em',null);
+  orfaosQ=idsL.length?orfaosQ.or(`lista_id.is.null,lista_id.not.in.(${idsL.join(',')})`):orfaosQ;
+  const orfaosP=orfaosQ.order('posicao').order('id').limit(CARDS_POR_LISTA);
 
-  const porLista={};L.forEach(l=>porLista[l.id]=[]);
-  const orfaos=[];
-  C.forEach(c=>{if(porLista[c.lista_id])porLista[c.lista_id].push(c);else orfaos.push(c);});
-  let kb=L.map(l=>listaHtml(l,porLista[l.id],false,ARQ[l.id]||0)).join('');
-  if(orfaos.length)kb+=listaHtml({id:'__sem__',nome:'Sem lista',cor:'#5A7070'},orfaos,true,0);
+  // quantos cards arquivados existem em cada lista deste quadro
+  const ARQ={};let ARQTOTAL=0;
+  const arqP=(async()=>{
+    // count exato por lista: o select comum para em 1000 linhas e mentiria o total
+    const{count:tot}=await sb.from('crm_clientes')
+      .select('id',{count:'exact',head:true}).eq('quadro',q).not('arquivado_em','is',null);
+    ARQTOTAL=tot||0;
+    if(ARQTOTAL){
+      const contagens=await Promise.all(L.map(l=>
+        sb.from('crm_clientes').select('id',{count:'exact',head:true})
+          .eq('lista_id',l.id).not('arquivado_em','is',null)
+      ));
+      L.forEach((l,i)=>{const n=contagens[i]?contagens[i].count||0:0;if(n)ARQ[l.id]=n;});
+    }
+  })();
+
+  const[porLista,orfaosR]=await Promise.all([Promise.all(porListaP),orfaosP,parP,arqP]);
+  if(carga!==KB_CARGA)return;   // outra carga do quadro comecou depois desta
+  const falha=porLista.find(x=>x.erro)||(orfaosR.error?{erro:orfaosR.error}:null);
+  if(falha){pc.innerHTML=`<div class="emp"><div class="empt">Erro ao carregar</div>${esc(falha.erro.message)}</div>`;return;}
+  const orfaos=orfaosR.data||[];
+  await enriquecerCardsDoQuadro(q,porLista.flatMap(x=>x.cards).concat(orfaos));
+
+  let totalAtivos=orfaosR.count||0;
+  let kb=porLista.map(x=>{
+    KB_LISTAS[x.l.id]={cursor:x.cursor,carregou:x.carregou,restante:x.restante};
+    totalAtivos+=x.cards.length+x.restante;
+    return listaHtml(x.l,x.cards,false,ARQ[x.l.id]||0,x.restante);
+  }).join('');
+  if(orfaos.length)kb+=listaHtml({id:'__sem__',nome:'Sem lista',cor:'#5A7070'},orfaos,true,0,Math.max(0,(orfaosR.count||0)-orfaos.length));
   kb+=`<button class="knl" onclick="modalNovaLista('${q}')">+ nova lista</button>`;
   pc.innerHTML=`<div class="pgh">
-      <div><div class="pgt">${QUADROS[q].rotulo}</div><div class="pgs">${C.length.toLocaleString('pt-BR')} ${C.length===1?'ativo':'ativos'}${ARQTOTAL?` · <span class="pgs-arq">${ARQTOTAL.toLocaleString('pt-BR')} arquivado${ARQTOTAL===1?'':'s'}</span>`:''} neste quadro</div></div>
+      <div><div class="pgt">${QUADROS[q].rotulo}</div><div class="pgs">${totalAtivos.toLocaleString('pt-BR')} ${totalAtivos===1?'ativo':'ativos'}${ARQTOTAL?` · <span class="pgs-arq">${ARQTOTAL.toLocaleString('pt-BR')} arquivado${ARQTOTAL===1?'':'s'}</span>`:''} neste quadro</div></div>
       <button class="bnew" onclick="location.hash='#/cliente/novo'">+ Novo cliente</button>
     </div><div class="kb" id="kb">${kb}</div>`;
   ligarDragDrop();
   ligarArrastoDoQuadro();
+}
+/* Carrega a proxima pagina de uma lista (ou a primeira, se ela foi aberta
+   minimizada) e acrescenta no fim do corpo. */
+async function carregarMaisLista(listaId){
+  const st=KB_LISTAS[listaId];
+  const kl=document.querySelector(`.kl[data-lista="${listaId}"]`);
+  if(!st||!kl||st.buscando)return;
+  const body=kl.querySelector('.klb'),btn=kl.querySelector('.kmore');
+  st.buscando=true;
+  if(btn){btn.disabled=true;btn.textContent='Carregando...';}
+  const quadro=KB_QUADRO,carga=KB_CARGA;
+  const r=await buscarPaginaDaLista(listaId,st.carregou?st.cursor:null);
+  st.buscando=false;
+  if(KB_CARGA!==carga||!document.body.contains(kl))return;   // quadro recarregou ou saiu da tela
+  if(r.error){toast('Não consegui carregar a lista: '+r.error.message,'er');if(btn){btn.disabled=false;btn.textContent='Tentar de novo';}return;}
+  const naTela=new Set([...body.querySelectorAll('.kc')].map(c=>c.getAttribute('data-card')));
+  const novos=r.cards.filter(c=>!naTela.has(c.id));
+  await enriquecerCardsDoQuadro(quadro,novos);
+  if(KB_CARGA!==carga||!document.body.contains(kl))return;
+  st.cursor=r.cursor;st.carregou=true;st.restante=r.restante;
+  const vazio=body.querySelector('.kempty');if(vazio&&novos.length)vazio.remove();
+  body.insertAdjacentHTML('beforeend',novos.map(cardHtml).join(''));
+  if(!body.querySelector('.kc')&&!body.querySelector('.kempty'))body.innerHTML='<div class="kempty">Vazia</div>';
+  kl.setAttribute('data-restante',String(r.restante));
+  if(btn)btn.remove();
+  if(r.restante>0)body.insertAdjacentHTML('afterend',botaoCarregarMais(listaId,r.restante));
+  ligarDragDrop();
+  atualizarContadores();
+}
+function botaoCarregarMais(listaId,restante){
+  const n=Math.min(CARDS_POR_LISTA,restante);
+  return `<button class="kmore" onclick="event.stopPropagation();carregarMaisLista('${listaId}')">Carregar mais ${n} · faltam ${restante.toLocaleString('pt-BR')}</button>`;
 }
 function listaColapsada(id){try{return localStorage.getItem('kl_col_'+id)==='1';}catch(_){return false;}}
 function toggleColapsarLista(id){
@@ -2867,18 +2988,30 @@ function toggleColapsarLista(id){
   try{if(atual)localStorage.removeItem('kl_col_'+id);else localStorage.setItem('kl_col_'+id,'1');}catch(_){}
   const el=document.querySelector(`.kl[data-lista="${id}"]`);
   if(el)el.classList.toggle('collapsed',!atual);
+  /* Lista que abriu minimizada nao tem cartao nenhum desenhado: expandir
+     e o momento de buscar a primeira pagina. */
+  if(el&&atual&&KB_LISTAS[id]&&!KB_LISTAS[id].carregou)carregarMaisLista(id);
 }
-function listaHtml(l,cards,semAcoes,arqCount){
-  const cs=cards.length?cards.map(cardHtml).join(''):'<div class="kempty">Vazia</div>';
+/* restante = cartoes desta lista que existem no banco e NAO estao
+   desenhados. Fica no data-restante porque o atualizarContadores() soma
+   com o que esta na tela: o cabecalho mostra sempre o total da lista. */
+function listaHtml(l,cards,semAcoes,arqCount,restante){
+  restante=restante||0;
+  const naoCarregou=KB_LISTAS[l.id]&&!KB_LISTAS[l.id].carregou;
+  const cs=cards.length?cards.map(cardHtml).join(''):(naoCarregou&&restante?'':'<div class="kempty">Vazia</div>');
   const colapsada=!semAcoes&&listaColapsada(l.id);
-  return `<div class="kl ${colapsada?'collapsed':''}" data-lista="${l.id}">
+  return `<div class="kl ${colapsada?'collapsed':''}" data-lista="${l.id}" data-restante="${restante}">
       <div class="klh" style="border-top-color:${escA(l.cor)}">
         <div class="kln">${esc(l.nome)}</div>
         <div style="display:flex;align-items:center;gap:4px">
-          <span class="klc">${cards.length}</span>
-          ${(()=>{const n=cards.filter(c=>PARADOS[c.id]).length;
+          <span class="klc">${cards.length+restante}</span>
+          ${(()=>{/* Conta pela view e nao pelos cartoes desenhados: com a
+                     lista pela metade, contar na tela esconderia os
+                     parados das paginas que nao vieram. */
+                  const par=Object.values(PARADOS).filter(x=>x.lista===l.nome);
+                  const n=par.length;
                   if(!n)return'';
-                  const d=cards.filter(c=>paradoComDireito(PARADOS[c.id])).length;
+                  const d=par.filter(paradoComDireito).length;
                   /* O numero fica no cabecalho para a lista colapsada
                      tambem avisar: colapsada nao mostra cartao nenhum, e
                      era ali que o abandono ficava mais escondido. */
@@ -2889,6 +3022,7 @@ function listaHtml(l,cards,semAcoes,arqCount){
         </div>
       </div>
       <div class="klb" data-drop="${l.id}">${cs}</div>
+      ${restante>0&&!naoCarregou&&!semAcoes?botaoCarregarMais(l.id,restante):''}
       ${semAcoes?'':`<div class="klf"><button class="kadd" onclick="location.hash='#/cliente/novo?lista=${l.id}'">+ adicionar cliente</button></div>`}
     </div>`;
 }
@@ -2949,7 +3083,7 @@ function cardHtml(c){
      isso ele nao pode ser apagado por um Salvar. */
   const trafHtml=ehDeTrafego(c)?`<div class="kcm"><span class="ent ent-ok">◈ anúncio${c.anuncio_codigo?' · '+esc(c.anuncio_codigo):''}${c.anuncio_app==='instagram'?' · Instagram':(c.anuncio_app==='facebook'?' · Facebook':'')}</span></div>`:'';
 
-  return `<div class="kc${clsPar}" draggable="true" data-card="${c.id}" onclick="abrirCardCliente('${c.id}')">
+  return `<div class="kc${clsPar}" draggable="true" data-card="${c.id}" data-pos="${c.posicao==null?'':c.posicao}" onclick="abrirCardCliente('${c.id}')">
       <button class="kcmv" title="Mover cartão" onclick="event.stopPropagation();modalMover('${c.id}')">⇄</button>
       <div class="kcn">${esc(c.nome_completo)}</div>
       ${trafHtml}
@@ -2987,8 +3121,14 @@ function bloqueioBadgeHtml(d){
   else if(dias<=3){cls='ent-soon';txt='Desbloqueia em '+fD(d)+' · faltam '+dias+'d';}
   return`<span class="ent ent-lg ${cls}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> ${txt}</span>`;
 }
+/* IDEMPOTENTE desde 16/09: o "carregar mais" acrescenta cartao numa tela
+   ja ligada e chama isto de novo. Ligar duas vezes o mesmo corpo de lista
+   faria o drop rodar duas vezes — dois movimentos gravados no historico
+   do cartao e duas contagens no dashboard. O data-dd marca o que ja foi
+   ligado. */
 function ligarDragDrop(){
-  document.querySelectorAll('.kc').forEach(card=>{
+  document.querySelectorAll('.kc:not([data-dd])').forEach(card=>{
+    card.setAttribute('data-dd','1');
     card.addEventListener('dragstart',e=>{
       dragCardId=card.getAttribute('data-card');
       const kl=card.closest('.kl');
@@ -2997,7 +3137,8 @@ function ligarDragDrop(){
     });
     card.addEventListener('dragend',()=>{card.classList.remove('dragging');document.querySelectorAll('.kl').forEach(l=>l.classList.remove('dragover'));});
   });
-  document.querySelectorAll('.klb').forEach(body=>{
+  document.querySelectorAll('.klb:not([data-dd])').forEach(body=>{
+    body.setAttribute('data-dd','1');
     body.addEventListener('dragover',e=>{
       e.preventDefault();body.closest('.kl').classList.add('dragover');
       const arr=document.querySelector('.dragging');if(!arr)return;
@@ -3010,7 +3151,7 @@ function ligarDragDrop(){
       const lid=body.getAttribute('data-drop');
       if(lid==='__sem__')return;
       const cid=dragCardId,origLista=dragOrigLista;
-      await salvarOrdemLista(lid,body);
+      await salvarOrdemLista(lid,body,cid);
       if(cid&&origLista&&origLista!==lid)await registrarMovimentoLista(cid,origLista,lid);
     });
   });
@@ -3121,10 +3262,42 @@ function cardDepoisDe(cont,y){
     return mais;
   },{off:Number.NEGATIVE_INFINITY,el:null}).el;
 }
-async function salvarOrdemLista(listaId,body){
-  const ids=[...body.querySelectorAll('.kc')].map(c=>c.getAttribute('data-card'));
-  const res=await Promise.all(ids.map((id,i)=>sb.from('crm_clientes').update({lista_id:listaId,posicao:i,atualizado_em:new Date().toISOString()}).eq('id',id)));
+/* DUAS FORMAS DE GRAVAR A ORDEM — 16/09/2026.
+
+   LISTA INTEIRA NA TELA: renumera todos, como sempre foi. E a unica forma
+   de a ordem que se ve ser exatamente a que fica gravada.
+
+   LISTA PELA METADE (data-restante > 0): grava SO o cartao arrastado.
+   Renumerar os desenhados de 0 a N colidiria com os que nao vieram, que
+   continuam com as posicoes antigas, e o cartao podia ir parar no meio da
+   segunda pagina. E havia o custo: soltar um cartao em Descartado disparava
+   592 UPDATEs em paralelo, um por cartao da lista. A posicao do arrastado
+   sai do vizinho de cima (ou do de baixo menos 1, se ficou no topo).
+   PRECO CONHECIDO: posicao e inteiro e repete, entao com vizinho de posicao
+   igual a ordem exata entre os dois fica pelo id ao recarregar. Nas listas
+   que ficam pela metade (Descartado, Reativacao Trello) isso nao muda
+   trabalho de ninguem; a lista e a garantia, a posicao e aproximada. */
+async function salvarOrdemLista(listaId,body,cid){
+  const kl=body.closest('.kl');
+  const parcial=kl&&Number(kl.getAttribute('data-restante')||0)>0;
+  const agora=new Date().toISOString();
+  if(parcial&&cid){
+    const el=body.querySelector(`.kc[data-card="${cid}"]`);
+    if(!el){route();return;}
+    const pos=x=>{const v=x&&x.getAttribute('data-pos');return v===''||v==null?null:Number(v);};
+    let ant=el.previousElementSibling;while(ant&&!ant.classList.contains('kc'))ant=ant.previousElementSibling;
+    let prox=el.nextElementSibling;while(prox&&!prox.classList.contains('kc'))prox=prox.nextElementSibling;
+    const nova=pos(ant)!=null?pos(ant):(pos(prox)!=null?pos(prox)-1:0);
+    const{error}=await sb.from('crm_clientes').update({lista_id:listaId,posicao:nova,atualizado_em:agora}).eq('id',cid);
+    if(error){toast('Não foi possível mover','er');route();return;}
+    el.setAttribute('data-pos',String(nova));
+    toast('Cliente movido','ok');atualizarContadores();
+    return;
+  }
+  const cards=[...body.querySelectorAll('.kc')];
+  const res=await Promise.all(cards.map((c,i)=>sb.from('crm_clientes').update({lista_id:listaId,posicao:i,atualizado_em:agora}).eq('id',c.getAttribute('data-card'))));
   if(res.find(r=>r.error)){toast('Não foi possível mover','er');route();return;}
+  cards.forEach((c,i)=>c.setAttribute('data-pos',String(i)));
   toast('Cliente movido','ok');atualizarContadores();
 }
 /* CONTRATO ASSINADO FORA DO SISTEMA — 14/09/2026.
@@ -3347,10 +3520,12 @@ async function gravarMotivoDescarte(clienteId,codigo){
 }
 function atualizarContadores(){
   document.querySelectorAll('.kl').forEach(l=>{
+    /* Cartao desenhado + os que ainda nao vieram do banco: o numero do
+       cabecalho e o total da lista, nao a pagina (16/09). */
     const n=l.querySelectorAll('.kc').length,c=l.querySelector('.klc');
-    if(c)c.textContent=n;
+    if(c)c.textContent=n+Number(l.getAttribute('data-restante')||0);
     const b=l.querySelector('.klb');
-    if(b&&n===0&&!b.querySelector('.kempty'))b.innerHTML='<div class="kempty">Vazia</div>';
+    if(b&&n===0&&!Number(l.getAttribute('data-restante')||0)&&!b.querySelector('.kempty'))b.innerHTML='<div class="kempty">Vazia</div>';
     if(b&&n>0){const e=b.querySelector('.kempty');if(e)e.remove();}
   });
 }

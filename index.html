@@ -608,15 +608,31 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .seqverfim{width:100%;background:none;border:none;border-top:1px solid var(--border2);padding:9px;font-size:11.5px;font-weight:800;color:var(--teal);cursor:pointer;font-family:inherit;}
 .seqverfim:hover{background:var(--bg);}
 .displista{max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:7px;}
-.dispitem{text-align:left;background:var(--white);border:1.5px solid var(--border);border-radius:11px;padding:10px 12px;cursor:pointer;font-family:inherit;transition:all .12s;}
-.dispitem:hover:not(.off){border-color:var(--teal);background:var(--bg);}
-.dispitem.off{opacity:.45;cursor:not-allowed;}
+.dispitem{text-align:left;background:var(--white);border:1.5px solid var(--border);border-radius:11px;padding:10px 12px;cursor:pointer;font-family:inherit;transition:border-color .12s,background .12s;}
+.dispitem:hover{border-color:var(--teal);background:var(--bg);}
+.dispitem.off{opacity:.55;}
+.dispitem.off .dispnome{color:var(--text2);}
+.dispitem.aberto{border-color:var(--teal);background:var(--bg);}
+/* A acao de disparar so existe dentro do item ABERTO: para mandar, tem de
+   ter aberto o texto (16/09). */
+.dispacao{display:none;justify-content:space-between;align-items:center;gap:9px;margin-top:9px;padding-top:9px;border-top:1px solid var(--border2);}
+.dispitem.aberto .dispacao{display:flex;}
+.dispdica{font-size:10.5px;color:var(--text3);font-weight:700;}
 .dispnome{font-size:13px;font-weight:800;color:var(--text);}
 .dispcod{font-size:11px;font-weight:600;color:var(--text3);}
 .dispav{font-size:11px;margin-top:2px;}
 /* A previa em duas linhas: o suficiente para reconhecer a mensagem, sem
-   virar um paredao que esconde as outras opcoes. */
-.disppre{font-size:11.5px;color:var(--text2);margin-top:5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+   virar um paredao que esconde as outras opcoes.
+   O TEXTO INTEIRO ESTA NO DOM desde 16/09 — quem corta e o CSS. Assim o
+   mouse parado em cima (desktop) e o clique (celular, onde nao existe
+   passar o mouse) mostram tudo sem ir buscar nada no banco. Os descartes
+   diferem por uma linha no meio; reconhecer pelas duas primeiras era
+   exatamente o jeito de mandar o bloco errado. */
+.disppre{font-size:11.5px;color:var(--text2);margin-top:5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;}
+@media (hover:hover) and (pointer:fine){
+  .dispitem:hover .disppre{-webkit-line-clamp:unset;max-height:40vh;overflow-y:auto;}
+}
+.dispitem.aberto .disppre{-webkit-line-clamp:unset;max-height:40vh;overflow-y:auto;}
 /* Gravador de audio da Caixa de Entrada. */
 .ib-send-linha{display:flex;align-items:stretch;gap:8px;margin-top:9px;}
 .ib-send-linha .btn{flex:1;}
@@ -10555,21 +10571,52 @@ async function abrirDisparoSequencia(clienteId,voltarParaCartao){
     const aviso=jaRoda?'<span style="color:var(--yellow);font-weight:800">já está rodando</span>'
               :(semTexto?'<span style="color:var(--text3)">sem texto ainda</span>'
               :(x.precisa_aprovacao?'<span style="color:var(--text3)">passa pela sua aprovação</span>':''));
-    return`<button class="dispitem${trava?' off':''}" ${trava?'disabled':''} onclick="mcConfirmarDisparo('${esc(x.codigo)}','${escA(x.nome)}')">
+    /* DIV e nao BUTTON porque agora ha um botao DENTRO (botao dentro de
+       botao e HTML invalido e o clique fica imprevisivel). Item travado
+       continua ABRINDO para leitura — so nao ganha o botao de disparar:
+       ler o texto de uma sequencia que ja esta rodando e legitimo. */
+    return`<div class="dispitem${trava?' off':''}" data-cod="${esc(x.codigo)}" onclick="dispAbrir('${esc(x.codigo)}')">
       <div class="dispnome">${esc(x.nome)} <span class="dispcod">${esc(x.codigo)}</span></div>
       ${aviso?`<div class="dispav">${aviso}</div>`:''}
-      ${x.previa?`<div class="disppre">${esc(String(x.previa).slice(0,160))}${String(x.previa).length>160?'…':''}</div>`:''}
-    </button>`;
+      ${x.previa?`<div class="disppre">${esc(String(x.previa))}</div>`:''}
+      <div class="dispacao">
+        <span class="dispdica">${trava?(jaRoda?'já está rodando para ela':'sem texto cadastrado'):'confira o texto acima'}</span>
+        ${trava?'':`<button class="btn btnp" style="padding:7px 14px;font-size:12px" onclick="event.stopPropagation();mcConfirmarDisparo('${esc(x.codigo)}','${escA(x.nome)}')">Disparar esta</button>`}
+      </div>
+    </div>`;
   }).join('');
   abrirModal(`
     <div class="mbt">Disparar sequência na mão</div>
     <div class="mbs">A mensagem entra na fila e o motor entrega em até 1 minuto, no ritmo de sempre.</div>
-    <div class="fhint" style="margin-bottom:12px">Sequência de etapa mais adiantada <b>cancela o que estiver pendente das etapas anteriores</b> — é assim que o funil funciona, e vale também no disparo manual.</div>
+    <div class="fhint" style="margin-bottom:12px">Toque numa sequência para <b>ler a mensagem inteira</b> antes de disparar. Sequência de etapa mais adiantada <b>cancela o que estiver pendente das etapas anteriores</b> — é assim que o funil funciona, e vale também no disparo manual.</div>
     <div class="displista">${linhas||'<div class="seqvazio">Nenhuma sequência ativa.</div>'}</div>
     <div class="brow" style="justify-content:flex-end;gap:9px;margin-top:14px">
       <button class="btn btns" onclick="dispFechar()">Voltar</button>
     </div>`,true);
   if(DISP_VOLTA_CARTAO)FILA_VOLTAR=alvo;
+}
+
+/* Abre um item da lista e fecha os outros — 16/09/2026.
+   ANTES O CLIQUE NO ITEM JA DISPARAVA, sem confirmacao e com duas linhas
+   de previa. Como os descartes sao quase iguais no comeco ("Entendi,
+   {primeiro-nome} 💗 / Pelas suas respostas, infelizmente..."), errar o
+   bloco custava uma mensagem errada na conversa de uma cliente, que nao
+   da para apagar depois. Agora o clique ABRE e o disparo tem botao
+   proprio dentro do item aberto.
+   Um aberto de cada vez porque o texto inteiro e alto: dois abertos e
+   ninguem mais acha a lista. */
+function dispAbrir(codigo){
+  const lista=document.querySelector('.displista');
+  if(!lista)return;
+  const alvo=lista.querySelector(`.dispitem[data-cod="${codigo}"]`);
+  if(!alvo)return;
+  const abrindo=!alvo.classList.contains('aberto');
+  lista.querySelectorAll('.dispitem.aberto').forEach(el=>el.classList.remove('aberto'));
+  if(abrindo){
+    alvo.classList.add('aberto');
+    // o item aberto cresce e pode ficar fora da area visivel da lista
+    alvo.scrollIntoView({block:'nearest'});
+  }
 }
 
 /* Desistir do disparo. Do cartao devolve o cartao (o filaFecharDialogo

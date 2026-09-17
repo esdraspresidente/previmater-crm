@@ -8,7 +8,14 @@
  *
  * ESTE ARQUIVO E PUBLICO e nao tem segredo nenhum dentro. O que autoriza a
  * conversa com o banco e a senha de 8 horas que o botao "Senha do robo" gera
- * no CRM e o Esdras cola na hora. Sem ela a function responde 401 para todos.
+ * no CRM. Sem ela a function responde 401 para todos.
+ *
+ * ONDE A SENHA FICA: no localStorage DESTE dominio (a Autentica), para o
+ * prazo de 8 horas significar alguma coisa — pedir a senha a cada clique
+ * tornava o prazo enfeite. O preco: qualquer script que rode nesta pagina
+ * pode ler esse localStorage, inclusive os da propria Autentica. E por isso
+ * que a senha vale 8 horas e nao 8 dias, e que o unico estrago possivel com
+ * ela e ler a fila de contratos do dia — nao ha chave do banco aqui.
  *
  * DUPLICACAO CONSCIENTE: os tres POSTs tambem existem em
  * previmater-ops/robo-autentica/autentica.js, que foi escrito para servir
@@ -40,6 +47,10 @@
    * documento_hash pega), vira conferencia na mao. Trocar a senha antes
    * custa dez segundos; descobrir no meio custa a tarde. */
   const MARGEM_MIN = 15;
+
+  /* Chave do localStorage. Nome com prefixo porque o dominio e deles: nao
+   * vamos colidir com alguma chave da propria Autentica. */
+  const GUARDA = 'pm_autentica_senha';
 
   if (window.__autenticaRodando) { alert('O robô já está rodando nesta aba.'); return; }
   if (!location.href.startsWith(BASE)) {
@@ -205,28 +216,80 @@
     return Math.floor((new Date(iso).getTime() - Date.now()) / 60000);
   }
 
+  /* A validade guardada e a que o SERVIDOR informou no ultimo `pegar`, nunca
+   * uma conta nossa: se o Esdras gerar outra senha no CRM, esta aqui morre
+   * antes do prazo e quem descobre e o 401. */
+  function senhaGuardada() {
+    try {
+      const bruto = localStorage.getItem(GUARDA);
+      if (!bruto) return null;
+      const g = JSON.parse(bruto);
+      if (!g || !g.codigo) return null;
+      // margem tambem aqui: senha quase vencida nao serve para comecar lote
+      if (minutosAte(g.validade) <= MARGEM_MIN) return null;
+      return g.codigo;
+    } catch (e) { return null; }
+  }
+  function guardarSenha(codigo, validade) {
+    try { localStorage.setItem(GUARDA, JSON.stringify({ codigo, validade })); } catch (e) {}
+  }
+  function esquecerSenha() {
+    try { localStorage.removeItem(GUARDA); } catch (e) {}
+  }
+  function pedirSenha() {
+    SENHA = (prompt('Cole a senha do robô (botão "Senha do robô", quadro Comercial do CRM):') || '').trim();
+    if (!SENHA) { fechar(); return false; }
+    return true;
+  }
+
   async function comecar() {
-    SENHA = (prompt('Cole a senha do robô (botão no quadro Comercial do CRM):') || '').trim();
-    if (!SENHA) { fechar(); return; }
+    /* Com senha guardada e boa, nao pergunta nada: o clique unico e o ponto
+     * inteiro do favorito. Pergunta so quando nao ha senha, quando ela venceu,
+     * ou quando o servidor recusa a que estava guardada. */
+    let jaPedi = false;
+    const guardada = senhaGuardada();
+    if (guardada) { SENHA = guardada; log('Usando a senha guardada.', '#7f9'); }
+    else { if (!pedirSenha()) return; jaPedi = true; }
 
     log('Buscando a fila…', '#9fd');
-    let fila;
-    try {
-      fila = await chamar('pegar');
-    } catch (e) {
-      if (String(e.message) === 'SENHA_INVALIDA') {
-        log('Senha inválida ou vencida. Gere outra no CRM e clique de novo.', '#ff9a8a');
-      } else {
-        log('Não consegui buscar a fila: ' + esc(e.message), '#ff9a8a');
+    let fila = null;
+    for (let volta = 0; volta < 2 && !fila; volta++) {
+      try {
+        fila = await chamar('pegar');
+      } catch (e) {
+        const motivo = String(e.message);
+        if (motivo === 'SENHA_INVALIDA' && !jaPedi) {
+          /* A guardada nao vale mais. O caso comum nao e prazo vencido (isso
+           * o senhaGuardada() ja filtrou) e sim senha nova gerada no CRM, que
+           * invalida a anterior. Joga fora e pergunta, em vez de mandar o
+           * Esdras clicar de novo sem entender. */
+          esquecerSenha();
+          log('A senha guardada não vale mais — provavelmente foi gerada outra no CRM.', '#ffcf7a');
+          if (!pedirSenha()) return;
+          jaPedi = true;
+          continue;
+        }
+        if (motivo === 'SENHA_INVALIDA') {
+          esquecerSenha();
+          log('Senha inválida ou vencida. Gere outra no CRM e clique de novo.', '#ff9a8a');
+        } else {
+          log('Não consegui buscar a fila: ' + esc(e.message), '#ff9a8a');
+        }
+        return;
       }
-      return;
     }
+    if (!fila) return;
+
+    // guarda com a validade que veio do servidor, para o proximo clique nao perguntar
+    guardarSenha(SENHA, fila.validade);
 
     /* A margem e conferida ANTES de qualquer POST. Com os cartoes ja
      * travados pelo `pegar`, desistir aqui apenas os devolve a fila quando a
      * trava vencer — nenhum envelope foi criado. */
     const min = minutosAte(fila.validade);
     if (min <= MARGEM_MIN) {
+      // esquece a guardada: no proximo clique ele pergunta em vez de repetir isto
+      esquecerSenha();
       log(`A senha vence em ${min} min. Gere outra no CRM antes de rodar — ` +
         'senha que vence no meio do lote deixa contrato enviado sem link no cartão.', '#ffcf7a');
       return;

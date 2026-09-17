@@ -7951,6 +7951,25 @@ function ehReativacao(a){
   const s=FILA_SEQ[a.sequencia_id];
   return !!s && String(s.codigo||'').indexOf('reativacao')===0;
 }
+/* QUEM E DO CANAL OFICIAL — a aba API Oficial.
+
+   O CRITERIO E O CANAL DO CARTAO e nao a sequencia, ao contrario da
+   reativacao: `crm_automacoes` NAO TEM coluna de canal (conferido em
+   17/09), e quem sabe por onde a conversa anda e o `canal_ativo` do
+   cliente. Mesma linha pode ser triagem, cobranca ou fala da Samara — o
+   que junta todas nesta aba e o meio por onde vao sair.
+
+   OFICIAL GANHA DE REATIVACAO quando as duas valem: durante a virada, o
+   que sai pelo numero novo tem que estar num lugar so, nem que uma linha
+   de reativacao mude de aba por causa disso. Cada linha aparece em UMA
+   aba, senao a soma das abas deixa de bater com a fila.
+
+   Hoje devolve falso para todo mundo: os 38.117 cartoes estao em
+   `whatsgw`. A aba nasce vazia de proposito e se enche sozinha quando o
+   primeiro cartao for para o canal oficial. */
+function ehCanalOficial(a){
+  return String(a.crm_clientes&&a.crm_clientes.canal_ativo||'').toLowerCase()==='oficial';
+}
 /* O telefone vem do banco em formatos diferentes: uns ja formatados, uns
    so digitos com 55 na frente. Lido as pressas, 5579999451651 e uma
    parede de numeros e da para ler o DDD errado. */
@@ -7986,7 +8005,7 @@ async function pageFila(){
 
   const[{data,error},{data:vars},{data:seqs},{data:cads},{data:listas},{data:msgs}]=await Promise.all([
     sb.from('crm_automacoes')
-      .select('id,cliente_id,tipo_automacao,sequencia_id,cadencia_id,data_hora_agendada,status,texto_montado,flags,erro,tentativas,ordem,criado_em,motivo_cancelamento,crm_clientes(nome_completo,telefone_principal,lista_id,samara_dados)')
+      .select('id,cliente_id,tipo_automacao,sequencia_id,cadencia_id,data_hora_agendada,status,texto_montado,flags,erro,tentativas,ordem,criado_em,motivo_cancelamento,crm_clientes(nome_completo,telefone_principal,lista_id,samara_dados,canal_ativo)')
       .in('status',['aguardando_aprovacao','agendado','pausado','erro','vencida'])
       .order('data_hora_agendada',{ascending:true})
       .limit(300),
@@ -8253,8 +8272,9 @@ function renderFila(){
      somem: vao todas para a aba Reativações, com qualquer status. Se
      ficassem nos dois lugares, a soma das abas deixaria de bater com a
      fila e nao daria para saber se algo foi tratado duas vezes. */
-  const funil=FILA_CACHE.filter(a=>!ehReativacao(a));
-  const reativ=FILA_CACHE.filter(ehReativacao);
+  const oficial=FILA_CACHE.filter(ehCanalOficial);
+  const funil=FILA_CACHE.filter(a=>!ehReativacao(a)&&!ehCanalOficial(a));
+  const reativ=FILA_CACHE.filter(a=>ehReativacao(a)&&!ehCanalOficial(a));
   const aprovar=funil.filter(a=>a.status==='aguardando_aprovacao');
   const agendadas=funil.filter(a=>a.status==='agendado'||a.status==='pausado');
   const comErro=funil.filter(a=>a.status==='erro');
@@ -8280,6 +8300,7 @@ function renderFila(){
      aba('vencidas','Vencidas',vencidas.length,vencidas.length>0)+
      aba('erro','Com erro',comErro.length,comErro.length>0)+
      aba('reativ','Reativações',reativ.length,false)+
+     aba('oficial','API Oficial',oficial.length,oficial.length>0)+
      aba('ritmo','Ritmo',0,false)+
      '</div>';
 
@@ -8342,9 +8363,21 @@ function renderFila(){
      resposta e a lista inteira: o que ja saiu esperando, o que venceu e
      o que falhou, junto. O status de cada linha continua aparecendo na
      etiqueta do proprio cartão. */
-  const lista=FILA_ABA==='reativ'?reativ
+  const lista=FILA_ABA==='oficial'?oficial
+    :FILA_ABA==='reativ'?reativ
     :(FILA_ABA==='aprovar'?aprovar:(FILA_ABA==='erro'?comErro:(FILA_ABA==='vencidas'?vencidas:agendadas)));
 
+  if(FILA_ABA==='oficial'){
+    h+='<div class="filabox" style="margin-bottom:12px"><div class="filaboxl">O que é esta aba</div>'+
+       '<div class="fhint">Tudo que está na fila para sair pelo <b>número da API Oficial</b> (canal <code>oficial</code> no cartão). '+
+       'Sai das abas Aprovar, Agendadas, Vencidas, Com erro e Reativações: durante a virada, o que anda pelo número novo fica num lugar só, '+
+       'e cada linha aparece em uma aba apenas — senão a soma das abas deixa de bater com a fila.<br><br>'+
+       '<b>Todos os status juntos</b> (agendada, vencida, com erro, esperando aprovação); a etiqueta de cada linha diz qual é.<br><br>'+
+       '<b>Janela de 24h:</b> no canal oficial, texto livre só sai dentro de 24h desde a última mensagem da lead. Passou disso, a linha fica aqui '+
+       'com erro dizendo <b>janela de 24h fechada</b> — não é falha de envio, é bloqueio de regra da Meta, e "Tentar de novo" volta a falhar '+
+       'enquanto a janela não reabrir. Quem reabre é a lead, escrevendo; ou um template aprovado, quando existir.<br><br>'+
+       '<b>Sem reenvio em lote aqui</b>, de propósito: mandar de uma vez pelo número novo é exatamente o que derruba a qualidade dele.</div></div>';
+  }
   if(FILA_ABA==='reativ'){
     h+='<div class="filabox" style="margin-bottom:12px"><div class="filaboxl">O que é esta aba</div>'+
        '<div class="fhint">Só as sequências de <b>reativação</b> — o resgate da base parada que veio do Trello. '+
@@ -8358,7 +8391,7 @@ function renderFila(){
      do funil e a de Reativações. A conta de quantas ha e feita sobre a
      aba aberta, senao "selecionar todas" na Reativações contaria as
      vencidas do funil, que nem estao na tela. */
-  const vencidasDaAba=(FILA_ABA==='reativ'?reativ.filter(a=>a.status==='vencida'):vencidas);
+  const vencidasDaAba=FILA_ABA==='oficial'?[]:(FILA_ABA==='reativ'?reativ.filter(a=>a.status==='vencida'):vencidas);
   if((FILA_ABA==='vencidas'||FILA_ABA==='reativ')&&vencidasDaAba.length){
     const n=FILA_SEL.size;
     const min=Math.max(0,Math.round((n-1)*2));

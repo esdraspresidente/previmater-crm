@@ -268,6 +268,14 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
     </div>
 
     <div class="card">
+      <div class="ctopo">
+        <div class="ctit">Quanto tempo até saber se ela tem direito</div>
+      </div>
+      <div class="csub"><b>Segue o período escolhido lá em cima.</b> Conta da <b>primeira mensagem</b> da lead até o <b>primeiro veredito que responde a pergunta</b>: tem direito, não tem, caminho pela contribuição ou judicial. "Falta dado" e "conferir CNIS" não param o relógio — ainda não dá para dizer nada a ela. Só leads de anúncio, as mesmas dos contatos novos.</div>
+      <div id="tempover"><div class="vazio">Carregando…</div></div>
+    </div>
+
+    <div class="card">
       <div class="ctit">Investimento no Meta</div>
       <div class="csub" id="invsub">—</div>
       <div class="inv">
@@ -430,6 +438,7 @@ let ANUNCIOS_ANT=null;   // mesmo recorte deslocado, por codigo; null = sem comp
 let VARIANTE='qtd';      // qtd = geral | qtd_pre | qtd_adm
 let PERIODO='7';         // hoje | ontem | 7 | 15 | 30 | tudo
 let COMPARAR='0';        // 0 = sem comparacao; 1,7,15,30 = deslocamento em dias
+let TEMPO_PEDIDO=0;      // numero do ultimo pedido do bloco de tempo; ver carregarTempo()
 
 const PERIODOS=[['hoje','Hoje'],['ontem','Ontem'],['7','7 dias'],['15','15 dias'],['30','30 dias'],['tudo','Tudo']];
 /* TODO O PERIODO — 23/09/2026, pedido do Esdras.
@@ -474,6 +483,7 @@ async function carregar(){
   if(!desc.error && Array.isArray(desc.data)) DESCARTES=desc.data;
   if(!canc.error && Array.isArray(canc.data)) CANCELADOS=canc.data;
   carregarAnuncios();
+  carregarTempo();
   if(!meta.error && Array.isArray(meta.data)) META=meta.data;
 
   // A view devolve um dia por linha desde 12/08. Com 400 dias de teto o
@@ -548,10 +558,10 @@ function montarFiltros(){
      tela filtra em memoria porque ja tem todos os dias na mao; esta
      tabela nao pode ter, ver o comentario de carregarAnuncios(). O
      botao de comparacao nao recarrega nada: ele nao mexe no periodo. */
-  $('fperiodo').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{PERIODO=b.dataset.v;montarFiltros();aplicar();carregarAnuncios();});
+  $('fperiodo').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{PERIODO=b.dataset.v;montarFiltros();aplicar();carregarAnuncios();carregarTempo();});
   /* A comparacao agora tambem mexe nos criativos: precisa de uma
      segunda ida ao banco, com a janela deslocada. */
-  $('fcomparar').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{COMPARAR=b.dataset.v;montarFiltros();aplicar();carregarAnuncios();});
+  $('fcomparar').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{COMPARAR=b.dataset.v;montarFiltros();aplicar();carregarAnuncios();carregarTempo();});
 }
 
 /**
@@ -1199,6 +1209,119 @@ function desenharCancelados(){
   + 'Cartão que sair de Contrato Cancelado deixa de contar aqui. '
   + '"Descartada depois de assinar" é cartão que foi para Descartado tendo contrato disparado: '
   + 'o cancelamento existiu, só não passou pela lista certa.</div>';
+}
+
+/* TEMPO ATE SABER SE TEM DIREITO — 25/09/2026.
+
+   Numero grande e a MEDIANA, nao a media. Em 25/09 a mediana era 24 min
+   e a media 13 h: a media e puxada por quem some no meio da triagem e
+   volta dias depois, e diria que "a triagem demora meio dia" quando
+   metade das leads tem resposta antes de meia hora. A media fica na
+   linha de baixo porque e o numero que o Gerenciador acostuma a ver, e
+   a distancia entre as duas e ela mesma uma informacao: quanto maior,
+   mais gente esta sumindo no meio do caminho.
+
+   O SEGUNDO NUMERO E QUEM CONCLUIU. Tempo so existe para quem teve
+   resposta; em 25/09 era pouco mais da metade das que chegaram. Mostrar
+   o tempo sozinho esconderia o problema maior, e em periodo curto o
+   tempo sai otimista justamente porque quem demora ainda esta na fila.
+
+   Volta ao banco pelo mesmo motivo dos criativos: mediana nao se soma
+   dia a dia, e uma linha por lead estouraria o corte de 1.000 do
+   PostgREST em poucas semanas. A funcao trafego_tempo_veredito devolve
+   uma linha ja calculada, so com contagem e tempo — nenhuma pessoa. */
+const INICIO_VEREDITO='2026-08-27'; // motor grava veredito desde 26/08 (v93); a funcao corta no dia seguinte
+function fmtMin(m){
+  if(m==null) return '—';
+  m=Math.round(Number(m));
+  if(m<60) return m+' min';
+  const h=Math.floor(m/60), r=m%60;
+  return h+'h'+(r?String(r).padStart(2,'0'):'');
+}
+async function carregarTempo(){
+  /* Pedido numerado: quem clica rapido em dois periodos pode receber a
+     resposta do primeiro depois da do segundo, e a tela mostraria o
+     numero de um periodo com o rotulo do outro. So desenha o ultimo. */
+  const pedido=++TEMPO_PEDIDO;
+  const j=janela(PERIODO);
+  if(j.fim<INICIO_VEREDITO){
+    $('tempover').innerHTML='<div class="vazio">Antes de '+fmtBR(INICIO_VEREDITO)+' o veredito não era gravado: não há como medir este período.</div>';
+    return;
+  }
+  const desloc=deslocAtivo();
+  // Comparacao so quando a janela anterior tem ao menos um dia com
+  // veredito gravado; antes disso seria comparar com o nada.
+  const jAnt=desloc?{ini:menos(j.ini,desloc),fim:menos(j.fim,desloc)}:null;
+  const usaAnt=jAnt&&jAnt.fim>=INICIO_VEREDITO;
+  const [at,ant]=await Promise.all([
+    sb.rpc('trafego_tempo_veredito',{p_ini:j.ini,p_fim:j.fim}),
+    usaAnt?sb.rpc('trafego_tempo_veredito',{p_ini:jAnt.ini,p_fim:jAnt.fim}):Promise.resolve({data:null,error:null})
+  ]);
+  if(pedido!==TEMPO_PEDIDO) return;
+  if(at.error||!Array.isArray(at.data)||!at.data.length){
+    $('tempover').innerHTML='<div class="vazio">Não deu para carregar o tempo deste período.</div>'; return;
+  }
+  const b=(usaAnt&&!ant.error&&Array.isArray(ant.data)&&ant.data.length)?ant.data[0]:null;
+  desenharTempo(at.data[0],b,j,desloc?jAnt:null);
+}
+function desenharTempo(t,b,j,jAnt){
+  if(!t.chegaram){ $('tempover').innerHTML='<div class="vazio">Nenhuma lead de anúncio chegou neste período.</div>'; return; }
+  const pct=(p,q)=>q?Math.round(100*p/q):0;
+  const taxa=pct(t.concluidas,t.chegaram);
+
+  /* Tempo menor e melhor, entao a cor e invertida em relacao aos KPIs de
+     cima: subir o tempo fica vermelho. Taxa de conclusao compara em
+     pontos percentuais, nao em % de %, que ninguem le direito. */
+  let cmpTempo='', cmpTaxa='';
+  if(jAnt){
+    if(!b||!b.chegaram) cmpTempo=cmpTaxa='<div class="cmp sembase">sem base de comparação</div>';
+    else{
+      if(b.mediana_min!=null&&t.mediana_min!=null){
+        const d=t.mediana_min-b.mediana_min;
+        cmpTempo='<div class="cmp '+(d<0?'sobe':d>0?'desce':'igual')+'">'+(d===0?'igual':(d>0?'+':'−')+fmtMin(Math.abs(d)))+' ('+fmtMin(b.mediana_min)+' antes)'
+          +(jAnt.ini<INICIO_VEREDITO?' · base parcial':'')+'</div>';
+      }
+      const tb=pct(b.concluidas,b.chegaram), d2=taxa-tb;
+      cmpTaxa='<div class="cmp '+(d2>0?'sobe':d2<0?'desce':'igual')+'">'+(d2===0?'igual':(d2>0?'+':'−')+Math.abs(d2)+(Math.abs(d2)===1?' pt':' pts'))+' ('+tb+'% antes)'
+        +(jAnt.ini<INICIO_VEREDITO?' · base parcial':'')+'</div>';
+    }
+  }
+
+  const blocoTempo=t.concluidas
+    ? '<div class="n">'+fmtMin(t.mediana_min)+'</div><div class="l">Tempo típico até a resposta</div>'+cmpTempo
+      +'<div class="e">Metade das que concluíram teve resposta em até isso. '
+      +'Média: <b>'+fmtMin(Number(t.media_h)*60)+'</b> — puxada por quem some no meio da triagem e volta dias depois.</div>'
+    : '<div class="n">—</div><div class="l">Tempo típico até a resposta</div><div class="e">Nenhuma das '+t.chegaram+' concluiu ainda.</div>';
+
+  const blocoTaxa='<div class="n">'+t.concluidas+' de '+t.chegaram+'</div><div class="l">Chegaram a uma resposta ('+taxa+'%)</div>'+cmpTaxa
+    +'<div class="e">'+t.sem_conclusao+' ainda sem resposta: '
+    +t.pendentes+' parada'+(t.pendentes===1?'':'s')+' em falta de dado ou conferir CNIS, '
+    +t.sem_veredito+' sem veredito nenhum.</div>';
+
+  let det='';
+  if(t.concluidas){
+    det='Das que concluíram: <b>'+pct(t.ate_1h,t.concluidas)+'%</b> em até 1 hora, <b>'+pct(t.ate_24h,t.concluidas)+'%</b> em até 24 horas.';
+    if(t.mediana_min_com!=null||t.mediana_min_sem!=null)
+      det+=' Tempo típico de quem <b>tem direito</b>: '+fmtMin(t.mediana_min_com)+'; de quem <b>não tem</b>: '+fmtMin(t.mediana_min_sem)+'.';
+  }
+
+  /* AVISOS. Cada um explica por que o numero de cima pode enganar, e
+     cada um aparece so quando o motivo existe no periodo escolhido. */
+  const av=[];
+  if(j.ini<INICIO_VEREDITO) av.push('O veredito só é gravado desde <b>'+fmtBR(INICIO_VEREDITO)+'</b>: a conta começa aí, não em '+fmtBR(j.ini)+'.');
+  // Periodo curto: quem demora ainda esta na fila, entao so os rapidos
+  // entraram na conta. Com metade sem resposta, o tempo sai bonito.
+  if(j.dias<=15&&t.sem_conclusao>0) av.push('Em período curto o tempo sai <b>otimista</b>: só entra quem já concluiu, e quem demora ainda está na fila.');
+  /* HISTORICO HERDADO. Antes de 25/09 so existia a data da ULTIMA
+     mudanca de veredito, e foi com ela que o historico foi preenchido.
+     Lead recalculada semanas depois aparece com semanas de espera. O
+     aviso some sozinho quando essas passarem a menos de 1 em 10. */
+  if(t.herdadas>0&&t.herdadas*10>=t.concluidas)
+    av.push((t.herdadas===t.concluidas?'Todas as '+t.concluidas:t.herdadas+' das '+t.concluidas)+' concluídas são de antes de 25/09, quando o sistema só guardava a <b>última</b> mudança de veredito, não a primeira. Para essas o tempo pode estar <b>maior</b> do que foi. O aviso some sozinho quando o registro novo dominar.');
+
+  $('tempover').innerHTML='<div class="dois" style="margin-top:0"><div class="cpl">'+blocoTempo+'</div><div class="cpl">'+blocoTaxa+'</div></div>'
+    +(det?'<div class="e" style="font-size:12px;color:var(--text2);margin-top:12px;line-height:1.55;">'+det+'</div>':'')
+    +(av.length?'<div class="e" style="font-size:11px;margin-top:12px;line-height:1.5;background:var(--yellow-bg);border:1px solid #F0D9AE;border-radius:10px;padding:10px 12px;color:#7A4400;">'+av.join('<br>')+'</div>':'');
 }
 
 /* Anuncio x funil real.

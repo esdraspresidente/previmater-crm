@@ -428,10 +428,27 @@ let ANUNCIOS=[];         // uma linha por criativo, ja somada NO PERIODO
 let ANUNCIOS_JANELA=null;// a janela que gerou o ANUNCIOS atual, para os avisos
 let ANUNCIOS_ANT=null;   // mesmo recorte deslocado, por codigo; null = sem comparacao
 let VARIANTE='qtd';      // qtd = geral | qtd_pre | qtd_adm
-let PERIODO='7';         // hoje | ontem | 7 | 15 | 30
+let PERIODO='7';         // hoje | ontem | 7 | 15 | 30 | tudo
 let COMPARAR='0';        // 0 = sem comparacao; 1,7,15,30 = deslocamento em dias
 
-const PERIODOS=[['hoje','Hoje'],['ontem','Ontem'],['7','7 dias'],['15','15 dias'],['30','30 dias']];
+const PERIODOS=[['hoje','Hoje'],['ontem','Ontem'],['7','7 dias'],['15','15 dias'],['30','30 dias'],['tudo','Tudo']];
+/* TODO O PERIODO — 23/09/2026, pedido do Esdras.
+   Comeca no primeiro dia da vw_trafego_dia, que e o dia em que o CRM
+   passou a registrar conversa. A data sai da propria view (LINHAS[0])
+   e nao de uma constante solta, para o botao dizer a verdade se a
+   serie um dia comecar em outra data; a constante so vale enquanto a
+   view ainda nao respondeu. O botao mostra a data de inicio no proprio
+   rotulo porque "Tudo" sozinho nao diz desde quando e o numero de cima
+   passaria a parecer historico de dez anos. */
+const INICIO_CRM='2026-08-12';
+function inicioSerie(){ return (LINHAS.length&&LINHAS[0].dia)||INICIO_CRM; }
+/* Comparar o periodo inteiro com ele mesmo deslocado nao tem base: o
+   deslocamento cai todo antes de o sistema existir. Em vez de mostrar
+   "sem base de comparacao" em cada KPI e ainda gastar uma segunda ida
+   ao banco nos criativos, a comparacao fica desligada enquanto "Tudo"
+   estiver escolhido. COMPARAR nao e apagado: volta sozinho ao trocar
+   de periodo. */
+function deslocAtivo(){ return PERIODO==='tudo' ? 0 : (Number(COMPARAR)||0); }
 /* DESDE QUANDO CADA FONTE EXISTE. Sem isto o filtro de 30 dias mostra
    um custo por elegivel bonito por um motivo ruim: metade da janela e
    anterior ao dia em que o anuncio passou a ser gravado na lead, entao
@@ -486,6 +503,13 @@ function janela(periodo){
   const hoje=hojeISO();
   if(periodo==='hoje')  return {ini:hoje,fim:hoje,dias:1};
   if(periodo==='ontem'){ const o=menos(hoje,1); return {ini:o,fim:o,dias:1}; }
+  if(periodo==='tudo'){
+    const ini=inicioSerie();
+    // Dias inclusivos entre as duas datas. Meio-dia UTC nos dois lados,
+    // como o menos(), para horario de verao nunca comer um dia da conta.
+    const dias=Math.round((new Date(hoje+'T12:00:00Z')-new Date(ini+'T12:00:00Z'))/86400000)+1;
+    return {ini,fim:hoje,dias};
+  }
   const n=Number(periodo);
   return {ini:menos(hoje,n-1),fim:hoje,dias:n};
 }
@@ -514,8 +538,11 @@ function somar(ini,fim){
 // ---------- filtros ----------
 function montarFiltros(){
   $('fperiodo').innerHTML=PERIODOS.map(([v,r])=>
-    '<button class="fb'+(v===PERIODO?' on':'')+'" data-v="'+v+'">'+r+'</button>').join('');
-  $('fcomparar').innerHTML=COMPARACOES.map(([v,r])=>
+    '<button class="fb'+(v===PERIODO?' on':'')+'" data-v="'+v+'">'
+    +(v==='tudo'?r+' (desde '+fmtBR(inicioSerie())+')':r)+'</button>').join('');
+  $('fcomparar').innerHTML=PERIODO==='tudo'
+    ? '<span class="cmp sembase">Não se aplica ao período inteiro: antes dele o sistema não existia.</span>'
+    : COMPARACOES.map(([v,r])=>
     '<button class="fb'+(v===COMPARAR?' on':'')+'" data-v="'+v+'">'+r+'</button>').join('');
   /* Trocar o periodo volta ao banco SO para os criativos. O resto da
      tela filtra em memoria porque ja tem todos os dias na mao; esta
@@ -537,7 +564,7 @@ function montarFiltros(){
  */
 function escreverComparacao(idCmp,atual,anterior,janelaAnt,inicioDados){
   const el=$(idCmp);
-  if(COMPARAR==='0'){ el.textContent=''; el.className='cmp'; return; }
+  if(deslocAtivo()===0){ el.textContent=''; el.className='cmp'; return; }
   if(janelaAnt.fim<inicioDados){
     el.textContent='sem base de comparação'; el.className='cmp sembase'; return;
   }
@@ -557,7 +584,7 @@ function aplicar(){
   const j=janela(PERIODO);
   const a=somar(j.ini,j.fim);
 
-  const desloc=Number(COMPARAR)||0;
+  const desloc=deslocAtivo();
   const jAnt={ini:menos(j.ini,desloc),fim:menos(j.fim,desloc)};
   const b=somar(jAnt.ini,jAnt.fim);
 
@@ -579,8 +606,10 @@ function aplicar(){
 
   desenharInvestimento(j,a.contatos);
 
-  const periodoTxt=j.dias===1?fmtBR(j.ini):fmtBR(j.ini)+' a '+fmtBR(j.fim);
-  const compTxt=COMPARAR==='0'?'':' · comparado com '+(jAnt.ini===jAnt.fim?fmtBR(jAnt.ini):fmtBR(jAnt.ini)+' a '+fmtBR(jAnt.fim));
+  const periodoTxt=PERIODO==='tudo'
+    ? 'todo o período, desde '+fmtBR(j.ini)+'/'+j.ini.slice(0,4)+' até hoje ('+fmtBR(j.fim)+'), '+j.dias+' dias'
+    : (j.dias===1?fmtBR(j.ini):fmtBR(j.ini)+' a '+fmtBR(j.fim));
+  const compTxt=desloc===0?'':' · comparado com '+(jAnt.ini===jAnt.fim?fmtBR(jAnt.ini):fmtBR(jAnt.ini)+' a '+fmtBR(jAnt.fim));
   $('linha7').textContent='Período: '+periodoTxt+compTxt+'. Contatos são registrados desde '
     +fmtBR(inicioDados)+'/'+inicioDados.slice(0,4)+'; assinatura, desde 17/08.';
 
@@ -1203,7 +1232,7 @@ function desenharCancelados(){
    e era por isso que esta tabela nao tinha filtro ate hoje. */ async function carregarAnuncios(){
   const j = janela(PERIODO);
   ANUNCIOS_JANELA = j;
-  const desloc = Number(COMPARAR)||0;
+  const desloc = deslocAtivo();
   const jAnt = desloc ? {ini:menos(j.ini,desloc), fim:menos(j.fim,desloc)} : null;
 
   const [at, ant] = await Promise.all([

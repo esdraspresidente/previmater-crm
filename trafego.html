@@ -1563,11 +1563,23 @@ function desenharAnuncios(){
 }
 
 function baixarAnuncios(){
-  const linhas=[['Codigo','Descricao','Formato','Anuncios','Leads','Nunca respondeu','Em triagem','Descartadas','Elegiveis','Nao classificadas','Gasto','Por lead','Por elegivel','% descarte']];
+  /* 28/09/2026: o CSV ganhou tres regua novas no fim, na ordem.
+     "Elegiveis" e ESTADO DO CARD (lista onde ele esta hoje): conta a
+     gravida da incubadora e deixa de fora quem tem direito e parou em
+     Retomada — nao serve para dizer se o criativo trouxe mae com direito.
+     "Veredito positivo" e o veredito de HOJE do motor (TEM_DIREITO,
+     CAMINHO_CONTRIBUICAO ou JUDICIAL), que e a regua de direito.
+     Contratos ja existia na tela e faltava no arquivo.
+     Colunas novas vao NO FIM de proposito: planilha que o Esdras ja
+     montou em cima deste CSV continua lendo as antigas no mesmo lugar. */
+  const linhas=[['Codigo','Descricao','Formato','Anuncios','Leads','Nunca respondeu','Em triagem','Descartadas','Elegiveis','Nao classificadas','Gasto','Por lead','Por elegivel','% descarte',
+                 'Veredito positivo','Por veredito positivo','Contratos','Por contrato']];
   for(const a of ANUNCIOS) linhas.push([a.codigo,a.criativo_desc||'',a.formato||'',a.anuncios||1,
                                         a.leads||0,a.nunca_respondeu||0,a.em_triagem||0,a.descartada||0,
                                         a.elegivel||0,a.nao_classificada||0,a.gasto||0,
-                                        a.por_lead||'',a.por_elegivel||'',a.pct_descarte||0]);
+                                        a.por_lead||'',a.por_elegivel||'',a.pct_descarte||0,
+                                        a.veredito_positivo||0,a.por_veredito_positivo||'',
+                                        a.contrato||0,a.por_contrato||'']);
   /* O periodo entra no NOME do arquivo. Planilha de criativo circula
      por WhatsApp e volta uma semana depois sem ninguem lembrar de que
      recorte ela era — e agora que ha recorte, dois arquivos com o

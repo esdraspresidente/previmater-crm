@@ -6927,13 +6927,16 @@ async function dwrBuscar(){
     let q=sb.from('vw_cards_parados')
       .select('cliente_id,nome,telefone,quadro,lista,cor,dias_parado,veredito,valor')
       .order('dias_parado',{ascending:false}).limit(300);
-    if(DWR_REC.recorte==='parados_direito')q=q.in('veredito',['TEM_DIREITO','CAMINHO_CONTRIBUICAO']);
-    /* O `is.null` no OR NAO e zelo: `veredito NOT IN (...)` devolve NULL
-       para quem tem a coluna vazia, e NULL nao passa no WHERE. Como 93
-       dos 98 parados ainda estao sem veredito (a varredura do motor so
-       carimba quem tem triagem da Samara, e cartao herdado do Trello nao
-       tem), sem esta linha a faixa diria 93 e a gaveta abriria vazia. */
-    else q=q.or('veredito.is.null,veredito.not.in.(TEM_DIREITO,CAMINHO_CONTRIBUICAO)');
+    /* A FAIXA VEM DA VIEW — 28/09/2026. Ate aqui a gaveta filtrava pelo
+       veredito, em qualquer quadro, e "paradas COM direito" mostrava
+       gravida da incubadora e cliente ja protocolada no INSS: o veredito
+       da triagem continua no cartao depois do contrato. Quem decide o que
+       entra e a coluna faixa_dashboard da vw_cards_parados, a mesma que a
+       RPC crm_dashboard conta — uma definicao so, para a faixa e a gaveta
+       nunca discordarem: comercial com direito + Montar Processo/Protocolar
+       = direito; resto do comercial = faxina; os outros quadros ficam de
+       fora porque seguem por outro caminho. */
+    q=q.eq('faixa_dashboard',DWR_REC.recorte==='parados_direito'?'direito':'faxina');
     const{data:pl,error:pe}=await q;
     DWR_CARREGANDO=false;
     if(pe){$('dwrb').innerHTML='<div class="emp"><div class="empt">Erro ao carregar a lista</div><div class="emps">'+esc(pe.message)+'</div></div>';return;}

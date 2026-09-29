@@ -3490,6 +3490,89 @@ async function salvarOrdemLista(listaId,body,cid){
    O UPDATE vai travado por `.is('contrato_disparado_em', null)` com
    select: se o motor ou outra aba carimbou no meio do caminho, afeta 0
    linhas e o clique avisa, em vez de sobrescrever o disparo real. */
+/* KIT JUDICIAL — 29/09/2026.
+   Gera num clique os quatro documentos do caso judicial (contrato de
+   honorarios, procuracao, declaracao de hipossuficiencia e termo de
+   renuncia), que ate aqui eram preenchidos na mao a cada cliente.
+
+   QUATRO ARQUIVOS E NAO UM: cada documento e assinado sozinho pelo
+   gov.br, que assina um arquivo por vez (decisao do Esdras, 29/09).
+
+   QUEM PREENCHE E A FUNCTION contrato-judicial, nao o navegador: o
+   zip-js ja e usado no motor para o contrato administrativo, com as
+   mesmas regras de CPF, telefone e data. Duas implementacoes da mesma
+   formatacao divergiriam no primeiro ajuste.
+
+   A FUNCTION LE O CADASTRO GRAVADO, nao a tela. Por isso a pergunta de
+   alteracao nao salva vem ANTES: sem ela, quem corrige o CPF no cartao
+   e clica aqui recebe o documento com o CPF antigo, e procuracao com
+   CPF errado so aparece quando o juiz manda emendar.
+
+   QUEM GUARDA OS ARQUIVOS E ESTA FUNCAO, pelo mesmo caminho do upload
+   manual de anexo (bucket + crm_anexos com o usuario da sessao). A
+   function so le; gerar duas vezes deixa oito arquivos, e isso e
+   aceitavel — e o mesmo que anexar duas vezes na mao.
+
+   NAO MEXE EM LISTA, CARIMBO NEM SEQUENCIA. O envio para assinatura do
+   judicial e manual, com biometria (decisao de 17/09); este botao so
+   produz os arquivos. */
+async function mcGerarContratoJudicial(id,btn){
+  if(!id)return;
+  if(mcTemAlteracaoNaoSalva()&&!confirm('Há alterações não salvas neste cartão.\n\nO contrato judicial sai com o que está GRAVADO no cadastro, não com o que está na tela. Gerar assim mesmo?'))return;
+  const rotulo=btn?btn.textContent:'';
+  const volta=()=>{if(btn){btn.disabled=false;btn.textContent=rotulo;}};
+  if(btn){btn.disabled=true;btn.textContent='Gerando...';}
+  const corta=new AbortController();
+  const t=setTimeout(()=>corta.abort(),90000);
+  let r=null,d=null;
+  try{
+    const{data:sess}=await sb.auth.getSession();
+    const tk=(sess&&sess.session)?sess.session.access_token:SUPABASE_ANON_KEY;
+    r=await fetch(SUPABASE_URL+'/functions/v1/contrato-judicial',{
+      method:'POST',
+      headers:{apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+tk,'Content-Type':'application/json'},
+      body:JSON.stringify({cliente_id:id}),
+      signal:corta.signal
+    });
+    d=await r.json().catch(()=>null);
+  }catch(e){
+    d=null;
+  }finally{
+    clearTimeout(t);
+  }
+  if(!r||!d||!d.ok||!Array.isArray(d.arquivos)||!d.arquivos.length){
+    toast('Contrato judicial não gerado: '+((d&&d.motivo)||'sem resposta do servidor'),'er');
+    volta();return;
+  }
+  const mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  const falhas=[];
+  for(let n=0;n<d.arquivos.length;n++){
+    const arq=d.arquivos[n];
+    const bin=atob(arq.base64);
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+    const blob=new Blob([bytes],{type:mime});
+    /* BAIXA PRIMEIRO, guarda depois: se o storage falhar, o arquivo ja
+       esta na mao de quem clicou. O intervalo entre os downloads e
+       porque o navegador descarta clique de download em rajada; no
+       Chrome a primeira vez pergunta se permite varios downloads. */
+    if(n>0)await new Promise(ok=>setTimeout(ok,700));
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);a.download=arq.nome;
+    document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},5000);
+    const caminho=`${id}/${Date.now()}_${arq.nome.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w.\-]/g,'_')}`;
+    const{error:eu}=await sb.storage.from(ANEXO_BUCKET).upload(caminho,blob,{contentType:mime});
+    if(eu){falhas.push(arq.nome);continue;}
+    const{error:ei}=await sb.from('crm_anexos').insert({cliente_id:id,usuario_id:U.id,nome_arquivo:arq.nome,caminho_storage:caminho,tamanho_bytes:bytes.length});
+    if(ei)falhas.push(arq.nome);
+  }
+  registrarAtividade(id,'gerou o contrato judicial ('+d.arquivos.length+' documentos: contrato, procuração, declaração e renúncia)');
+  if(falhas.length)toast(d.arquivos.length+' documentos baixados, mas '+falhas.length+' não ficaram nos anexos','er');
+  else toast(d.arquivos.length+' documentos gerados e guardados nos anexos','ok');
+  volta();
+  if($('mcpane-anexos'))carregarAnexos(id);
+}
 async function mcContratoExterno(id){
   if(!id)return;
   const p2=n=>String(n).padStart(2,'0');
@@ -4245,6 +4328,10 @@ function renderCardClienteModal(c,etqSel,listas){
           <div class="fld ff" style="margin-bottom:11px">
             ${c.contrato_disparado_em?`<div class="fhint">Contrato registrado em ${new Date(c.contrato_disparado_em).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'})}.</div>`:`<button class="btn btns" style="padding:6px 12px;font-size:12px" onclick="mcContratoExterno('${c.id}')">Registrar contrato assinado fora do sistema</button>
             <div class="fhint">Para contrato que já foi assinado por fora — outro número, papel, outro canal. Leva o cartão por Contrato enviado até Contrato assinado para o contrato contar no dashboard, <b>sem enviar nenhuma mensagem</b> para a cliente.</div>`}
+          </div>
+          <div class="fld ff" style="margin-bottom:11px">
+            <button class="btn btns" style="padding:6px 12px;font-size:12px" onclick="mcGerarContratoJudicial('${c.id}',this)">Gerar contrato judicial</button>
+            <div class="fhint">Gera os <b>4 documentos separados</b> — contrato de honorários, procuração, declaração de hipossuficiência e termo de renúncia — com nome, CPF, endereço e telefone <b>gravados</b> no cadastro. Cada um é assinado sozinho no gov.br. Baixam na hora e ficam na aba Anexos. O envio para assinatura continua na mão.</div>
           </div>
           <div class="fg">
             <div class="fld"><label>Referência 1 · nome</label><input type="text" id="mc-ref1-nome" value="${escA(c.referencia1_nome)}"/></div>

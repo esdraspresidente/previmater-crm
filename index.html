@@ -10814,7 +10814,7 @@ async function abrirDisparoSequencia(clienteId,voltarParaCartao){
       ${x.previa?`<div class="disppre">${esc(String(x.previa))}</div>`:''}
       <div class="dispacao">
         <span class="dispdica">${trava?(jaRoda?'já está rodando para ela':'sem texto cadastrado'):'confira o texto acima'}</span>
-        ${trava?'':`<button class="btn btnp" style="padding:7px 14px;font-size:12px" onclick="event.stopPropagation();mcConfirmarDisparo('${esc(x.codigo)}','${escA(x.nome)}')">Disparar esta</button>`}
+        ${trava?'':`<span style="display:inline-flex;gap:7px"><button class="btn btns" style="padding:7px 14px;font-size:12px" onclick="event.stopPropagation();dispEditar('${esc(x.codigo)}')">Editar para enviar</button><button class="btn btnp" style="padding:7px 14px;font-size:12px" onclick="event.stopPropagation();mcConfirmarDisparo('${esc(x.codigo)}','${escA(x.nome)}')">Disparar esta</button></span>`}
       </div>
     </div>`;
   }).join('');
@@ -10861,16 +10861,65 @@ function dispFechar(){
   if(eraCartao)filaFecharDialogo(); else fecharModal();
 }
 
-async function mcConfirmarDisparo(codigo,nome){
+/* EDITAR PARA ENVIAR — 29/09/2026.
+   As vezes a sequencia e QUASE o que se quer mandar, mas um detalhe
+   foge. Aqui o texto da primeira mensagem pode ser ajustado para ESTE
+   disparo, e so para ele.
+
+   O QUE O TEXTO EDITADO TROCA: a mensagem que sai agora (o passo 1). Os
+   passos seguintes saem com o texto da cadencia, e a cadencia no banco
+   nao e tocada — o proximo disparo desta sequencia, para ela ou para
+   qualquer outra cliente, volta ao texto de sempre. Quem troca e o
+   motor (v206), que le crm_clientes.sequencia_solicitada_texto junto
+   com o codigo e limpa os dois na mesma hora.
+
+   O RESTO DO DISPARO E IGUAL: mover o cartao, etiqueta, cancelar etapas
+   anteriores, aprovacao quando a sequencia pede. Editar o texto nao
+   muda o que a sequencia faz, so o que a primeira mensagem diz. */
+function dispEditar(codigo){
+  const x=(MC_SEQ_LISTA||[]).find(s=>s.codigo===codigo);
+  if(!x||!DISP_ALVO)return;
+  abrirModal(`
+    <div class="mbt">Editar para enviar</div>
+    <div class="mbs">${esc(x.nome)} <span class="dispcod">${esc(x.codigo)}</span></div>
+    <div class="fhint" style="margin-bottom:10px">A edição vale <b>só para este envio</b>. A sequência salva não muda: os próximos disparos, para ela ou para outras clientes, saem com o texto de sempre. Só a <b>primeira mensagem</b> muda — se a sequência tem mais passos, eles saem como estão cadastrados.</div>
+    <textarea id="disp-edit-txt" style="width:100%;min-height:230px;font-family:inherit;font-size:14px;line-height:1.5;padding:12px;border-radius:10px;border:1.5px solid var(--border);resize:vertical">${esc(String(x.previa||''))}</textarea>
+    <div class="fhint" style="margin-top:6px">Variáveis entre chaves, como {primeiro_nome}, continuam sendo trocadas na hora do envio. Uma variável que não existe trava a mensagem na Fila. " / " separa uma mensagem da outra, como na cadência.</div>
+    <div class="brow" style="justify-content:flex-end;gap:9px;margin-top:14px">
+      <button class="btn btns" onclick="abrirDisparoSequencia(DISP_ALVO,DISP_VOLTA_CARTAO)">Voltar</button>
+      <button class="btn btnp" id="disp-edit-ok" onclick="dispEnviarEditado('${esc(x.codigo)}')">Disparar com este texto</button>
+    </div>`,true);
+  const t=$('disp-edit-txt');if(t)t.focus();
+}
+async function dispEnviarEditado(codigo){
+  const x=(MC_SEQ_LISTA||[]).find(s=>s.codigo===codigo);
+  const t=$('disp-edit-txt');
+  if(!x||!t)return;
+  const txt=t.value.trim();
+  if(!txt){toast('A mensagem ficou vazia','er');return;}
+  if(txt.length>4000){toast('Mensagem longa demais (máx. 4000 caracteres)','er');return;}
+  /* Texto igual ao da cadencia vai como disparo normal: nao ha o que
+     trocar, e o historico nao deve dizer "editado" quando nada mudou. */
+  const igual=txt===String(x.previa||'').trim();
+  const bt=$('disp-edit-ok');if(bt){bt.disabled=true;bt.textContent='Disparando...';}
+  await mcConfirmarDisparo(x.codigo,x.nome,igual?null:txt);
+  if(bt&&bt.isConnected){bt.disabled=false;bt.textContent='Disparar com este texto';}
+}
+
+async function mcConfirmarDisparo(codigo,nome,textoEditado){
   const alvo=DISP_ALVO;
   if(!alvo)return;
+  /* sequencia_solicitada_texto VAI SEMPRE, null no disparo normal: se
+     um disparo editado anterior tivesse falhado antes do motor limpar,
+     o texto velho seria usado neste disparo, que ninguem editou. */
   const{error}=await sb.from('crm_clientes').update({
     sequencia_solicitada:codigo,
+    sequencia_solicitada_texto:textoEditado||null,
     sequencia_solicitada_em:new Date().toISOString(),
     sequencia_solicitada_por:U.id
   }).eq('id',alvo);
   if(error){toast('Erro: '+error.message,'er');return;}
-  registrarAtividade(alvo,'pediu para disparar a sequência '+nome);
+  registrarAtividade(alvo,'pediu para disparar a sequência '+nome+(textoEditado?' com a primeira mensagem editada: '+textoEditado:''));
   toast(nome+' na fila — sai em até 1 minuto','ok');
   FILA_VOLTAR=null;DISP_ALVO=null;
   fecharModal();

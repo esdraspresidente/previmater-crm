@@ -5843,10 +5843,38 @@ async function salvarCardCliente(id){
   const quadro=$('mc-quadro').value,listaId=$('mc-lista').value||null;
   const linkContrato=$('mc-link-contrato')?$('mc-link-contrato').value.trim():'';
 
+  /* LISTA E QUADRO SO VIAJAM QUANDO VOCE TROCOU O SELETOR — 29/09/2026.
+     Ate aqui o Salvar gravava SEMPRE a lista que estava na tela. Se o
+     sistema movesse o cartao enquanto ele estava aberto, o Salvar
+     devolvia o cartao para a lista antiga — e sem deixar historico,
+     porque so registrava movimento quando a lista da tela diferia da
+     lista da abertura.
+     Caso real, Kimberly, 29/09: o pedido de senha moveu o cartao de
+     Contrato enviado para Montar Processo as 12:02; as 18:28 um Salvar
+     para renomear levou o cartao de volta para Contrato enviado, calado.
+     Agora: sem troca no seletor, lista e quadro nem entram no payload, e
+     o banco fica com a lista que ele ja tem. */
+  const mexeuNaLista=!!mcOriginal&&(mcOriginal.lista_id!==listaId||mcOriginal.quadro!==quadro);
+  /* De onde o cartao SAI de verdade: normalmente a lista da abertura.
+     Se o sistema moveu enquanto a tela estava aberta, sai de onde o
+     banco diz — e o historico registra essa origem, nao a velha. */
+  let listaOrigem=mcOriginal?mcOriginal.lista_id:null;
+  if(mexeuNaLista){
+    const{data:agora}=await sb.from('crm_clientes').select('lista_id').eq('id',id).single();
+    if(agora&&agora.lista_id!==mcOriginal.lista_id){
+      const{data:la}=await sb.from('crm_listas').select('nome').eq('id',agora.lista_id).maybeSingle();
+      const selL0=$('mc-lista');
+      const destino0=selL0?((selL0.options[selL0.selectedIndex]||{}).text||'').trim():'';
+      if(!confirm('Enquanto este cartão estava aberto, o sistema moveu ele para "'+((la&&la.nome)||'outra lista')+'".\n\nVocê está mandando para "'+destino0+'".\n\nMover mesmo assim?'))return;
+      listaOrigem=agora.lista_id;
+    }
+  }
+
   // A lista "Contrato enviado" e o gatilho: o motor so manda o contrato
   // para a cliente quando o card chega la COM link. Sem link, o card
-  // fica parado e ninguem avisa — entao o aviso e aqui.
-  if(listaId===LISTA_CONTRATO_ENVIADO&&!linkContrato){
+  // fica parado e ninguem avisa — entao o aviso e aqui. So quando voce
+  // esta MOVENDO para la: com a lista intocada, o Salvar nao move nada.
+  if(mexeuNaLista&&listaId===LISTA_CONTRATO_ENVIADO&&!linkContrato){
     if(!confirm('Este card esta indo para "Contrato enviado" sem o link do contrato.\n\nA Samara nao vai mandar nada ate o link ser preenchido — o card fica parado.\n\nMover assim mesmo?'))return;
   }
 
@@ -5920,6 +5948,7 @@ async function salvarCardCliente(id){
     // Mesma regra do descarte: so viaja quando o destino e a lista dele.
     if(nomeDestino==='Contrato Cancelado') payload.cancelamento_motivo=vCampo('mc-cancel-motivo');
   }
+  if(!mexeuNaLista){delete payload.quadro;delete payload.lista_id;}
   // Sao dois botoes Salvar (topo e rodape) e a mesma funcao atende os
   // dois. Mexer so no de baixo deixaria o de cima dizendo "Salvar"
   // enquanto o gravamento acontece — e o clique repetido gravaria duas
@@ -5937,8 +5966,8 @@ async function salvarCardCliente(id){
   finCarregado=false;
 
   if(mcOriginal){
-    if(mcOriginal.lista_id!==listaId&&mcOriginal.lista_id){
-      await registrarMovimentoLista(id,mcOriginal.lista_id,listaId);
+    if(mexeuNaLista&&listaOrigem&&listaOrigem!==listaId){
+      await registrarMovimentoLista(id,listaOrigem,listaId);
     }else if(mcOriginal.nome_completo!==nome){
       registrarAtividade(id,`renomeou o cartão de "${mcOriginal.nome_completo}" para "${nome}"`);
     }
@@ -5951,7 +5980,7 @@ async function salvarCardCliente(id){
      lista, que sao o que o Salvar pode ter mudado ali) e o quadro atras;
      o resto da tela ja esta com os valores certos, porque foram eles que
      acabaram de ser enviados. */
-  mcOriginal={nome_completo:nome,quadro:quadro,lista_id:listaId};
+  mcOriginal=mexeuNaLista||!mcOriginal?{nome_completo:nome,quadro:quadro,lista_id:listaId}:{nome_completo:nome,quadro:mcOriginal.quadro,lista_id:mcOriginal.lista_id};
   btnEstado('Salvar',false);
   toast('Cliente atualizado','ok');
   refrescarRotaAtual();
@@ -5969,7 +5998,23 @@ async function salvarCardCliente(id){
   if(mcClienteId!==id)return; // trocou de cartao enquanto gravava
   const hn=document.querySelector('#mchead-sticky .mchs-nome');
   if(hn)hn.textContent=nome;
-  if(cAt)await mcPintarTrilha(cAt);
+  if(cAt){
+    /* O SELETOR ACOMPANHA O BANCO. Se o sistema tinha movido o cartao,
+       o seletor ainda mostra a lista velha; deixado assim, o proximo
+       Salvar leria isso como troca feita por voce e desfaria o
+       movimento — o mesmo defeito por outra porta. */
+    if(cAt.lista_id&&$('mc-lista')&&$('mc-lista').value!==cAt.lista_id){
+      if($('mc-quadro')&&$('mc-quadro').value!==cAt.quadro){
+        $('mc-quadro').value=cAt.quadro;
+        await mcTrocarQuadro();
+      }
+      $('mc-lista').value=cAt.lista_id;
+      mcListaChange();
+      if(!mexeuNaLista)toast('O sistema tinha movido este cartão enquanto ele estava aberto. A lista nova foi mantida.','ok');
+    }
+    mcOriginal={nome_completo:nome,quadro:cAt.quadro,lista_id:cAt.lista_id};
+    await mcPintarTrilha(cAt);
+  }
   mcSnapshot=mcFotoCampos();
 }
 const LEMB_BLOQ_RECUSADO=new Set();

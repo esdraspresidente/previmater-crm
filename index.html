@@ -2413,6 +2413,8 @@ async function visualizarAnexo(caminho,nome,idx){
   let corpo;
   if(anexoEhImagem(nome))corpo=`<img src="${escA(url)}" style="width:100%;border-radius:12px;display:block"/>`;
   else if(ext==='pdf')corpo=`<iframe src="${escA(url)}" style="width:100%;height:72vh;border:none;border-radius:10px"></iframe>`;
+  else if(ext==='docx')corpo=`<div id="docx-prev" data-url="${escA(url)}" style="width:100%;height:72vh;overflow:auto;border-radius:10px;background:#8a8a8a"><div class="fhint" style="padding:18px;color:#fff">Abrindo o documento...</div></div>
+    <div style="text-align:right;margin-top:8px"><a href="${escA(url)}" target="_blank" class="btn btns" style="display:inline-block;text-decoration:none;padding:5px 12px;font-size:12px">Baixar .docx</a></div>`;
   else corpo=`<div class="emp"><div class="empi"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg></div><div class="empt">Pré-visualização não disponível para este tipo de arquivo</div><a href="${escA(url)}" target="_blank" class="btn btnp" style="display:inline-block;margin-top:8px;text-decoration:none">Abrir / baixar arquivo</a></div>`;
   /* So na PRIMEIRA abertura: passar de um anexo para o outro reabre o
      modal, e sobrescrever aqui gravaria a aba do proprio preview. */
@@ -2429,6 +2431,69 @@ async function visualizarAnexo(caminho,nome,idx){
       <button class="btn btns" style="padding:5px 12px" ${mcPreviewIdx>=MC_ANEXOS.length-1?'disabled':''} onclick="mcPreviewNavegar(1)">Próximo ›</button>
     </div>`:'';
   abrirModal(`<button class="mbc" onclick="fecharInteligente()">×</button><div class="mbt">${esc(nome)}</div><div class="mbs">&nbsp;</div>${nav}${corpo}`,true);
+  if(ext==='docx')mcRenderDocx();
+}
+/* PREVIA DE .DOCX DENTRO DO CRM — 29/09/2026.
+   O navegador nao abre Word sozinho, e ate aqui todo .docx da aba
+   Anexos (contrato administrativo, os 4 do kit judicial) so podia ser
+   conferido baixando.
+
+   DESENHADO AQUI, NO NAVEGADOR, e nao no visualizador do Office ou do
+   Google: aqueles recebem o link do arquivo e baixam do servidor deles,
+   entao o contrato com CPF e endereco da cliente passaria por terceiro
+   a cada olhada. A docx-preview monta o documento a partir dos bytes,
+   sem mandar nada para fora.
+
+   AS BIBLIOTECAS SO CARREGAM NO PRIMEIRO .DOCX ABERTO (~170 kB), e nao
+   no carregamento do CRM: a maior parte das sessoes nunca abre um. Versao
+   fixa de proposito — "latest" mudaria a previa sem ninguem mexer aqui.
+
+   E PREVIA, NAO O ARQUIVO: quebra de pagina e espacamento podem sair
+   diferentes do Word. Por isso o botao de baixar continua embaixo. */
+let DOCX_LIBS=null;
+function mcCarregarScript(src){
+  return new Promise((ok,falha)=>{
+    const s=document.createElement('script');
+    s.src=src;s.onload=ok;s.onerror=()=>falha(new Error('não carregou '+src));
+    document.head.appendChild(s);
+  });
+}
+function mcLibsDocx(){
+  if(window.docx&&window.docx.renderAsync)return Promise.resolve();
+  if(!DOCX_LIBS){
+    /* JSZip antes: a docx-preview procura window.JSZip ao carregar. */
+    DOCX_LIBS=mcCarregarScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js')
+      .then(()=>mcCarregarScript('https://cdn.jsdelivr.net/npm/docx-preview@0.4.1/dist/docx-preview.min.js'))
+      .catch(e=>{DOCX_LIBS=null;throw e;});
+  }
+  return DOCX_LIBS;
+}
+async function mcRenderDocx(){
+  const alvo=$('docx-prev');
+  if(!alvo)return;
+  const url=alvo.dataset.url;
+  const erro=msg=>{if(alvo.isConnected)alvo.innerHTML=`<div class="fhint" style="padding:18px;color:#fff">${esc(msg)} Use o botão Baixar .docx.</div>`;};
+  try{
+    const[,resp]=await Promise.all([mcLibsDocx(),fetch(url)]);
+    if(!resp.ok){erro('Não consegui baixar o arquivo para a prévia.');return;}
+    const blob=await resp.blob();
+    /* Quem passou para o proximo anexo enquanto este carregava nao pode
+       ver o documento anterior aparecer por cima do novo. */
+    if(!alvo.isConnected)return;
+    alvo.innerHTML='';
+    await window.docx.renderAsync(blob,alvo,null,{inWrapper:true,ignoreLastRenderedPageBreak:true,renderHeaders:true,renderFooters:true});
+    /* A folha A4 tem ~794 px; no celular ela passaria da tela e o
+       documento viraria rolagem para os lados. Reduz so para caber,
+       nunca aumenta. */
+    const folha=alvo.querySelector('section');
+    if(folha&&folha.offsetWidth>0){
+      const escala=Math.min(1,(alvo.clientWidth-8)/(folha.offsetWidth+60));
+      const emb=alvo.querySelector('.docx-wrapper');
+      if(emb&&escala<1)emb.style.zoom=escala;
+    }
+  }catch(e){
+    erro('Não consegui montar a prévia deste documento.');
+  }
 }
 /* Anda na lista sem passar pelo cartao. Para nas pontas em vez de dar a
    volta: com 30 anexos, voltar ao primeiro sem querer e perder o lugar. */

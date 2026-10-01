@@ -75,6 +75,12 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
 .fbotoes{display:flex;flex-wrap:wrap;gap:6px;}
 .fb{background:var(--white);border:1px solid var(--border);color:var(--text2);border-radius:99px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}
 .fb.on{background:var(--teal);border-color:var(--teal);color:#fff;}
+/* Periodo personalizado. Campos de data nativos: no celular abrem o
+   calendario do proprio aparelho, que e mais rapido que digitar. */
+.fpers{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin-top:4px;}
+.fpers label{display:flex;flex-direction:column;gap:3px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;}
+.fpers input{border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;font-family:inherit;color:var(--text);background:var(--white);}
+.fpers .fpnota{flex-basis:100%;font-size:11px;color:var(--text3);}
 .kpi .cmp{font-size:11px;font-weight:700;margin-top:3px;}
 .cmp.sobe{color:var(--green);}
 .cmp.desce{color:var(--red);}
@@ -230,6 +236,7 @@ header{background:var(--white);border-bottom:1px solid var(--border);padding:16p
       <div class="fgrupo">
         <div class="flabel">Período</div>
         <div class="fbotoes" id="fperiodo"></div>
+        <div class="fpers" id="fpers" style="display:none"></div>
       </div>
       <div class="fgrupo">
         <div class="flabel">Comparar com</div>
@@ -436,11 +443,37 @@ let ANUNCIOS=[];         // uma linha por criativo, ja somada NO PERIODO
 let ANUNCIOS_JANELA=null;// a janela que gerou o ANUNCIOS atual, para os avisos
 let ANUNCIOS_ANT=null;   // mesmo recorte deslocado, por codigo; null = sem comparacao
 let VARIANTE='qtd';      // qtd = geral | qtd_pre | qtd_adm
-let PERIODO='7';         // hoje | ontem | 7 | 15 | 30 | tudo
-let COMPARAR='0';        // 0 = sem comparacao; 1,7,15,30 = deslocamento em dias
+let PERIODO='7';         // hoje | ontem | 7 | 15 | 30 | mesant | pers | tudo
+let COMPARAR='0';        // 0 = sem comparacao; 1,7,15,30 = deslocamento em dias; mes | ant (ver comparacoesDoPeriodo)
+let PERS_INI='';         // periodo personalizado, AAAA-MM-DD; vazio = ainda nao escolhido
+let PERS_FIM='';
 let TEMPO_PEDIDO=0;      // numero do ultimo pedido do bloco de tempo; ver carregarTempo()
 
-const PERIODOS=[['hoje','Hoje'],['ontem','Ontem'],['7','7 dias'],['15','15 dias'],['30','30 dias'],['tudo','Tudo']];
+const PERIODOS=[['hoje','Hoje'],['ontem','Ontem'],['7','7 dias'],['15','15 dias'],['30','30 dias'],['mesant','Mês fechado'],['pers','Escolher datas'],['tudo','Tudo']];
+/* MES FECHADO E DATAS ESCOLHIDAS — 01/10/2026, pedido do Esdras.
+   "30 dias" termina hoje e anda todo dia: nao responde "como foi
+   setembro", que e a pergunta de fechamento de mes. "Mes fechado" e o
+   mes de calendario anterior inteiro (dia 1 ao ultimo), e o botao
+   mostra o nome do mes para ninguem achar que sao os ultimos 30 dias.
+   "Escolher datas" e de tal dia a tal dia, inclusive nas duas pontas.
+   Os dois terminam ANTES de hoje (ou podem terminar), e por isso o
+   grafico de barras e a comparacao passaram a seguir o fim da janela
+   em vez de assumir que ela acaba hoje. */
+const MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+/* Primeiro e ultimo dia do mes de calendario anterior ao mes de dataISO.
+   Date.UTC com dia 0 devolve o ultimo dia do mes anterior: vale para
+   fevereiro e ano bissexto sem tabela nenhuma. */
+function mesAntesDe(dataISO){
+  const y=Number(dataISO.slice(0,4)), m=Number(dataISO.slice(5,7)); // m: 1..12
+  const ini=iso(new Date(Date.UTC(y,m-2,1,12)));
+  const fim=iso(new Date(Date.UTC(y,m-1,0,12)));
+  return {ini,fim,dias:Number(fim.slice(8,10))};
+}
+function nomeMes(dataISO){ return MESES[Number(dataISO.slice(5,7))-1]+'/'+dataISO.slice(0,4); }
+function diasEntre(ini,fim){
+  // Inclusivo nas duas pontas; meio-dia UTC para horario de verao nunca comer um dia.
+  return Math.round((new Date(fim+'T12:00:00Z')-new Date(ini+'T12:00:00Z'))/86400000)+1;
+}
 /* TODO O PERIODO — 23/09/2026, pedido do Esdras.
    Comeca no primeiro dia da vw_trafego_dia, que e o dia em que o CRM
    passou a registrar conversa. A data sai da propria view (LINHAS[0])
@@ -457,7 +490,38 @@ function inicioSerie(){ return (LINHAS.length&&LINHAS[0].dia)||INICIO_CRM; }
    ao banco nos criativos, a comparacao fica desligada enquanto "Tudo"
    estiver escolhido. COMPARAR nao e apagado: volta sozinho ao trocar
    de periodo. */
-function deslocAtivo(){ return PERIODO==='tudo' ? 0 : (Number(COMPARAR)||0); }
+/* As opcoes de comparacao dependem do periodo. Deslocar "mes fechado"
+   em 30 dias erra o mes (setembro menos 30 dias comeca em 02/08), entao
+   ali a comparacao e o mes de calendario anterior. Em datas escolhidas,
+   e o mesmo numero de dias imediatamente antes. */
+function comparacoesDoPeriodo(){
+  if(PERIODO==='tudo') return [];
+  if(PERIODO==='mesant'){
+    const j=janela('mesant');
+    return [['0','Não comparar'],['mes','Mês anterior ('+nomeMes(mesAntesDe(j.ini).ini)+')']];
+  }
+  if(PERIODO==='pers'){
+    const j=janela('pers');
+    return [['0','Não comparar'],['ant','Os '+j.dias+' dia'+(j.dias>1?'s':'')+' anteriores']];
+  }
+  return COMPARACOES;
+}
+/* Comparacao escolhida que nao existe no periodo atual vale como "nao
+   comparar", sem apagar COMPARAR: volta sozinha ao trocar de periodo,
+   igual ao "Tudo" sempre fez. */
+function compAtivo(){ return comparacoesDoPeriodo().some(x=>x[0]===COMPARAR) ? COMPARAR : '0'; }
+/* UMA conta so para "qual e o periodo anterior", usada pelos KPIs, pelo
+   tempo ate o veredito e pelos criativos. Antes eram tres copias de
+   menos(j,desloc); com tres tipos de comparacao, tres copias divergiriam. */
+function janelaAnt(j){
+  const c=compAtivo();
+  if(c==='0') return null;
+  if(c==='mes') return mesAntesDe(j.ini);
+  if(c==='ant') return {ini:menos(j.ini,j.dias),fim:menos(j.ini,1),dias:j.dias};
+  const n=Number(c)||0;
+  return n ? {ini:menos(j.ini,n),fim:menos(j.fim,n),dias:j.dias} : null;
+}
+function deslocAtivo(){ return janelaAnt(janela(PERIODO)) ? 1 : 0; }
 /* DESDE QUANDO CADA FONTE EXISTE. Sem isto o filtro de 30 dias mostra
    um custo por elegivel bonito por um motivo ruim: metade da janela e
    anterior ao dia em que o anuncio passou a ser gravado na lead, entao
@@ -520,6 +584,14 @@ function janela(periodo){
     const dias=Math.round((new Date(hoje+'T12:00:00Z')-new Date(ini+'T12:00:00Z'))/86400000)+1;
     return {ini,fim:hoje,dias};
   }
+  if(periodo==='mesant') return mesAntesDe(hoje);
+  if(periodo==='pers'){
+    // Sem escolha ainda: do dia 1 do mes corrente ate hoje, que e o
+    // ponto de partida mais comum de quem abre o calendario.
+    const ini=PERS_INI||(hoje.slice(0,8)+'01');
+    const fim=PERS_FIM||hoje;
+    return {ini,fim,dias:diasEntre(ini,fim)};
+  }
   const n=Number(periodo);
   return {ini:menos(hoje,n-1),fim:hoje,dias:n};
 }
@@ -549,11 +621,15 @@ function somar(ini,fim){
 function montarFiltros(){
   $('fperiodo').innerHTML=PERIODOS.map(([v,r])=>
     '<button class="fb'+(v===PERIODO?' on':'')+'" data-v="'+v+'">'
-    +(v==='tudo'?r+' (desde '+fmtBR(inicioSerie())+')':r)+'</button>').join('');
+    +(v==='tudo'?r+' (desde '+fmtBR(inicioSerie())+')'
+      :v==='mesant'?r+' ('+MESES[Number(janela('mesant').ini.slice(5,7))-1]+')'
+      :r)+'</button>').join('');
+  montarCamposDatas();
+  const comp=compAtivo();
   $('fcomparar').innerHTML=PERIODO==='tudo'
     ? '<span class="cmp sembase">Não se aplica ao período inteiro: antes dele o sistema não existia.</span>'
-    : COMPARACOES.map(([v,r])=>
-    '<button class="fb'+(v===COMPARAR?' on':'')+'" data-v="'+v+'">'+r+'</button>').join('');
+    : comparacoesDoPeriodo().map(([v,r])=>
+    '<button class="fb'+(v===comp?' on':'')+'" data-v="'+v+'">'+r+'</button>').join('');
   /* Trocar o periodo volta ao banco SO para os criativos. O resto da
      tela filtra em memoria porque ja tem todos os dias na mao; esta
      tabela nao pode ter, ver o comentario de carregarAnuncios(). O
@@ -562,6 +638,35 @@ function montarFiltros(){
   /* A comparacao agora tambem mexe nos criativos: precisa de uma
      segunda ida ao banco, com a janela deslocada. */
   $('fcomparar').querySelectorAll('.fb').forEach(b=>b.onclick=()=>{COMPARAR=b.dataset.v;montarFiltros();aplicar();carregarAnuncios();carregarTempo();});
+}
+
+/* Campos "de" e "até". So aparecem com "Escolher datas". Aplicam no
+   botao, e nao a cada mudanca do campo: cada aplicacao vai duas vezes
+   ao banco (criativos e tempo), e data digitada pela metade dispararia
+   consulta com periodo que ninguem pediu. */
+function montarCamposDatas(){
+  const box=$('fpers');
+  if(PERIODO!=='pers'){ box.style.display='none'; box.innerHTML=''; return; }
+  const j=janela('pers'), hoje=hojeISO();
+  box.style.display='flex';
+  box.innerHTML='<label>De<input type="date" id="pini" min="'+INICIO_CRM+'" max="'+hoje+'" value="'+j.ini+'"></label>'
+    +'<label>Até<input type="date" id="pfim" min="'+INICIO_CRM+'" max="'+hoje+'" value="'+j.fim+'"></label>'
+    +'<button class="fb on" id="paplicar">Aplicar</button>'
+    +'<div class="fpnota" id="pnota">'+j.dias+' dia'+(j.dias>1?'s':'')+', contando o primeiro e o último.</div>';
+  $('paplicar').onclick=()=>{
+    let ini=$('pini').value, fim=$('pfim').value;
+    if(!ini||!fim){ $('pnota').textContent='Escolha as duas datas.'; return; }
+    // Invertido: troca em vez de recusar — a intencao e obvia.
+    if(ini>fim){ const t=ini; ini=fim; fim=t; }
+    // Futuro nao tem dado; antes de o CRM existir tambem nao. Corta nas
+    // pontas e diz que cortou, para o numero nao parecer de outro periodo.
+    const avisos=[];
+    if(fim>hoje){ fim=hoje; avisos.push('o fim foi trazido para hoje'); }
+    if(ini<INICIO_CRM){ ini=INICIO_CRM; avisos.push('o início foi trazido para '+fmtBR(INICIO_CRM)+', quando o CRM começou a registrar'); }
+    PERS_INI=ini; PERS_FIM=fim;
+    montarFiltros(); aplicar(); carregarAnuncios(); carregarTempo();
+    if(avisos.length) $('pnota').textContent+=' Atenção: '+avisos.join(' e ')+'.';
+  };
 }
 
 /**
@@ -594,12 +699,16 @@ function aplicar(){
   const j=janela(PERIODO);
   const a=somar(j.ini,j.fim);
 
-  const desloc=deslocAtivo();
-  const jAnt={ini:menos(j.ini,desloc),fim:menos(j.fim,desloc)};
+  /* Sem comparacao, jAnt vira a propria janela so para as contas abaixo
+     nao quebrarem; escreverComparacao() limpa o texto nesse caso. */
+  const jAntReal=janelaAnt(j);
+  const desloc=jAntReal?1:0;
+  const jAnt=jAntReal||j;
   const b=somar(jAnt.ini,jAnt.fim);
 
   const medAtual=j.dias?(a.contatos/j.dias):0;
-  const medAnt=j.dias?(b.contatos/j.dias):0;
+  // Media do anterior pelos dias DELE: agosto tem 31, setembro 30.
+  const medAnt=jAnt.dias?(b.contatos/jAnt.dias):0;
 
   $('k1').textContent=a.contatos;
   $('k2').textContent=medAtual.toFixed(1).replace('.',',');
@@ -618,6 +727,10 @@ function aplicar(){
 
   const periodoTxt=PERIODO==='tudo'
     ? 'todo o período, desde '+fmtBR(j.ini)+'/'+j.ini.slice(0,4)+' até hoje ('+fmtBR(j.fim)+'), '+j.dias+' dias'
+    : PERIODO==='mesant'
+    ? 'mês fechado de '+nomeMes(j.ini)+' ('+fmtBR(j.ini)+' a '+fmtBR(j.fim)+', '+j.dias+' dias)'
+    : PERIODO==='pers'
+    ? (j.dias===1?fmtBR(j.ini)+'/'+j.ini.slice(0,4):fmtBR(j.ini)+'/'+j.ini.slice(0,4)+' a '+fmtBR(j.fim)+'/'+j.fim.slice(0,4)+' ('+j.dias+' dias)')
     : (j.dias===1?fmtBR(j.ini):fmtBR(j.ini)+' a '+fmtBR(j.fim));
   const compTxt=desloc===0?'':' · comparado com '+(jAnt.ini===jAnt.fim?fmtBR(jAnt.ini):fmtBR(jAnt.ini)+' a '+fmtBR(jAnt.fim));
   $('linha7').textContent='Período: '+periodoTxt+compTxt+'. Contatos são registrados desde '
@@ -626,7 +739,7 @@ function aplicar(){
   // O gráfico nunca mostra menos de 7 barras: com "Hoje" selecionado,
   // uma barra sozinha não diz nada. Os KPIs seguem o filtro; o gráfico
   // dá o contexto em volta.
-  desenharDias(Math.max(j.dias,7));
+  desenharDias(Math.max(j.dias,7),j.fim);
 
   // Descartes seguem o mesmo filtro. Entram aqui, e não no carregar(),
   // porque têm que se redesenhar a cada clique no período — igual aos
@@ -744,8 +857,13 @@ function baixarFunil(){
   baixar('previmater-funil-'+hojeISO()+'.csv',linhas);
 }
 
-function desenharDias(quantos){
-  const mostra=LINHAS.slice(-Math.min(quantos,30));
+/* O grafico termina no FIM da janela, nao em hoje: com "Mes fechado"
+   ou datas escolhidas no passado, as barras de hoje mostrariam outro
+   periodo embaixo dos KPIs. Teto de 31 colunas (era 30) para um mes de
+   31 dias nao perder o dia 1. */
+function desenharDias(quantos,fim){
+  const ate=fim?LINHAS.filter(l=>l.dia<=fim):LINHAS;
+  const mostra=ate.slice(-Math.min(quantos,31));
   const teto=Math.max(1,...mostra.map(l=>l.novos_contatos||0));
   $('bars').innerHTML=mostra.map(l=>{
     const v=l.novos_contatos||0;
@@ -1248,10 +1366,10 @@ async function carregarTempo(){
     $('tempover').innerHTML='<div class="vazio">Antes de '+fmtBR(INICIO_VEREDITO)+' o veredito não era gravado: não há como medir este período.</div>';
     return;
   }
-  const desloc=deslocAtivo();
   // Comparacao so quando a janela anterior tem ao menos um dia com
   // veredito gravado; antes disso seria comparar com o nada.
-  const jAnt=desloc?{ini:menos(j.ini,desloc),fim:menos(j.fim,desloc)}:null;
+  const jAnt=janelaAnt(j);
+  const desloc=jAnt?1:0;
   const usaAnt=jAnt&&jAnt.fim>=INICIO_VEREDITO;
   const [at,ant]=await Promise.all([
     sb.rpc('trafego_tempo_veredito',{p_ini:j.ini,p_fim:j.fim}),
@@ -1355,8 +1473,7 @@ function desenharTempo(t,b,j,jAnt){
    e era por isso que esta tabela nao tinha filtro ate hoje. */ async function carregarAnuncios(){
   const j = janela(PERIODO);
   ANUNCIOS_JANELA = j;
-  const desloc = deslocAtivo();
-  const jAnt = desloc ? {ini:menos(j.ini,desloc), fim:menos(j.fim,desloc)} : null;
+  const jAnt = janelaAnt(j);
 
   const [at, ant] = await Promise.all([
     sb.rpc('trafego_anuncio_periodo', { p_ini: j.ini, p_fim: j.fim }),

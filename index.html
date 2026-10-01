@@ -4369,7 +4369,8 @@ function renderCardClienteModal(c,etqSel,listas){
             <select id="mc-cancel-motivo">${optCancel}</select>
             <div class="fhint">Aparece sozinho quando a lista vira Contrato Cancelado. É contrato assinado que caiu — conta no relatório de cancelamentos, não no painel do tráfego.</div>
           </div>
-          <div class="fld"><label>Telefone</label><input type="text" id="mc-tel" value="${escA(c.telefone_principal)}"/></div>
+          <div class="fld"><label>Telefone</label><input type="text" id="mc-tel" value="${escA(c.telefone_principal)}"/>
+            <div class="fhint">${(c.telefones_anteriores&&c.telefones_anteriores.length)?'Números anteriores: '+c.telefones_anteriores.map(esc).join(' · ')+'<br>':''}<a href="#" onclick="event.preventDefault();mcTrocarNumero('${c.id}')">Trocar número</a> — tudo do cartão continua aqui. Se o número novo já tiver cartão, os dois são juntados.</div></div>
           <div class="fld"><label>Canal WhatsApp</label><select id="mc-canal" onchange="mcCanalChange()">${optCanal}</select></div>
           <div class="fld"><label>Origem</label>${origemCampoHtml(c,optOrig,'mc-origem')}</div>
           <div class="fld"><label>DN do bebê</label><input type="date" id="mc-dn" value="${c.data_nascimento_bebe||''}"/>
@@ -5949,6 +5950,18 @@ async function salvarCardCliente(id){
     if(nomeDestino==='Contrato Cancelado') payload.cancelamento_motivo=vCampo('mc-cancel-motivo');
   }
   if(!mexeuNaLista){delete payload.quadro;delete payload.lista_id;}
+  /* NUMERO QUE JA E DE OUTRO CARTAO — 01/10/2026.
+     Antes o banco recusava (uniq_crm_clientes_telefone_chave) e o Salvar
+     inteiro morria com o erro cru do Postgres, levando junto tudo o que
+     tinha sido editado no cartao. Agora o resto e salvo com o numero de
+     antes, e DEPOIS de gravar vem a oferta de juntar os dois cartoes —
+     que e o caso da cliente que mudou de numero e escreveu do novo antes
+     de alguem trocar aqui. */
+  let juntarCom=null;
+  if(payload.telefone_principal){
+    const exTel=await clienteComONumero(payload.telefone_principal,id);
+    if(exTel){juntarCom=exTel;delete payload.telefone_principal;}
+  }
   // Sao dois botoes Salvar (topo e rodape) e a mesma funcao atende os
   // dois. Mexer so no de baixo deixaria o de cima dizendo "Salvar"
   // enquanto o gravamento acontece — e o clique repetido gravaria duas
@@ -6016,6 +6029,17 @@ async function salvarCardCliente(id){
     await mcPintarTrilha(cAt);
   }
   mcSnapshot=mcFotoCampos();
+  if(juntarCom){
+    const juntou=await mcOferecerJuncao(id,juntarCom);
+    /* Recusou: o numero digitado NAO foi gravado. Devolve o campo ao que
+       esta no banco, senao o proximo Salvar ofereceria a juncao de novo
+       e a tela mostraria um numero que o cartao nao tem. */
+    if(!juntou&&mcClienteId===id){
+      const{data:tv}=await sb.from('crm_clientes').select('telefone_principal').eq('id',id).single();
+      if(tv&&$('mc-tel'))$('mc-tel').value=tv.telefone_principal||'';
+      mcSnapshot=mcFotoCampos();
+    }
+  }
 }
 const LEMB_BLOQ_RECUSADO=new Set();
 async function ofertarLembreteDeBloqueio(clienteId,dia){
@@ -6386,6 +6410,111 @@ function avisoNumeroRepetido(ex){
   return 'Este telefone já é da cliente '+(ex.nome_completo||'sem nome')+
     (ex.arquivado_em?' — cartão ARQUIVADO em '+new Date(ex.arquivado_em).toLocaleDateString('pt-BR')+', por isso ele não aparece nas buscas do quadro':' (quadro '+(ex.quadro||'?')+')')+
     '.\n\nNão dá para ter dois cartões com o mesmo número. Abrir o cartão dela agora?';
+}
+/* TROCA DE NUMERO E JUNCAO DE CARTOES — 01/10/2026.
+
+   Tudo de uma cliente (mensagens, anexos, historico, sequencias,
+   parcelas) esta preso ao ID do cartao, nao ao telefone. O telefone so
+   e a porta de entrada: e por ele que o webhook descobre de quem e a
+   mensagem. Por isso trocar o numero nao perde nada.
+
+   O buraco era outro: a cliente escreve do numero novo ANTES de alguem
+   trocar aqui, o webhook nao reconhece e cria um cartao novo em Lead
+   novo. Dai a trava de numero unico impede por o numero novo no cartao
+   antigo, e nao havia como juntar os dois.
+
+   A troca e a juncao moram no banco (gatilhos trg_telefone_historico e
+   trg_telefone_trocado, funcao crm_juntar_clientes), para valer venha de
+   onde vier a escrita. Esta tela so pergunta. */
+
+/* MESMA CONTA do fone_chave() do banco (coluna gerada telefone_chave):
+   tira o 55 de quem tem 12 ou 13 digitos, e fica DDD + 8 ultimos.
+   Copiada aqui so para PROCURAR o cartao dono do numero. Se um dia as
+   duas divergirem, a busca erra para menos e quem segura e o banco, com
+   o erro 23505 — que o mcTrocarNumero tambem trata. */
+function foneChaveJs(tel){
+  let d=String(tel||'').replace(/\D/g,'');
+  if((d.length===12||d.length===13)&&d.startsWith('55'))d=d.slice(2);
+  return d.length>=10?d.slice(0,2)+d.slice(-8):null;
+}
+/* Igualdade exata da chave, e nao o sufixo de 8 digitos do
+   clienteMesmoTelefone: aqui a resposta vira oferta de JUNTAR, e 41 e
+   11 com o mesmo final sao duas mulheres diferentes. Inclui arquivado. */
+async function clienteComONumero(tel,exceto){
+  const ch=foneChaveJs(tel);
+  if(!ch)return null;
+  const{data}=await sb.from('crm_clientes').select('id,nome_completo,telefone_principal,arquivado_em')
+    .eq('telefone_chave',ch).neq('id',exceto).limit(1);
+  return (data&&data[0])||null;
+}
+/* Botao "Trocar numero" do cartao. Grava SO o telefone, de proposito:
+   o Salvar manda o cartao inteiro e escreve por cima do que o motor
+   gravou desde que a tela abriu. */
+async function mcTrocarNumero(id){
+  if(typeof mcTemAlteracaoNaoSalva==='function'&&mcTemAlteracaoNaoSalva()){
+    toast('Salve ou desfaça as alterações do cartão antes de trocar o número','er');return;
+  }
+  const atual=$('mc-tel')?$('mc-tel').value.trim():'';
+  const tel=(prompt('Número novo da cliente, com DDD:\n\nO número atual'+(atual?' ('+atual+')':'')+' fica guardado em "Números anteriores". Mensagens, anexos e histórico continuam neste cartão.','')||'').trim();
+  if(!tel)return;
+  if(!foneChaveJs(tel)){toast('Número inválido: precisa ter DDD e número','er');return;}
+  const ex=await clienteComONumero(tel,id);
+  if(ex){await mcOferecerJuncao(id,ex);return;}
+  const{error}=await sb.from('crm_clientes').update({telefone_principal:tel,atualizado_em:new Date().toISOString()}).eq('id',id);
+  if(error){
+    if(error.code==='23505'){
+      const ex2=await clienteMesmoTelefone(tel,id);
+      if(ex2){await mcOferecerJuncao(id,ex2);return;}
+    }
+    toast('Erro ao trocar o número: '+error.message,'er');return;
+  }
+  toast('Número trocado. O antigo ficou guardado no cartão.','ok');
+  mcSnapshot='';
+  abrirCardCliente(id);
+  if(typeof refrescarRotaAtual==='function')refrescarRotaAtual();
+}
+/* Oferece juntar o cartao aberto com o dono do numero. Devolve true se
+   juntou.
+   QUAL CARTAO FICA: por padrao o MAIS ANTIGO — e nele que costumam
+   estar contrato, veredito e documentos; o novo quase sempre e o lead
+   que o webhook criou quando ela escreveu do numero novo. Cancelar
+   oferece o contrario, porque a regra pode errar (cartao do Trello
+   migrado tem data de criacao recente).
+   QUAL NUMERO FICA quem decide e o banco: o do cartao em que ela
+   escreveu por ULTIMO. A simulacao mostra antes de confirmar. */
+async function mcOferecerJuncao(atualId,ex){
+  const simular=async(manter,juntar)=>{
+    const{data,error}=await sb.rpc('crm_juntar_clientes',{p_manter:manter,p_juntar:juntar,p_simular:true});
+    if(error)throw error;
+    return data;
+  };
+  const dt=x=>x?new Date(x).toLocaleDateString('pt-BR'):'—';
+  const desc=c=>(c.nome||'sem nome')+' — '+(c.telefone||'sem número')+(c.lista?', lista '+c.lista:'')+(c.arquivado_em?', ARQUIVADO':'')+', criado em '+dt(c.criado_em)+(c.ultima_entrada?', última mensagem dela em '+dt(c.ultima_entrada):', nenhuma mensagem dela');
+  const texto=s=>'FICA este cartão:\n'+desc(s.manter)+'\n(com a lista, o veredito, o contrato e o cadastro dele)\n\n'
+    +'VEM PARA ELE e fica ARQUIVADO (não é apagado):\n'+desc(s.juntar)+'\n'
+    +s.mensagens+' mensagens, '+s.anexos+' anexos, '+s.atividades+' registros do histórico, '+s.comentarios+' comentários'
+    +(s.automacoes_pendentes?'. '+s.automacoes_pendentes+' automação(ões) agendada(s) nele é(são) cancelada(s)':'')+'.\n\n'
+    +'NÚMERO QUE FICA: '+(s.telefone_final||'nenhum')+' — o do cartão em que ela escreveu por último. O outro vai para "Números anteriores".';
+  let s;
+  try{
+    s=await simular(atualId,ex.id);
+    if(new Date(s.juntar.criado_em)<new Date(s.manter.criado_em))s=await simular(ex.id,atualId);
+  }catch(e){toast('Não consegui conferir os dois cartões: '+(e.message||e),'er');return false;}
+  if(!confirm('Este número já é do cartão de '+(ex.nome_completo||'outra cliente')+'. Juntar os dois?\n\n'+texto(s)+'\n\nOK = juntar assim.\nCancelar = ver a opção ao contrário.')){
+    let s2;
+    try{s2=await simular(s.juntar.id,s.manter.id);}catch(e){toast('Não consegui conferir: '+(e.message||e),'er');return false;}
+    if(!confirm('E ao contrário?\n\n'+texto(s2)+'\n\nOK = juntar assim.\nCancelar = não juntar nada.')){
+      toast('Nada foi juntado. O número continua no outro cartão.','ok');return false;
+    }
+    s=s2;
+  }
+  const{data:r,error}=await sb.rpc('crm_juntar_clientes',{p_manter:s.manter.id,p_juntar:s.juntar.id,p_simular:false});
+  if(error||!r||!r.ok){toast('Não juntei: '+((error&&error.message)||'resposta vazia'),'er');return false;}
+  toast('Cartões juntados. O de '+(s.juntar.nome||'')+' ficou arquivado.','ok');
+  mcSnapshot='';
+  abrirCardCliente(s.manter.id);
+  if(typeof refrescarRotaAtual==='function')refrescarRotaAtual();
+  return true;
 }
 async function salvarCliente(id){
   const btn=$('btn-salvar'),nome=$('f-nome').value.trim();

@@ -1181,7 +1181,12 @@ const QUADROS={
   comercial:{rotulo:'Comercial',icone:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4.5-5"/><circle cx="12" cy="18" r="1.4"/></svg>',ordem:1},
   incubadora:{rotulo:'Incubadora',icone:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21v-7"/><path d="M12 14C7 14 4 11 4 6c5 0 8 3 8 8zM12 14c5 0 8-3 8-8-5 0-8 3-8 8z"/></svg>',ordem:2},
   operacional:{rotulo:'Administrativo',icone:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>',ordem:3},
-  financeiro:{rotulo:'Financeiro',icone:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M14.5 7.5a5.5 5.5 0 1 1-7 7"/></svg>',ordem:4}
+  financeiro:{rotulo:'Financeiro',icone:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M14.5 7.5a5.5 5.5 0 1 1-7 7"/></svg>',ordem:4},
+  /* BPC/LOAS (07/10/2026): quadro proprio porque toda varredura da
+     maternidade no motor filtra pelo Comercial; com o BPC fora dele,
+     nenhuma cobranca ou triagem da maternidade enxerga esses cards.
+     Listas e permissoes: docs/sql/bpc_v1.sql no previmater-ops. */
+  bpc:{rotulo:'BPC/LOAS',icone:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/></svg>',ordem:5}
 };
 const CANAIS={meta_oficial:'Meta oficial',evolution:'Evolution',whatsgw:'WhatsGW'};
 /* Canal por onde a conversa desta cliente acontece. Sao os DOIS valores

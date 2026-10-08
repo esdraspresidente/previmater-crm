@@ -3643,6 +3643,37 @@ async function mcGerarContratoJudicial(id,btn){
   volta();
   if($('mcpane-anexos'))carregarAnexos(id);
 }
+/* REENVIO DO CONTRATO PELA AUTENTIQUE — 08/10/2026.
+
+   QUEM FAZ O TRABALHO E A FUNCTION autentique (acao=reenviar), nao o
+   navegador: ela apaga o documento velho na Autentique ANTES de zerar o
+   cartao, e se nao conseguir apagar para tudo. Dois links validos na mao
+   da cliente e o pior caso — ela assina o velho e ninguem fica sabendo.
+
+   A FUNCTION LE O CADASTRO GRAVADO, como no contrato judicial: por isso a
+   pergunta de alteracao nao salva vem antes. */
+async function mcReenviarContrato(id,btn){
+  if(!id)return;
+  if(mcTemAlteracaoNaoSalva()){alert('Há alterações não salvas neste cartão.\n\nSalve primeiro: o contrato novo sai com o que está GRAVADO no cadastro.');return;}
+  if(!confirm('Reenviar o contrato?\n\nO link atual vai parar de funcionar e a cliente recebe um link novo em poucos minutos.'))return;
+  const rotulo=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='Reenviando...';}
+  let d=null;
+  try{
+    const{data:sess}=await sb.auth.getSession();
+    const tk=(sess&&sess.session)?sess.session.access_token:'';
+    const r=await fetch(SUPABASE_URL+'/functions/v1/autentique?acao=reenviar',{
+      method:'POST',
+      headers:{apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+tk,'Content-Type':'application/json'},
+      body:JSON.stringify({cliente_id:id})
+    });
+    d=await r.json().catch(()=>null);
+  }catch(e){d=null;}
+  if(btn){btn.disabled=false;btn.textContent=rotulo;}
+  if(!d||!d.ok){toast('Não reenviado: '+((d&&d.motivo)||'sem resposta do servidor'),'er');return;}
+  toast('Contrato reenviado. O link novo sai em poucos minutos.','ok');
+  abrirCardCliente(id);
+}
 async function mcContratoExterno(id){
   if(!id)return;
   const p2=n=>String(n).padStart(2,'0');
@@ -4392,10 +4423,14 @@ function renderCardClienteModal(c,etqSel,listas){
             <div class="fld"><label>Cidade</label><input type="text" id="mc-endereco-cidade" value="${escA(c.endereco_cidade)}"/></div>
             <div class="fld"><label>UF</label><input type="text" id="mc-endereco-uf" maxlength="2" value="${escA(c.endereco_uf)}" oninput="this.value=this.value.toUpperCase()"/></div>
           </div>
-          <div class="fld ff" style="margin-bottom:11px"><label>Link do contrato (Autentica Online)</label>
+          <div class="fld ff" style="margin-bottom:11px"><label>Link do contrato</label>
             <input type="url" id="mc-link-contrato" placeholder="https://..." value="${escA(c.link_contrato)}"/>
-            <div class="fhint">Cole o link e mova o card para <b>Contrato enviado</b>. A Samara volta a falar com a cliente e manda o contrato sozinha.</div>
+            <div class="fhint">${c.autentique_documento_id?`Enviado pela <b>Autentique</b>${c.autentique_assinado_em?` · <b>assinado</b> em ${new Date(c.autentique_assinado_em).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})}`:''}${c.autentique_sandbox?' · <b>TESTE (sandbox)</b>':''}.`:'Com o seu <b>sim</b> no WhatsApp o contrato sobe na Autentique e o link sai sozinho. Colar link aqui na mão só para contrato feito por fora.'}${c.autentique_erro?`<br><b style="color:var(--red,#c0392b)">Autentique: ${esc(c.autentique_erro)}</b>`:''}</div>
           </div>
+          ${(c.link_contrato||c.autentique_documento_id||c.autentique_erro)&&!c.autentique_assinado_em&&c.contrato_dados_conferido_em?`<div class="fld ff" style="margin-bottom:11px">
+            <button class="btn btns" style="padding:6px 12px;font-size:12px" onclick="mcReenviarContrato('${c.id}',this)">Reenviar contrato (link novo)</button>
+            <div class="fhint">Apaga o contrato atual na Autentique (o link velho para de funcionar), refaz o contrato com o cadastro <b>gravado agora</b> e manda o link novo para a cliente em poucos minutos. Use depois de corrigir CPF ou endereço, ou quando ela perdeu o link.</div>
+          </div>`:''}
           <div class="fld ff" style="margin-bottom:11px">
             ${c.contrato_disparado_em?`<div class="fhint">Contrato registrado em ${new Date(c.contrato_disparado_em).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'})}.</div>`:`<button class="btn btns" style="padding:6px 12px;font-size:12px" onclick="mcContratoExterno('${c.id}')">Registrar contrato assinado fora do sistema</button>
             <div class="fhint">Para contrato que já foi assinado por fora — outro número, papel, outro canal. Leva o cartão por Contrato enviado até Contrato assinado para o contrato contar no dashboard, <b>sem enviar nenhuma mensagem</b> para a cliente.</div>`}

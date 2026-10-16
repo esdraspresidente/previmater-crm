@@ -441,6 +441,9 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .dossbar{margin-top:10px;font-size:12px;font-weight:700}
 .dossbom{color:var(--text2)}
 .dossruim{color:var(--red)}
+.dossrot{font-size:12px;font-weight:700;color:var(--text2);margin:14px 0 6px}
+.dossrecado{width:100%;min-height:74px;resize:vertical;padding:9px 11px;border:1px solid var(--bd);border-radius:10px;font:inherit;font-size:13px;color:var(--text);background:transparent;box-sizing:border-box}
+.dosscoment{display:block;font-size:13px;color:var(--text);white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .anexoitem{display:flex;align-items:center;gap:11px;padding:11px 14px;border:1.5px solid var(--border);border-radius:11px;background:#F3FAFA;}
 .anexoicone{width:36px;height:36px;border-radius:9px;background:var(--teal-l);color:var(--teal);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
 .anexonome{font-size:14px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -2270,6 +2273,14 @@ async function carregarAnexos(clienteId){
    Mandar tudo encheria o e-mail de audio e de foto repetida, e o
    documento que interessa ao processo sumiria no meio. */
 let DOSSIE_ALVO=null,DOSSIE_ITENS=[],DOSSIE_CLIENTE=null;
+/* RECADO E COMENTARIOS — 16/10/2026. Pedido do Esdras: poder falar com a
+   Naiarha no proprio e-mail do dossie. Os comentarios sao os de
+   crm_comentarios (escritos por gente), nunca o historico automatico de
+   crm_atividades, que afogaria o que importa. Vem todos marcados porque
+   em 35 cartoes com comentario a media e menos de 2 por cartao; o que for
+   conversa interna se desmarca. O recado mora em variavel e nao so no
+   textarea porque marcar um comentario redesenha o modal. */
+let DOSSIE_COMENTS=[],DOSSIE_RECADO='';
 
 /* 18 MB e o teto do que sai daqui, e e o MESMO numero conferido do lado
    da function. O Resend aceita 40 MB, mas a caixa da destinataria corta
@@ -2279,16 +2290,17 @@ const DOSSIE_TETO=18*1024*1024;
 
 async function abrirDossie(clienteId){
   if(!clienteId)return;
-  DOSSIE_ALVO=clienteId;DOSSIE_ITENS=[];DOSSIE_CLIENTE=null;
+  DOSSIE_ALVO=clienteId;DOSSIE_ITENS=[];DOSSIE_CLIENTE=null;DOSSIE_COMENTS=[];DOSSIE_RECADO='';
   FILA_VOLTAR=clienteId;
   abrirModal('<div class="mbt">Dossiê judicial</div><div class="mbs">Carregando o material da cliente...</div>');
   /* Colunas explicitas de proposito: crm_mensagens tem a coluna bruto,
      que guarda o payload inteiro do WhatsApp. Um select('*') aqui
      arrastaria megabytes de base64 por cartao aberto. */
-  const[{data:cli},{data:anx},{data:mid}]=await Promise.all([
+  const[{data:cli},{data:anx},{data:mid},{data:coms}]=await Promise.all([
     sb.from('crm_clientes').select('id,nome_completo,senha_inss,contrato_arquivo_caminho').eq('id',clienteId).maybeSingle(),
     sb.from('crm_anexos').select('id,nome_arquivo,tamanho_bytes,criado_em').eq('cliente_id',clienteId).order('criado_em',{ascending:false}).limit(200),
-    sb.from('crm_mensagens').select('id,midia_nome,midia_mime,midia_tamanho,midia_tipo_doc,criado_em').eq('cliente_id',clienteId).not('midia_caminho','is',null).order('criado_em',{ascending:false}).limit(300)
+    sb.from('crm_mensagens').select('id,midia_nome,midia_mime,midia_tamanho,midia_tipo_doc,criado_em').eq('cliente_id',clienteId).not('midia_caminho','is',null).order('criado_em',{ascending:false}).limit(300),
+    sb.from('crm_comentarios').select('id,texto,criado_em,autor_usuario_id').eq('cliente_id',clienteId).order('criado_em',{ascending:true}).limit(100)
   ]);
   if(DOSSIE_ALVO!==clienteId)return; // trocaram de cartao enquanto carregava
   if(!cli){abrirModal('<div class="mbt">Dossiê judicial</div><div class="mbs">Cliente não encontrada.</div><div class="brow" style="justify-content:flex-end"><button class="btn btns" onclick="dossieFechar()">Voltar</button></div>');return;}
@@ -2312,6 +2324,7 @@ async function abrirDossie(clienteId){
       quando:m.criado_em,marcado:!ehAudio});
   });
   DOSSIE_ITENS=itens;
+  DOSSIE_COMENTS=(coms||[]).filter(k=>String(k.texto||'').trim()).map(k=>({id:k.id,texto:k.texto,quando:k.criado_em,autor:nomeUsuario(k.autor_usuario_id),marcado:true}));
   dossieDesenhar();
 }
 
@@ -2329,7 +2342,19 @@ function dossieDesenhar(){
   abrirModal(`
     <div class="mbt">Dossiê judicial</div>
     <div class="mbs">${esc(c?c.nome_completo:'')} — vai para ${esc(DOSSIE_EMAIL_ROTULO)}</div>
-    <div class="fhint" style="margin-bottom:10px">Os dados do cartão (CPF, endereço, datas, veredito, referências e observações) vão sempre no corpo do e-mail. Aqui você escolhe só os arquivos.</div>
+    <div class="fhint" style="margin-bottom:10px">Os dados do cartão (CPF, endereço, datas, veredito, referências e observações) vão sempre no corpo do e-mail. Aqui você escolhe o recado, os comentários e os arquivos.</div>
+    <div class="dossrot">Recado para a Naiarha <span class="dossmeta" style="display:inline">· opcional, vai no topo do e-mail</span></div>
+    <textarea id="doss-recado" class="dossrecado" maxlength="4000" placeholder="Ex.: Caso de concomitância, INSS negou em 10/10. Precisa entrar até o fim do mês." oninput="DOSSIE_RECADO=this.value">${esc(DOSSIE_RECADO)}</textarea>
+    ${DOSSIE_COMENTS.length?`<div class="dossrot">Comentários do cartão (${DOSSIE_COMENTS.length})</div>
+    <div class="dosslista" style="max-height:22vh">${DOSSIE_COMENTS.map((k,i)=>`
+      <label class="dossitem">
+        <input type="checkbox" ${k.marcado?'checked':''} onchange="dossieMarcarComent(${i},this.checked)"/>
+        <span style="flex:1;min-width:0">
+          <span class="dossmeta" style="margin:0 0 2px">${esc(k.autor)} · ${tempoRel(k.quando)}</span>
+          <span class="dosscoment">${esc(k.texto)}</span>
+        </span>
+      </label>`).join('')}</div>`:''}
+    <div class="dossrot">Arquivos</div>
     <label class="dossitem" style="border-color:var(--yellow)">
       <input type="checkbox" id="doss-senha" ${temSenha?'':'disabled'}/>
       <span style="flex:1;min-width:0">
@@ -2344,6 +2369,11 @@ function dossieDesenhar(){
       <button class="btn btnp" id="doss-enviar" onclick="dossieEnviar()">Enviar</button>
     </div>`,true);
   dossieRecalcular();
+}
+
+function dossieMarcarComent(i,valor){
+  if(!DOSSIE_COMENTS[i])return;
+  DOSSIE_COMENTS[i].marcado=!!valor;
 }
 
 function dossieMarcar(i,valor){
@@ -2368,7 +2398,7 @@ function dossieRecalcular(){
 }
 
 function dossieFechar(){
-  DOSSIE_ALVO=null;DOSSIE_ITENS=[];DOSSIE_CLIENTE=null;
+  DOSSIE_ALVO=null;DOSSIE_ITENS=[];DOSSIE_CLIENTE=null;DOSSIE_COMENTS=[];DOSSIE_RECADO='';
   filaFecharDialogo();
 }
 
@@ -2378,6 +2408,8 @@ async function dossieEnviar(){
   const botao=$('doss-enviar');
   const marcados=DOSSIE_ITENS.filter(x=>x.marcado).map(x=>({origem:x.origem,id:x.id}));
   const comSenha=!!($('doss-senha')&&$('doss-senha').checked);
+  const recado=String(($('doss-recado')&&$('doss-recado').value)||'').trim();
+  const comentIds=DOSSIE_COMENTS.filter(k=>k.marcado).map(k=>k.id);
   if(botao){botao.disabled=true;botao.textContent='Enviando...';}
   /* Timeout largo: a function baixa cada arquivo do storage antes de
      falar com o Resend, e dez anexos nao voltam em cinco segundos. */
@@ -2390,7 +2422,7 @@ async function dossieEnviar(){
     r=await fetch(SUPABASE_URL+'/functions/v1/enviar-dossie',{
       method:'POST',
       headers:{apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+tk,'Content-Type':'application/json'},
-      body:JSON.stringify({cliente_id:alvo,arquivos:marcados,incluir_senha:comSenha}),
+      body:JSON.stringify({cliente_id:alvo,arquivos:marcados,incluir_senha:comSenha,recado,comentarios:comentIds}),
       signal:corta.signal
     });
     dados=await r.json().catch(()=>null);
@@ -2405,9 +2437,13 @@ async function dossieEnviar(){
     if(botao){botao.disabled=false;botao.textContent='Enviar';}
     return;
   }
-  registrarAtividade(alvo,'enviou o dossiê judicial ('+dados.enviados+' anexo(s))');
+  /* Function antiga nao devolve `comentarios`: sem o numero, nao se
+     afirma nada sobre eles. */
+  const nCom=typeof dados.comentarios==='number'?dados.comentarios:null;
+  const extras=(nCom?', '+nCom+' comentário(s)':'')+(recado?', com recado':'');
+  registrarAtividade(alvo,'enviou o dossiê judicial ('+dados.enviados+' anexo(s)'+extras+')');
   const sobrou=(dados.falhas&&dados.falhas.length)?(' — '+dados.falhas.length+' arquivo(s) não abriram'):'';
-  toast('Dossiê enviado com '+dados.enviados+' anexo(s)'+sobrou,'ok');
+  toast('Dossiê enviado com '+dados.enviados+' anexo(s)'+extras+sobrou,'ok');
   dossieFechar();
 }
 

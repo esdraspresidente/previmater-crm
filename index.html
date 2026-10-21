@@ -5511,7 +5511,16 @@ function mcContratoLidosHtml(c) {
     ['endereco_cidade', 'Cidade', 'mc-endereco-cidade', c.endereco_cidade],
     ['endereco_uf', 'UF', 'mc-endereco-uf', c.endereco_uf]
   ].filter(x => L && L[x[0]]);
-  if (!campos.length && !conferido) return '';
+  /* SEM LEITURA TAMBEM GERA — 21/10/2026, caso Veridiane. Cartao sem nada
+     lido (atendimento feito por outro numero) escondia o quadro inteiro, e
+     com ele o unico botao que libera o contrato. Agora aparece o botao, que
+     reusa mcMarcarConferido(): um caminho de escrita so, com o mesmo aviso
+     de campo faltando. */
+  if (!campos.length && !conferido) return `<div style="background:var(--yellow-bg,#fff8e1);border:1.5px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:12px">
+    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:2px">Contrato — nenhum documento lido neste cartão</div>
+    <div style="font-size:10.5px;color:var(--text3);margin-bottom:8px">Se os dados chegaram por fora (outro número, e-mail, balcão), preencha nome, CPF, endereço completo e telefone e clique abaixo. O contrato é gerado com o cadastro e segue a esteira normal: Autentique, link no cartão e envio pela Samara.</div>
+    <button class="btn btnp" style="padding:5px 12px;font-size:11.5px" onclick="mcMarcarConferido('${c.id}')">Gerar contrato com o cadastro</button>
+  </div>`;
   if (conferido) {
     /* A CAIXA VERDE MENTIA — 02/09/2026, caso da Leonara.
 

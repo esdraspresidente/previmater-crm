@@ -5027,6 +5027,31 @@ async function enviarVencidaPeloMotor(idAutomacao){
     clearTimeout(t);
   }
 }
+/* DISPARO NA MAO SAI NA HORA — 26/10/2026 (motor v223).
+   O pedido continua sendo gravado em crm_clientes.sequencia_solicitada
+   (a RLS e quem autoriza). Esta chamada so faz o motor atender o pedido
+   AGORA e entregar o passo 1 na mesma tacada, em vez de esperar o cron
+   do minuto seguinte e a fila de cadencia. Se falhar, nada se perde: o
+   pedido esta no banco e a rodada atende normalmente. */
+async function dispararSequenciaPeloMotor(clienteId){
+  const corta=new AbortController();
+  const t=setTimeout(()=>corta.abort(),40000);
+  try{
+    const{data:sess}=await sb.auth.getSession();
+    const tk=(sess&&sess.session)?sess.session.access_token:SUPABASE_ANON_KEY;
+    const r=await fetch(SUPABASE_URL+'/functions/v1/motor?disparar_sequencia='+encodeURIComponent(clienteId),{
+      method:'POST',
+      headers:{apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+tk},
+      signal:corta.signal
+    });
+    if(!r.ok)return{ok:false,motivo:'o motor respondeu '+r.status};
+    return await r.json();
+  }catch(e){
+    return{ok:false,motivo:'não foi possível falar com o motor'};
+  }finally{
+    clearTimeout(t);
+  }
+}
 async function enviarJaPeloMotor(idMensagem){
   const corta=new AbortController();
   const t=setTimeout(()=>corta.abort(),15000);
@@ -11134,9 +11159,20 @@ async function mcConfirmarDisparo(codigo,nome,textoEditado){
   }).eq('id',alvo);
   if(error){toast('Erro: '+error.message,'er');return;}
   registrarAtividade(alvo,'pediu para disparar a sequência '+nome+(textoEditado?' com a primeira mensagem editada: '+textoEditado:''));
-  toast(nome+' na fila — sai em até 1 minuto','ok');
   FILA_VOLTAR=null;DISP_ALVO=null;
   fecharModal();
+  toast('Enviando '+nome+'...','in');
+  let r=await dispararSequenciaPeloMotor(alvo);
+  /* "espere" = saiu outra mensagem para ela ha menos de 8s (o WhatsGW
+     embaralha a ordem). E justamente o caso de quem esta no meio da
+     conversa: espera os 8s e tenta de novo, sem pedir clique. */
+  if(r&&r.situacao==='espere'&&r.automacao_id){
+    await new Promise(ok=>setTimeout(ok,9000));
+    r=await enviarVencidaPeloMotor(r.automacao_id);
+  }
+  if(r&&r.ok)toast(nome+' enviada','ok');
+  else if(r&&r.situacao==='nao_disparou')toast(nome+' não disparou: '+r.motivo,'er');
+  else toast('Não saiu agora ('+((r&&r.motivo)||'sem resposta')+'). Ficou na fila e sai na próxima rodada.','er');
   /* Da Caixa de Entrada NAO abre o cartao: quem estava lendo a conversa
      quer continuar lendo a conversa. Abrir o cartao por cima seria
      mudar de tela sem ninguem ter pedido. */

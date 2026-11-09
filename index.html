@@ -1381,7 +1381,7 @@ async function boot(){
   S=data.session;
   if(S)await carregarUsuario();
   $('ls').classList.add('h');
-  if(U){mostrarApp();route();}
+  if(U){mostrarApp();route();vozConcierge();}
   else $('ln').classList.remove('h');
 }
 async function carregarUsuario(){
@@ -1406,7 +1406,7 @@ async function doLogin(){
   S=data.session;
   await carregarUsuario();
   if(!U){err.textContent='Usuário não cadastrado no CRM.';await sb.auth.signOut();S=null;return;}
-  $('ln').classList.add('h');mostrarApp();location.hash='#/';route();
+  $('ln').classList.add('h');mostrarApp();location.hash='#/';route();vozConcierge();
 }
 async function doLogout(){
   await sb.auth.signOut();
@@ -7658,6 +7658,67 @@ function renderMDia(iso){
       <button style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--text2)" onclick="navDia(1)">›</button></div>
     <div class="mbs" style="text-align:center">${ps.length?`${ps.length} parcela(s) · Total: ${R(tot)}`:'Nenhuma parcela'}</div>
     ${corpo}`);
+}
+/* COMANDO DO CONCIERGE (?voz_texto) — 09/11/2026.
+   O Concierge (app porteiro dos comandos de voz) ouve "a Fulana pagou a
+   parcela", decide que é da Prev e abre o CRM com o texto. Aqui o texto
+   vai para a function prev-voz, que diz QUAL parcela é, e abre a mesma
+   tela "Confirmar recebimento" de sempre (abreMRec), já com a data falada.
+   Nada é gravado sem o Confirmar: pm_parcelas é compartilhada com o
+   Fullfin, e marcar a parcela errada tira a cobrança de uma mãe e faz o
+   Fullfin importar receita que não entrou.
+   Se o login cair no meio, o ?voz_texto fica na barra e roda depois do
+   login (doLogin chama de novo). */
+const PREV_VOZ_URL=SUPABASE_URL+'/functions/v1/prev-voz';
+async function vozConcierge(){
+  const q=new URLSearchParams(location.search);
+  const vt=(q.get('voz_texto')||'').trim(); if(!vt) return;
+  // Tira da barra já: recarregar a página não pode repetir o comando.
+  q.delete('voz_texto');
+  history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:'')+location.hash);
+  toast('Entendendo o comando…','ok');
+  try{
+    await loadFin(true);   // a parcela devolvida precisa estar em PARC
+    const{data}=await sb.auth.getSession(); const tk=data?.session?.access_token;
+    if(!tk) throw new Error('Entre de novo no CRM.');
+    const fd=new FormData(); fd.append('texto',vt.slice(0,500)); fd.append('hoje',fISO(today()));
+    const r=await fetch(PREV_VOZ_URL,{method:'POST',headers:{Authorization:'Bearer '+tk,apikey:SUPABASE_ANON_KEY},body:fd});
+    const j=await r.json().catch(()=>({ok:false,erro:'resposta inválida ('+r.status+')'}));
+    if(!j.ok) return vozPrevNaoEntendi(j.transcricao||vt,[j.erro||'Falhou.']);
+    vozPrevAplicar(j);
+  }catch(e){ toast(e?.message||'Sem conexão.','er'); }
+}
+// Cada ação da prev-voz abre a tela que já existe para ela. Ação nova: um
+// "if" aqui e o mesmo nome na function.
+function vozPrevAplicar(j){
+  const c=j.campos||{};
+  if(j.acao==='parcela_paga'){
+    const p=PARC.find(x=>String(x.id)===String(c.parcela_id));
+    if(!p) return vozPrevNaoEntendi(j.transcricao,['Achei a parcela, mas ela não está carregada aqui. Atualize o CRM e fale de novo.']);
+    abreMRec(p.id);
+    if(c.data && $('mrecd')) $('mrecd').value=c.data;
+    // Faixa do que foi ouvido logo abaixo do nome/parcela/valor: é o que
+    // deixa ver a mãe ou a parcela errada antes do Confirmar.
+    $('modalbox').querySelector('.mbs')?.insertAdjacentHTML('afterend',vozPrevBanner(j));
+    return;
+  }
+  vozPrevNaoEntendi(j.transcricao,j.duvidas);
+}
+function vozPrevBanner(j){
+  const d=(j.duvidas||[]).map(x=>`<li>${esc(x)}</li>`).join('');
+  return `<div style="background:#FFF7E0;border:1px solid #F2CF8A;border-radius:10px;padding:10px 12px;margin:-8px 0 16px;font-size:13px;color:#6B4A00;line-height:1.4">
+    <div><b>Você disse:</b> “${esc(j.transcricao)}”</div>${d?`<ul style="margin:6px 0 0 16px;padding:0">${d}</ul>`:''}
+    <div style="margin-top:6px;font-weight:700">Confira a mãe, a parcela e a data, e toque em Confirmar.</div></div>`;
+}
+function vozPrevNaoEntendi(transcricao,duvidas){
+  const d=(duvidas||[]).map(x=>`<li>${esc(x)}</li>`).join('');
+  abrirModal(`<button class="mbc" onclick="fecharModal()">×</button>
+    <div class="mbt">Não entendi o comando</div>
+    ${transcricao?`<div class="mbs"><b>Você disse:</b> “${esc(transcricao)}”</div>`:''}
+    ${d?`<ul style="margin:0 0 14px 18px;padding:0;font-size:13px;color:var(--text2)">${d}</ul>`:''}
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Exemplos: “a Juliana Souza pagou a parcela” · “a Juliana Souza pagou a segunda parcela ontem”.</div>
+    <div class="brow"><button class="btn btns" onclick="fecharModal()">Fechar</button>
+    <button class="btn btnp" onclick="fecharModal();location.hash='#/recebimentos'">Abrir recebimentos</button></div>`);
 }
 function abreMRec(pid){
   preceberId=pid;const p=PARC.find(x=>String(x.id)===String(pid));if(!p)return;

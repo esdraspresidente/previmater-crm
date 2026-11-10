@@ -355,6 +355,11 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .mb.mb-wide{max-width:680px;}
 .mbt{font-size:17px;font-weight:800;color:var(--text);margin-bottom:3px;letter-spacing:-.3px;}
 .mbs{font-size:13px;color:var(--text3);margin-bottom:20px;}
+.as-fio{display:flex;flex-direction:column;gap:8px;margin:12px 0 10px;max-height:52vh;overflow:auto}
+.as-p{align-self:flex-end;background:var(--teal);color:#fff;border-radius:14px 14px 4px 14px;padding:9px 12px;font-size:14px;max-width:88%}
+.as-r{align-self:flex-start;background:var(--bg,#F4F6F8);border:1px solid var(--border,#E3E7EB);border-radius:14px 14px 14px 4px;padding:10px 12px;font-size:14px;line-height:1.45;white-space:pre-wrap;max-width:94%}
+.as-itens{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.as-itens button{text-align:left;background:#fff;border:1px solid var(--border,#E3E7EB);border-radius:10px;padding:8px 10px;color:var(--teal);font-size:13px;font-weight:700;cursor:pointer}
 .mbc{float:right;background:none;border:none;font-size:26px;cursor:pointer;color:var(--text3);line-height:1;}
 .mctit{font-size:27px;font-weight:800;color:var(--text);border:none;border-bottom:1.5px solid transparent;background:none;width:100%;padding:4px 0 8px;margin-bottom:4px;font-family:inherit;}
 .mctit:focus{outline:none;border-bottom-color:var(--teal);}
@@ -1110,6 +1115,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
       <div class="sbi logo-mark"><svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="128" fill="#0A9396"/><path d="M 122 212 C 186 168, 240 124, 292 100 A 56 56 0 1 1 258 196" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><path d="M 226 218 C 150 232, 110 310, 134 372 C 156 424, 226 444, 296 424" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><path d="M 202 326 C 208 374, 276 392, 320 358 C 356 328, 352 270, 312 250 C 282 234, 250 256, 256 284 C 261 306, 292 308, 294 286" fill="none" stroke="#F4A3B8" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div><div class="sblt">PreviMater</div><div class="sbls">CRM</div></div>
     </div>
+    <button class="nbtn as-btn h" onclick="pAsAbrir()" title="Perguntar ao assistente"><svg class="ic lg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.8 7L4 20.5 5.5 16A8 8 0 1 1 21 12z"/><path d="M9 10h6M9 14h4"/></svg></button>
     <button id="notifbtn" class="nbtn h" onclick="abrirNotificacoes()" title="Notificações"><svg class="ic lg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/></svg><span id="notifbadge" class="nbadge"></span></button>
     </div>
     <div class="sbsearch" onclick="abrirBuscaGlobal()"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></span><span>Buscar cliente...</span></div>
@@ -1129,6 +1135,7 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <button id="notifbtnm" class="nbtn h" onclick="abrirNotificacoes()" title="Notificações"><svg class="ic lg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/></svg><span id="notifbadgem" class="nbadge"></span></button>
+        <button class="nbtn as-btn h" onclick="pAsAbrir()" title="Perguntar ao assistente"><svg class="ic lg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.8 7L4 20.5 5.5 16A8 8 0 1 1 21 12z"/><path d="M9 10h6M9 14h4"/></svg></button>
         <button class="nbtn" onclick="abrirBuscaGlobal()" title="Buscar cliente"><svg class="ic lg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></button>
         <button class="bnew" style="padding:7px 13px;font-size:12px" onclick="location.hash='#/cliente/novo'">+ Novo</button>
       </div>
@@ -1417,6 +1424,9 @@ async function doLogout(){
 }
 function mostrarApp(){
   $('app').classList.add('v');
+  /* Assistente só para quem já vê o Financeiro: ele fala de parcelas e
+     valores, e a mesma trava das telas (temFinanceiro) vale aqui. */
+  document.querySelectorAll('.as-btn').forEach(b=>b.classList.toggle('h',!temFinanceiro()));
   $('sbav').textContent=(U.nome||'?').charAt(0).toUpperCase();
   $('sbnm').textContent=U.nome;$('sbem').textContent=U.email;
   montarSidebar();
@@ -7682,6 +7692,7 @@ async function vozConcierge(){
     const{data}=await sb.auth.getSession(); const tk=data?.session?.access_token;
     if(!tk) throw new Error('Entre de novo no CRM.');
     const fd=new FormData(); fd.append('texto',vt.slice(0,500)); fd.append('hoje',fISO(today()));
+    pAsAnexar(fd);
     const r=await fetch(PREV_VOZ_URL,{method:'POST',headers:{Authorization:'Bearer '+tk,apikey:SUPABASE_ANON_KEY},body:fd});
     const j=await r.json().catch(()=>({ok:false,erro:'resposta inválida ('+r.status+')'}));
     if(!j.ok) return vozPrevNaoEntendi(j.transcricao||vt,[j.erro||'Falhou.']);
@@ -7692,6 +7703,11 @@ async function vozConcierge(){
 // "if" aqui e o mesmo nome na function.
 function vozPrevAplicar(j){
   const c=j.campos||{};
+  if(j.acao==='consulta') return pAsResposta(j);
+  if(_pAs.aberto){
+    if(j.acao==='nao_entendi') return pAsResposta({...j,resposta:'Não consegui entender.'+((j.duvidas||[]).length?'\n• '+j.duvidas.join('\n• '):''),itens:[]});
+    _pAs.fio.push({p:j.transcricao,r:'Abri a tela para você confirmar.',itens:[]});
+  }
   if(j.acao==='parcela_paga'){
     const p=PARC.find(x=>String(x.id)===String(c.parcela_id));
     if(!p) return vozPrevNaoEntendi(j.transcricao,['Achei a parcela, mas ela não está carregada aqui. Atualize o CRM e fale de novo.']);
@@ -7720,6 +7736,158 @@ function vozPrevNaoEntendi(transcricao,duvidas){
     <div class="brow"><button class="btn btns" onclick="fecharModal()">Fechar</button>
     <button class="btn btnp" onclick="fecharModal();location.hash='#/recebimentos'">Abrir recebimentos</button></div>`);
 }
+/* ASSISTENTE DA PREV (perguntas) — 09/11/2026.
+   "Quem está atrasada?", "a Juliana já pagou?", "quanto entra esta
+   semana?". Quem monta os fatos é ESTE código, com as mesmas regras das
+   telas: stD() para o status, e as contas da tela Resumo de recebimentos
+   (mês pelo VENCIMENTO, inadimplente fora da previsão). A IA (prev-voz,
+   modo consulta) só recebe esse resumo pronto e escreve a resposta: não lê
+   o banco nem faz conta própria — o número que ela fala é o da tela.
+   Cada mãe leva um código (M1, M2...). A IA devolve os que citou, e o CRM
+   transforma em botões que abrem o cartão da cliente; ids não saem daqui.
+   Vai para a IA: nome da mãe, parcelas, valores e datas. Nada de CPF,
+   telefone ou endereço.
+   Ordem dada na conversa ("a Juliana pagou") abre o Confirmar recebimento.
+   Só para quem tem Financeiro (mesma trava das telas). */
+let _pAs={fio:[],mapa:{},mapaFio:{},aberto:false,fechaOrig:null,rec:null,stream:null,partes:[],ocupado:false};
+const P_AS_MAX_FIO=3;
+
+function pAsSituacao(){
+  const h=fISO(today()), L=[], mapa={};
+  const soma=a=>a.reduce((t,p)=>t+parseFloat(p.valor_honorario||0),0);
+  const DIAS=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+  // Uma linha por mãe, com código: é por ela que a pessoa pergunta.
+  const grupos=new Map();
+  PARC.forEach(p=>{ const k=String(pCli(p)||'nome:'+(p.cliente_nome||'')); if(!grupos.has(k)) grupos.set(k,{nome:p.cliente_nome||'—',cli:pCli(p),ps:[]}); grupos.get(k).ps.push(p); });
+  let n=0; const codMae=new Map();
+  [...grupos.entries()].sort((a,b)=>String(a[1].nome).localeCompare(String(b[1].nome))).forEach(([k,g])=>{
+    const c='M'+(++n); codMae.set(k,c); mapa[c]={rotulo:g.nome,cli:g.cli};
+  });
+  const cm=p=>codMae.get(String(pCli(p)||'nome:'+(p.cliente_nome||'')));
+  const lp=p=>`${cm(p)} ${p.cliente_nome} — parcela ${p.num_parcela}/${p.total_parcelas} — ${R(p.valor_honorario)} — venc ${fD(p.data_vencimento)}`;
+
+  L.push(`HOJE: ${fD(h)} (${DIAS[today().getDay()]})`);
+  // Mês de hoje: mesmas contas das caixas da tela "Resumo de recebimentos".
+  const ms=h.slice(0,7);
+  const pM=PARC.filter(p=>p.data_vencimento&&p.data_vencimento.startsWith(ms)&&p.status!=='cancelado');
+  const pPrev=pM.filter(p=>p.status!=='inadimplente');
+  L.push(`\nMÊS ATUAL (${fMes(today())}), por mês de VENCIMENTO — mesmas caixas da tela Resumo:`,
+    `Previsto ${R(soma(pPrev))} (${pPrev.length} parcelas); já recebido ${R(soma(pM.filter(p=>p.status==='recebido')))}; a receber ${R(soma(pM.filter(p=>stD(p)==='previsto')))}; atrasado ${R(soma(pM.filter(p=>stD(p)==='atrasado')))}; inadimplente ${R(soma(pM.filter(p=>p.status==='inadimplente')))} (fora da previsão)`);
+  L.push(`GERAL: total já recebido ${R(soma(PARC.filter(p=>p.status==='recebido')))}; ainda a vencer ${R(soma(PARC.filter(p=>stD(p)==='previsto')))}`);
+
+  const atr=PARC.filter(p=>stD(p)==='atrasado').sort((a,b)=>a.data_vencimento.localeCompare(b.data_vencimento));
+  L.push(`\nATRASADAS (${atr.length}, ${R(soma(atr))}):`, ...atr.slice(0,150).map(p=>lp(p)+` — ${dAtr(p.data_vencimento)} dia(s) de atraso`));
+  const ate=fISO(new Date(today().getTime()+15*86400000));
+  const prox=PARC.filter(p=>stD(p)==='previsto'&&p.data_vencimento>=h&&p.data_vencimento<=ate).sort((a,b)=>a.data_vencimento.localeCompare(b.data_vencimento));
+  L.push(`\nVENCEM DE HOJE ATÉ 15 DIAS (${prox.length}, ${R(soma(prox))}):`, ...prox.slice(0,120).map(p=>lp(p)+(p.data_vencimento===h?' — VENCE HOJE':'')));
+  const desde=fISO(new Date(today().getTime()-30*86400000));
+  const pagas=PARC.filter(p=>p.status==='recebido'&&p.data_pagamento&&p.data_pagamento>=desde).sort((a,b)=>b.data_pagamento.localeCompare(a.data_pagamento));
+  L.push(`\nRECEBIDAS NOS ÚLTIMOS 30 DIAS, pela data do pagamento (${pagas.length}, ${R(soma(pagas))}):`, ...pagas.slice(0,150).map(p=>lp(p)+` — paga em ${fD(p.data_pagamento)}`));
+  const inad=PARC.filter(p=>p.status==='inadimplente');
+  L.push(`\nINADIMPLENTES (${inad.length}, ${R(soma(inad))}):`, ...inad.slice(0,100).map(lp));
+  // Ficha curta de cada mãe: responde "a Fulana já pagou?" mesmo fora das
+  // listas acima.
+  L.push(`\nTODAS AS MÃES (código — nome — pagas — em aberto — próxima):`);
+  [...grupos.entries()].sort((a,b)=>String(a[1].nome).localeCompare(String(b[1].nome))).forEach(([k,g])=>{
+    const pg=g.ps.filter(p=>p.status==='recebido'), ab=g.ps.filter(p=>!['recebido','cancelado'].includes(p.status));
+    const prx=ab.slice().sort((a,b)=>String(a.data_vencimento).localeCompare(String(b.data_vencimento)))[0];
+    L.push(`${codMae.get(k)} ${g.nome} — pagas ${pg.length}/${g.ps[0]?.total_parcelas||g.ps.length} (${R(soma(pg))}) — em aberto ${ab.length} (${R(soma(ab))})`
+      +(prx?` — próxima ${prx.num_parcela}/${prx.total_parcelas} venc ${fD(prx.data_vencimento)} (${stD(prx)})`:'')+(g.ps.some(p=>p.status==='inadimplente')?' — tem parcela INADIMPLENTE':''));
+  });
+  return{texto:L.join('\n'),mapa};
+}
+function pAsAnexar(fd){
+  // Erro no resumo não pode derrubar o comando de parcela paga.
+  try{ const s=pAsSituacao(); _pAs.mapa=s.mapa; fd.append('situacao',s.texto); }catch(e){ console.error('situação',e); }
+  if(_pAs.aberto) fd.append('historico',JSON.stringify(_pAs.fio.slice(-P_AS_MAX_FIO).map(x=>({p:x.p,r:x.r}))));
+}
+async function pAsAbrir(){
+  if(!temFinanceiro()) return toast('Área restrita ao financeiro.','er');
+  await loadFin();
+  // Fechar o modal encerra a conversa; embrulha o fecharModal uma vez só.
+  if(!_pAs.fechaOrig){
+    _pAs.fechaOrig=window.fecharModal;
+    window.fecharModal=function(){ _pAs.aberto=false; pAsMicParar(true); const f=_pAs.fechaOrig; _pAs.fechaOrig=null; window.fecharModal=f; return f.apply(this,arguments); };
+  }
+  _pAs.aberto=true;
+  abrirModal(`<button class="mbc" onclick="fecharModal()">×</button>
+    <div class="mbt">Assistente</div>
+    <div class="mbs" style="margin-bottom:0">Parcelas e recebimentos da PreviMater</div>
+    <div class="as-fio" id="as-fio">${pAsFioHtml()}</div>
+    <div style="display:flex;gap:8px;align-items:flex-end">
+      <textarea id="as-txt" rows="1" style="flex:1;min-height:44px;resize:none;border:1px solid var(--border,#E3E7EB);border-radius:10px;padding:10px 12px;font:inherit;font-size:15px" placeholder="Pergunte… ex.: quem está atrasada?"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();pAsEnviar()}"></textarea>
+      <button class="btn btnp" style="padding:11px 13px" onclick="pAsEnviar()" aria-label="Enviar"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg></button>
+      <button class="btn" id="as-mic" style="padding:11px 13px;background:#25D366;color:#fff" onclick="pAsMic()" aria-label="Perguntar falando"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    </div>
+    ${_pAs.fio.length?'':`<div style="font-size:12px;color:var(--text3);margin-top:10px">Exemplos: “quem está atrasada?” · “a Juliana Souza já pagou?” · “quanto entra esta semana?” · “quanto recebi este mês?”</div>`}
+    <div style="font-size:11.5px;color:var(--text3);margin-top:8px">Pode dar ordem aqui também (“a Juliana Souza pagou a parcela”): abre o Confirmar recebimento. Nada é gravado sem o seu toque.</div>`);
+  pAsRolar();
+}
+function pAsFioHtml(){
+  return _pAs.fio.map((x,i)=>`<div class="as-p">${esc(x.p)}</div><div class="as-r">${esc(x.r)}${x.itens?.length?`<div class="as-itens">${x.itens.map(c=>
+    `<button onclick="pAsIr('${c}')">${esc(_pAs.mapaFio[c]?.rotulo||c)} ›</button>`).join('')}</div>`:''}
+    <div style="margin-top:6px"><button style="border:0;background:none;color:var(--teal);font-weight:700;cursor:pointer;padding:0;font-size:12.5px" onclick="pAsOuvir(${i})">Ouvir</button></div></div>`).join('');
+}
+function pAsRolar(){ const f=$('as-fio'); if(f) f.scrollTop=f.scrollHeight; }
+function pAsIr(c){ const it=_pAs.mapaFio[c]; if(!it?.cli) return toast('Cliente sem cartão no CRM.','er'); fecharModal(); setTimeout(()=>abrirCardCliente(it.cli),200); }
+
+async function pAsMandar(fd){
+  if(_pAs.ocupado) return; _pAs.ocupado=true; toast('Pensando…','ok');
+  try{
+    const{data}=await sb.auth.getSession(); const tk=data?.session?.access_token;
+    if(!tk) throw new Error('Entre de novo no CRM.');
+    fd.append('hoje',fISO(today())); pAsAnexar(fd);
+    const r=await fetch(PREV_VOZ_URL,{method:'POST',headers:{Authorization:'Bearer '+tk,apikey:SUPABASE_ANON_KEY},body:fd});
+    const j=await r.json().catch(()=>({ok:false,erro:'resposta inválida ('+r.status+')'}));
+    if(!j.ok) return toast(j.erro||'Falhou.','er');
+    if($('as-txt')) $('as-txt').value='';
+    vozPrevAplicar(j);
+  }catch(e){ toast(e?.message||'Sem conexão.','er'); }
+  finally{ _pAs.ocupado=false; }
+}
+function pAsEnviar(){ const t=($('as-txt')?.value||'').trim(); if(!t) return; const fd=new FormData(); fd.append('texto',t.slice(0,500)); pAsMandar(fd); }
+
+// Microfone da conversa: toca para gravar, toca de novo para enviar.
+async function pAsMic(){
+  if(_pAs.rec&&_pAs.rec.state==='recording') return pAsMicParar(false);
+  if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==='undefined') return toast('Este aparelho não grava áudio aqui.','er');
+  try{ _pAs.stream=await navigator.mediaDevices.getUserMedia({audio:true}); }catch(e){ return toast('Libere o microfone para o CRM.','er'); }
+  const tipos=['audio/webm;codecs=opus','audio/mp4','audio/webm'];
+  const mime=tipos.find(t=>{try{return MediaRecorder.isTypeSupported(t);}catch(e){return false;}})||'';
+  _pAs.rec=mime?new MediaRecorder(_pAs.stream,{mimeType:mime}):new MediaRecorder(_pAs.stream);
+  _pAs.partes=[]; _pAs.cancelado=false;
+  _pAs.rec.ondataavailable=e=>{ if(e.data?.size) _pAs.partes.push(e.data); };
+  _pAs.rec.onstop=()=>{
+    try{_pAs.stream?.getTracks().forEach(t=>t.stop());}catch(e){} _pAs.stream=null;
+    if($('as-mic')) $('as-mic').style.background='#25D366';
+    if(_pAs.cancelado) return;
+    const tipo=_pAs.rec.mimeType||'audio/webm', blob=new Blob(_pAs.partes,{type:tipo});
+    if(blob.size<1500) return toast('Não deu para ouvir. Fale de novo.','er');
+    const fd=new FormData(); fd.append('audio',blob,'pergunta.'+(tipo.includes('mp4')?'mp4':'webm')); pAsMandar(fd);
+  };
+  _pAs.rec.start();
+  if($('as-mic')) $('as-mic').style.background='#E5484D';
+  toast('Gravando… toque de novo para enviar','ok');
+}
+function pAsMicParar(cancelar){ _pAs.cancelado=!!cancelar; try{ if(_pAs.rec?.state==='recording') _pAs.rec.stop(); }catch(e){} }
+
+function pAsResposta(j){
+  const mapa=_pAs.mapa||{}; Object.assign(_pAs.mapaFio,mapa);
+  const itens=(j.itens||[]).filter(c=>mapa[c]).slice(0,8);
+  _pAs.fio.push({p:j.transcricao,r:j.resposta||'Sem resposta.',itens});
+  if(_pAs.fio.length>20) _pAs.fio=_pAs.fio.slice(-20);
+  if(_pAs.aberto&&$('as-fio')){ $('as-fio').innerHTML=pAsFioHtml(); pAsRolar(); } else pAsAbrir();
+}
+function pAsOuvir(i){
+  try{
+    if(speechSynthesis.speaking){ speechSynthesis.cancel(); return; }
+    const u=new SpeechSynthesisUtterance(_pAs.fio[i]?.r||''); u.lang='pt-BR';
+    const v=speechSynthesis.getVoices().find(x=>/pt[-_]BR/i.test(x.lang)); if(v) u.voice=v;
+    speechSynthesis.speak(u);
+  }catch(e){ toast('Este aparelho não lê em voz alta.','er'); }
+}
+
 function abreMRec(pid){
   preceberId=pid;const p=PARC.find(x=>String(x.id)===String(pid));if(!p)return;
   abrirModal(`<button class="mbc" onclick="fecharModal()">×</button>

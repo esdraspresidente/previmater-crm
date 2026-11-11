@@ -16,5 +16,20 @@
       "sizes": "512x512",
       "type": "image/png"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Falar com a Prev",
+      "short_name": "Falar com a Prev",
+      "description": "Abre o CRM já gravando: parcela paga ou pergunta",
+      "url": "./?voz=1",
+      "icons": [
+        {
+          "src": "icon-voz-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

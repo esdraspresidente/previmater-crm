@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="theme-color" content="#0A9396"/>
 <title>PreviMater — CRM</title>
-<link rel="manifest" href="manifest.json?v=2"/>
+<link rel="manifest" href="manifest.json?v=3"/>
 <link rel="icon" href="pm-icon-192.png"/>
 <link rel="apple-touch-icon" href="pm-icon-192.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -1032,6 +1032,29 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 .bni.a{color:var(--teal);}
 .bni.a svg.ic{stroke-width:2.2;}
 .bni.h{display:none;}
+/* ══ MICROFONE VERDE (igual ao Fullfin e ao Trabalho de Homem) ══
+   Verde de WhatsApp: já é a cor de "mandar áudio". À direita, logo acima
+   da barra inferior no celular. Só para quem tem Financeiro (mostrarApp):
+   tudo que ele faz hoje é parcela. Fala comando ("a Juliana pagou a
+   parcela") ou pergunta ("quem está atrasada?"). */
+#fab-voz{position:fixed;right:16px;bottom:calc(var(--bnh) + 16px + env(safe-area-inset-bottom,0));z-index:96;
+  width:58px;height:58px;border-radius:50%;border:0;background:#25D366;color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 12px 26px -8px rgba(37,211,102,.75);}
+#fab-voz svg.ic{width:28px;height:28px;}
+#fab-voz:active{transform:scale(.93);}
+#fab-voz.h{display:none;}
+@media(min-width:901px){#fab-voz{bottom:24px;right:28px;}}
+/* Tela de gravação: botão de enviar grande EMBAIXO, perto do polegar. */
+#voz-ov{position:fixed;inset:0;z-index:600;background:rgba(10,20,40,.74);display:none;flex-direction:column;
+  align-items:center;justify-content:flex-end;gap:18px;padding-bottom:calc(env(safe-area-inset-bottom,0) + 28px);}
+#voz-ov.v{display:flex;}
+#voz-big{width:176px;height:176px;border-radius:50%;border:0;cursor:pointer;background:#25D366;color:#fff;
+  display:flex;align-items:center;justify-content:center;animation:vozPulso 1.4s ease-in-out infinite;}
+#voz-big svg.ic{width:64px;height:64px;}
+#voz-tempo{color:#fff;font-size:30px;font-weight:800;font-variant-numeric:tabular-nums;min-height:36px;}
+#voz-dica{color:rgba(255,255,255,.88);font-size:15px;font-weight:600;text-align:center;padding:0 24px;}
+#voz-cancel{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:10px 26px;font-size:14px;font-weight:700;cursor:pointer;}
+@keyframes vozPulso{0%,100%{box-shadow:0 0 0 0 rgba(37,211,102,.6)}50%{box-shadow:0 0 0 26px rgba(37,211,102,0)}}
 /* O ponto de "tem coisa esperando" da fila precisa existir aqui também:
    se ele só vive no menu lateral, ninguém no celular vê o aviso — que é
    justamente o motivo de a fila ter subido para a barra. */
@@ -1141,6 +1164,13 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
       </div>
     </div>
     <div id="pc"></div>
+  </div>
+  <button id="fab-voz" class="h" onclick="vozPrevToggle()" aria-label="Falar com a Prev"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+  <div id="voz-ov" role="dialog" aria-label="Gravando comando de voz">
+    <div id="voz-tempo"></div>
+    <div id="voz-dica">Fale e toque no botão para enviar<br><small style="font-weight:500;opacity:.8">“a Juliana pagou a parcela” · “quem está atrasada?”</small></div>
+    <button id="voz-big" onclick="vozPrevBotaoGrande()" aria-label="Parar e enviar"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg></button>
+    <button id="voz-cancel" onclick="vozPrevParar(true)">Cancelar</button>
   </div>
   <nav id="bn">
     <button class="bni" id="bn-quadro" onclick="location.hash='#/quadro/'+(QPERM[0]||'comercial')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5.5" height="16" rx="1.5"/><rect x="10.5" y="4" width="5.5" height="11" rx="1.5"/><rect x="18" y="4" width="3" height="8" rx="1.5"/></svg>Quadros</button>
@@ -1427,6 +1457,7 @@ function mostrarApp(){
   /* Assistente só para quem já vê o Financeiro: ele fala de parcelas e
      valores, e a mesma trava das telas (temFinanceiro) vale aqui. */
   document.querySelectorAll('.as-btn').forEach(b=>b.classList.toggle('h',!temFinanceiro()));
+  $('fab-voz')?.classList.toggle('h',!temFinanceiro());
   $('sbav').textContent=(U.nome||'?').charAt(0).toUpperCase();
   $('sbnm').textContent=U.nome;$('sbem').textContent=U.email;
   montarSidebar();
@@ -7682,10 +7713,14 @@ function renderMDia(iso){
 const PREV_VOZ_URL=SUPABASE_URL+'/functions/v1/prev-voz';
 async function vozConcierge(){
   const q=new URLSearchParams(location.search);
-  const vt=(q.get('voz_texto')||'').trim(); if(!vt) return;
+  const vt=(q.get('voz_texto')||'').trim();
+  const atalho=q.get('voz')==='1';
+  if(!vt&&!atalho) return;
   // Tira da barra já: recarregar a página não pode repetir o comando.
-  q.delete('voz_texto');
+  q.delete('voz_texto'); q.delete('voz');
   history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:'')+location.hash);
+  // Atalho "Falar com a Prev" (segurar o ícone do app): abre já gravando.
+  if(atalho){ if(temFinanceiro()){ vozPrevPronto(); vozPrevToggle(true); } return; }
   toast('Entendendo o comando…','ok');
   try{
     await loadFin(true);   // a parcela devolvida precisa estar em PARC
@@ -7886,6 +7921,53 @@ function pAsOuvir(i){
     const v=speechSynthesis.getVoices().find(x=>/pt[-_]BR/i.test(x.lang)); if(v) u.voice=v;
     speechSynthesis.speak(u);
   }catch(e){ toast('Este aparelho não lê em voz alta.','er'); }
+}
+
+/* MICROFONE VERDE — 11/11/2026 (pedido do Esdras: igual ao do Fullfin).
+   Grava, manda o áudio para a prev-voz junto com o resumo do assistente
+   e abre o que voltar: comando → Confirmar recebimento; pergunta → a
+   conversa do assistente; não entendido → explicação. Não grava nada. */
+const VOZ_MAX_SEG=45;
+const _pv={rec:null,stream:null,partes:[],timer:null,t0:0,cancelado:false};
+const VOZ_ICONE_MIC='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>', VOZ_ICONE_ENVIAR='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>';
+function vozPrevBotaoGrande(){ if(_pv.rec&&_pv.rec.state==='recording') vozPrevParar(false); else vozPrevToggle(); }
+// Tela aberta esperando um toque (o navegador às vezes exige um toque
+// antes de liberar o microfone, quando o app abre pelo atalho).
+function vozPrevPronto(){
+  $('voz-ov').classList.add('v'); $('voz-tempo').textContent='';
+  $('voz-big').innerHTML=VOZ_ICONE_MIC; $('voz-dica').firstChild.textContent='Toque no botão e fale';
+}
+async function vozPrevToggle(automatico){
+  if(_pAs.ocupado) return;
+  if(_pv.rec&&_pv.rec.state==='recording') return vozPrevParar(false);
+  if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==='undefined'){ $('voz-ov').classList.remove('v'); return toast('Este aparelho não grava áudio aqui.','er'); }
+  try{ _pv.stream=await navigator.mediaDevices.getUserMedia({audio:true}); }
+  catch(e){ if(automatico===true) return; $('voz-ov').classList.remove('v'); return toast('Libere o microfone para o CRM nas configurações do navegador.','er'); }
+  const tipos=['audio/webm;codecs=opus','audio/mp4','audio/webm','audio/ogg;codecs=opus'];
+  const mime=tipos.find(t=>{try{return MediaRecorder.isTypeSupported(t);}catch(e){return false;}})||'';
+  try{ _pv.rec=mime?new MediaRecorder(_pv.stream,{mimeType:mime}):new MediaRecorder(_pv.stream); }
+  catch(e){ vozPrevSoltar(); $('voz-ov').classList.remove('v'); return toast('Não consegui iniciar a gravação.','er'); }
+  _pv.partes=[]; _pv.cancelado=false; _pv.t0=Date.now();
+  _pv.rec.ondataavailable=e=>{ if(e.data?.size) _pv.partes.push(e.data); };
+  _pv.rec.onstop=()=>{ vozPrevSoltar(); if(!_pv.cancelado) vozPrevEnviar(); };
+  _pv.rec.start();
+  $('voz-ov').classList.add('v'); $('voz-big').innerHTML=VOZ_ICONE_ENVIAR;
+  $('voz-dica').firstChild.textContent='Fale e toque no botão para enviar';
+  const tick=()=>{ const s=Math.floor((Date.now()-_pv.t0)/1000); $('voz-tempo').textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); if(s>=VOZ_MAX_SEG) vozPrevParar(false); };
+  tick(); _pv.timer=setInterval(tick,500);
+}
+function vozPrevParar(cancelar){
+  _pv.cancelado=!!cancelar; clearInterval(_pv.timer); $('voz-ov').classList.remove('v');
+  try{ if(_pv.rec?.state==='recording') _pv.rec.stop(); else vozPrevSoltar(); }catch(e){ vozPrevSoltar(); }
+}
+// Desliga o microfone de verdade (senão o ícone de gravação fica aceso).
+function vozPrevSoltar(){ try{ _pv.stream?.getTracks().forEach(t=>t.stop()); }catch(e){} _pv.stream=null; }
+async function vozPrevEnviar(){
+  const tipo=_pv.rec?.mimeType||'audio/webm', blob=new Blob(_pv.partes,{type:tipo});
+  if(blob.size<1500) return toast('Não deu para ouvir. Toque e fale de novo.','er');
+  await loadFin();   // a parcela devolvida precisa estar carregada
+  const fd=new FormData(); fd.append('audio',blob,'comando.'+(tipo.includes('mp4')?'mp4':tipo.includes('ogg')?'ogg':'webm'));
+  pAsMandar(fd);     // mesmo envio do assistente: resumo + histórico + vozPrevAplicar
 }
 
 function abreMRec(pid){

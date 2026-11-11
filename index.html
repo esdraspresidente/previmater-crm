@@ -1200,7 +1200,18 @@ html,body{min-height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:
 // ============================================================
 const SUPABASE_URL='https://ggyngtqknonwnohbzkyj.supabase.co';
 const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdneW5ndHFrbm9ud25vaGJ6a3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5ODA4NzcsImV4cCI6MjA5NDU1Njg3N30.0zYn_V9gBtRNWivAHfps6u68akb0mTc7Ix8ZD38OD0I';
-const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+/* MODO INVISÍVEL (Concierge, 11/11/2026): o Concierge abre o CRM
+   escondido (iframe, ?situacao=1) só para montar o resumo do assistente
+   (pAsSituacao) e responder pergunta falada sem abrir o app. Nesse modo
+   o cliente usa SÓ o passe que o Concierge manda (accessToken), em
+   memória: não lê, não renova e não grava o login guardado do CRM.
+   Renovar a mesma chave em dois lugares faz o Supabase derrubar a sessão
+   do CRM aberto. Também não desenha tela e não grava nada. */
+const MODO_SIT=(()=>{try{return window.parent!==window&&new URLSearchParams(location.search).get('situacao')==='1';}catch(e){return false;}})();
+let _sitToken=null;
+const sb=MODO_SIT
+  ? supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{accessToken:async()=>_sitToken})
+  : supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 
 // Lista que serve de gatilho: card que chega aqui COM link do contrato
 // preenchido faz o motor religar a Samara e mandar o contrato.
@@ -1610,7 +1621,8 @@ function marcarNav(id){
 // ROTEAMENTO
 // ============================================================
 window.addEventListener('hashchange',route);
-window.addEventListener('DOMContentLoaded',boot);
+// Modo invisível não entra no fluxo normal (login, telas, avisos): ver sitIniciar.
+window.addEventListener('DOMContentLoaded',()=>MODO_SIT?sitIniciar():boot());
 document.addEventListener('click',e=>{
   const p=$('mc-etq-picker');
   if(p&&!p.classList.contains('h')&&!e.target.closest('.mcetq')&&!e.target.closest('.etq-trigger'))p.classList.add('h');
@@ -11602,9 +11614,45 @@ async function ibConfirmarCriarCliente(chave){
   fecharModal();
   abrirCardCliente(novo.id);
 }
+
+/* MODO INVISÍVEL — conversa com o Concierge (11/11/2026)
+   Carrega o usuário (mesma trava do assistente: só quem vê o Financeiro)
+   e as parcelas (loadFin), e devolve o MESMO resumo do assistente
+   (pAsSituacao). O resumo não tem CPF: pm_parcelas não guarda, e de
+   crm_clientes o loadFin só lê nome, telefone e Trello. Mensagens só da
+   janela de cima, do mesmo endereço. Dados com mais de 60 s são
+   recarregados antes de responder. */
+function sitIniciar(){
+  let carregado=0, carregando=null;
+  const avisa=m=>parent.postMessage({cc:1,app:'prev',...m},location.origin);
+  const carregar=()=>carregando||(carregando=(async()=>{
+    if(!U) await carregarUsuario();
+    if(!U) throw new Error('Este login não está cadastrado no CRM.');
+    if(!temFinanceiro()) throw new Error('Este login não vê o Financeiro do CRM.');
+    await loadFin(true);
+    carregado=Date.now();
+  })().finally(()=>{carregando=null;}));
+  window.addEventListener('message',async e=>{
+    if(e.source!==parent||e.origin!==location.origin||!e.data?.cc) return;
+    const d=e.data;
+    try{
+      if(d.token){ _sitToken=d.token; S={access_token:d.token,user:{id:d.user_id}}; }
+      if(d.tipo==='token'){ await carregar(); avisa({tipo:'pronto'}); }
+      else if(d.tipo==='contexto'){
+        if(!_sitToken) throw new Error('sem login');
+        if(Date.now()-carregado>60000) await carregar();
+        const s=pAsSituacao();
+        avisa({tipo:'contexto',id:d.id,situacao:s.texto,mapa:s.mapa});
+      }
+    }catch(err){ avisa({tipo:'erro',id:d.id,erro:err?.message||'falha ao carregar'}); }
+  });
+  avisa({tipo:'aberto'});
+}
 </script>
 <script>
-if('serviceWorker' in navigator){
+// O modo invisível (Concierge) não registra service worker: é o app aberto
+// de verdade que cuida disso.
+if('serviceWorker' in navigator && !MODO_SIT){
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
 </script>

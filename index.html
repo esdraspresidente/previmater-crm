@@ -2524,7 +2524,11 @@ async function visualizarAnexo(caminho,nome,idx){
       <span class="fhint">${mcPreviewIdx+1} de ${MC_ANEXOS.length}</span>
       <button class="btn btns" style="padding:5px 12px" ${mcPreviewIdx>=MC_ANEXOS.length-1?'disabled':''} onclick="mcPreviewNavegar(1)">Próximo ›</button>
     </div>`:'';
-  abrirModal(`<button class="mbc" onclick="fecharInteligente()">×</button><div class="mbt">${esc(nome)}</div><div class="mbs">&nbsp;</div>${nav}${corpo}`,true);
+  /* Botao Baixar em TODO tipo de arquivo. O PDF vai num iframe, e o
+     Chrome do celular nao desenha PDF em iframe: mostra so um "Abrir"
+     proprio, que usa o link assinado (vale 3 min) e nao baixa. */
+  const baixar=`<div style="text-align:right;margin-bottom:8px"><button class="btn btns" style="padding:5px 12px;font-size:12px" onclick="baixarAnexo('${escA(caminho)}','${escA(nome)}')">⬇ Baixar</button></div>`;
+  abrirModal(`<button class="mbc" onclick="fecharInteligente()">×</button><div class="mbt">${esc(nome)}</div><div class="mbs">&nbsp;</div>${nav}${baixar}${corpo}`,true);
   if(ext==='docx')mcRenderDocx();
 }
 /* PREVIA DE .DOCX DENTRO DO CRM — 29/09/2026.
@@ -3021,10 +3025,22 @@ function mcLigarDropAnexos(){
   });
 }
 
+/* DOWNLOAD DE VERDADE — 16/11/2026.
+   Antes abria o link assinado numa aba nova. No Chrome do celular isso
+   nao baixa: abre o visualizador de PDF, e o arquivo sai com o nome do
+   caminho no storage (12345_renuncia_8111...). Agora busca os bytes e
+   entrega com `download=nome`, que o navegador trata como download,
+   com o nome que aparece no CRM. */
 async function baixarAnexo(caminho,nome){
-  const{data,error}=await sb.storage.from(ANEXO_BUCKET).createSignedUrl(caminho,60);
-  if(error||!data){toast('Erro ao gerar link','er');return;}
-  window.open(data.signedUrl,'_blank');
+  try{
+    const blob=await baixarBlobAnexo(caminho);
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=nome||'arquivo';
+    document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},5000);
+  }catch(e){
+    toast('Não foi possível baixar: '+(e.message||e),'er');
+  }
 }
 async function excluirAnexo(id,caminho,clienteId){
   if(!confirm('Excluir este anexo?'))return;
